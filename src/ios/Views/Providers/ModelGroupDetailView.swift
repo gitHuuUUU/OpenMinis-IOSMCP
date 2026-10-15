@@ -352,7 +352,7 @@ struct ModelGroupDetailView: View {
         .scrollDismissesKeyboard(.interactively)
         .environment(\.editMode, $editMode)
         .sheet(isPresented: $showAddModels) {
-            NavigationStack {
+            NavigationView {
                 UnifiedModelPicker(config: addModelsConfig())
             }
         }

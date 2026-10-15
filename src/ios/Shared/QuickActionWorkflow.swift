@@ -6,7 +6,7 @@
 //  Actions (Chat with Voice / Chat with Camera). Replaces the previous
 //  delay-based ("hop a few runloops and hope") routing, which raced
 //  with the transient draft AIChatView SwiftUI mounts during
-//  NavigationStack push of a new session.
+//  NavigationView push of a new session.
 //
 //  State machine:
 //

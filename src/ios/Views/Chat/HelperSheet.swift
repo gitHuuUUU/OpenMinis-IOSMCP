@@ -7,7 +7,7 @@ import SwiftUI
 //
 // This used to be a draggable half-sheet (HelperSheet). The user found it
 // easy to dismiss by accident and hard to scroll, so it is now a full-screen
-// page (fullScreenCover with its own NavigationStack) that looks like the
+// page (fullScreenCover with its own NavigationView) that looks like the
 // main chat — same CollectionViewMessageListV3 renderer — with a navigation
 // bar that says what it is: "Agent · <task>", tier badge, elapsed while
 // running, and a Stop button. It is reached from the agent's tool sheet
@@ -50,14 +50,11 @@ struct HelperSheetTarget: Identifiable, Equatable {
 /// Three detents so the height is adjustable, opening at `.medium` so the
 /// opener stays visible behind it.
 struct HelperTranscriptSheetStyle: ViewModifier {
-    @State private var detent: PresentationDetent = .medium
-
-    static let detents: Set<PresentationDetent> = [.fraction(0.35), .medium, .large]
+    // [IOS-MCP] Detents were iOS 16-only (PresentationDetent); removed for
+    // iOS 15 compatibility — the sheet now uses the default full-size style.
 
     func body(content: Content) -> some View {
         let base = content
-            .presentationDetents(Self.detents, selection: $detent)
-            .presentationDragIndicator(.visible)
             .interactiveDismissDisabled()
         if #available(iOS 16.4, *) {
             base.presentationContentInteraction(.scrolls)
@@ -107,7 +104,7 @@ struct HelperTranscriptPage: View {
     private let clock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        NavigationStack {
+        NavigationView {
             // [T-agent-transcript-navbar-lost] The ZStack is load-bearing, not
             // cosmetic: everything below — the nav bar style and, critically,
             // the `.background` toolbar host — must attach to a node whose
@@ -139,7 +136,7 @@ struct HelperTranscriptPage: View {
             .modifier(NavBarStyleModifier(topSafeAreaInset: $topSafeAreaInset, measuresSafeArea: false))
             .navigationBarTitleDisplayMode(.inline)
             // [T-agent-transcript-navbar-lost] Pin the bar visible. This page
-            // is the ROOT of its NavigationStack, and SwiftUI auto-hides a
+            // is the ROOT of its NavigationView, and SwiftUI auto-hides a
             // root's bar when it computes nothing to show there (a pushed
             // destination never auto-hides -- it needs its back button, which
             // is why the main chat is immune). Without this the bar exists
@@ -153,7 +150,7 @@ struct HelperTranscriptPage: View {
                 // `.background` host.
                 //
                 // Device evidence (iPhone 8 / iOS 16.1, debug.viewTree): in the
-                // failure state this NavigationStack's UILayoutContainerView has
+                // failure state this NavigationView's UILayoutContainerView has
                 // NO UIKitNavigationBar subview at all -- not hidden, not with
                 // emptied items; the bar view is absent, while the main chat's
                 // stack right behind it still has its own. SwiftUI drops the bar
@@ -359,7 +356,7 @@ struct HelperTranscriptPage: View {
 /// the ToolbarContent is never re-pushed to the UINavigationItem.
 ///
 /// That re-push is what the bar was being lost to -- dismissing a tool sheet
-/// hosted OUTSIDE this NavigationStack (SheetOverlayView, a child VC of the
+/// hosted OUTSIDE this NavigationView (SheetOverlayView, a child VC of the
 /// message list) raced the next tick's re-push, and on iOS 16-18 the bar lost
 /// that race with nothing left to restore it.
 private struct HelperElapsedLabel: View {

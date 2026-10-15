@@ -764,7 +764,7 @@ private struct FolderPickerSheet: View {
     private var sessionCount: Int { sessionIds.count }
 
     var body: some View {
-        NavigationStack {
+        NavigationView {
             List {
                 Section {
                     HStack {
@@ -1123,9 +1123,6 @@ struct MacOS27OpaqueNavigationBar<S: ShapeStyle>: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *), MacOS27GlassWorkaround.isActive {
             content
-                .scrollEdgeEffectHidden(true, for: .top)
-                .toolbarBackground(background, for: .navigationBar)
-                .toolbarBackground(.visible, for: .navigationBar)
         } else {
             content
         }
@@ -1438,8 +1435,9 @@ struct ContentView: View {
     @State private var sessionRefreshCooldownDeadline: Date?
     /// Whether the initial session load has completed (prevents showing the list before we decide to auto-navigate).
     @State private var didInitialLoad = false
-    /// Controls sidebar visibility on iPad (automatic handles iPhone collapse).
-    @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
+    // [IOS-MCP] `columnVisibility` (NavigationSplitViewVisibility) removed —
+    // it is iOS 16-only; the split layout uses a constant binding inside the
+    // #available branch instead.
 
     /// Launch screen preference: 0=Auto, 1=Last Session, 2=New Chat.
     @AppStorage("launchScreen") private var launchScreen: Int = 0
@@ -1546,7 +1544,7 @@ struct ContentView: View {
     @State private var consumedQuickActionTrigger: Int = 0
 
     /// Set when `handleNewChatRequest()` had to pop the iPhone
-    /// NavigationStack before it could open the new draft session.
+    /// NavigationView before it could open the new draft session.
     /// `onChange(of: navigationPath.count == 0)` watches this and
     /// dispatches the new-draft open once the pop has fully settled.
     @State private var pendingNewChatAfterPop: Bool = false
@@ -1561,7 +1559,7 @@ struct ContentView: View {
     /// Four `.ips` reports (1.12(16) 03:58 + 04:09, 1.13(1) 19:28 + 20:04, all
     /// `WatchdogVisibility: Background`) share one main-thread stack:
     ///
-    ///     NavigationStackCoordinator.update(to:from:navigationController:…)
+    ///     NavigationViewCoordinator.update(to:from:navigationController:…)
     ///     → UIKitNavigationController.pushViewController(_:animated:)
     ///     → -[UINavigationController _immediatelyApplyViewControllers:…]
     ///     → -[UINavigationBar _redisplayItems]
@@ -1683,7 +1681,7 @@ struct ContentView: View {
         .onAppear {
             if quickActionRouter.newChatTrigger != consumedQuickActionTrigger {
                 consumedQuickActionTrigger = quickActionRouter.newChatTrigger
-                // Defer one runloop so the NavigationStack body has a
+                // Defer one runloop so the NavigationView body has a
                 // chance to attach `$navigationPath` before we append to
                 // it — otherwise the append on a freshly-mounted stack
                 // can be lost.
@@ -1709,7 +1707,7 @@ struct ContentView: View {
             // `.id(appLanguage)` rebuild above) — would leave the push stranded
             // with no later transition to release it. Deferred one runloop for
             // the same reason the quick-action path above is: the
-            // NavigationStack must have attached `$navigationPath` first.
+            // NavigationView must have attached `$navigationPath` first.
             DispatchQueue.main.async {
                 flushPendingBackgroundNavigation()
             }
@@ -1820,7 +1818,7 @@ struct ContentView: View {
             }
         }
         .fullScreenCover(isPresented: $showTerminal) {
-            NavigationStack {
+            NavigationView {
                 ISHTerminalView(showCloseButton: true)
             }
         }
@@ -1832,7 +1830,7 @@ struct ContentView: View {
             case .settings:
                 SettingsSheet(showTerminal: $showTerminal)
             case .rootfsManagement:
-                NavigationStack {
+                NavigationView {
                     RootfsManagementView()
                         .toolbar {
                             ToolbarItem(placement: .topBarTrailing) {
@@ -1843,11 +1841,11 @@ struct ContentView: View {
             case .browser:
                 BrowserSheetView(pool: browserPool)
             case .browserManagement:
-                NavigationStack {
+                NavigationView {
                     BrowserManagementView(pool: browserPool)
                 }
             case .syncMigrationDetail:
-                NavigationStack {
+                NavigationView {
                     SyncMigrationDetailView()
                         .toolbar {
                             ToolbarItem(placement: .topBarTrailing) {
@@ -1876,7 +1874,6 @@ struct ContentView: View {
             .onAppear {
                 print("[DELETE] Sheet appeared. singleDeleteInfo is \(singleDeleteInfo == nil ? "nil" : "non-nil, sessionCount=\(singleDeleteInfo!.sessionCount)")")
             }
-            .presentationDetents([.medium])
         }
         .sheet(item: $sessionToEdit) { session in
             SessionEditSheet(session: session) { newTitle, newCategory in
@@ -1888,7 +1885,6 @@ struct ContentView: View {
                 }
                 sessionToEdit = nil
             }
-            .presentationDetents([.medium])
         }
         .sheet(isPresented: $showDeleteConfirm, onDismiss: {
             if deleteInfo == nil {
@@ -1905,7 +1901,6 @@ struct ContentView: View {
                 deleteSelectedSessions()
                 showDeleteConfirm = false
             }
-            .presentationDetents([.medium])
         }
         .sheet(isPresented: $showExportPreview) {
             ExportPreviewSheet(fileURL: exportFileURL, previewURL: exportPreviewURL, summary: exportSummary)
@@ -1940,7 +1935,6 @@ struct ContentView: View {
                 if req.fromMultiSelect { folderMoveApplied = true }
                 folderPickerRequest = nil
             }
-            .presentationDetents([.medium, .large])
         }
         .modifier(FolderAlertsModifier(
             folderToRename: $folderToRename,
@@ -2256,7 +2250,7 @@ struct ContentView: View {
             // Crash 2026-08-10 19:23 (Minis 1.12(1), iOS 26.5.2, iPhone18,1 —
             // a STACK-layout device): EXC_BAD_ACCESS at 0xffffffff00000000 in
             // AG::Subgraph::~Subgraph → NodeCache::~NodeCache, reached from
-            // `NavigationStackCoordinator.navigationController(_:willShow:)` →
+            // `NavigationViewCoordinator.navigationController(_:willShow:)` →
             // `ejectDeferred/sanitize` → `replaceRootViewWhenSafe` → a
             // synchronous `ViewGraph.updateOutputs` inside the UIKit
             // transition-completion callback. The device log shows exactly the
@@ -2464,7 +2458,7 @@ struct ContentView: View {
     private var splitLayout: some View {
         // [T-ios-gh29-font-scale-split-column] App-base font scale for the iPad
         // split view. `appFontScale()` is environment-based (`.dynamicTypeSize`),
-        // and SwiftUI environment does NOT bridge across NavigationSplitView's
+        // and SwiftUI environment does NOT bridge across the split container's
         // per-column UIHostingController boundaries — applying it on the
         // container (the previous GH#29 fix) left the column contents unscaled,
         // which is why the font slider still didn't take effect on iPad/Mac.
@@ -2473,62 +2467,77 @@ struct ContentView: View {
         // session-switch / tap lag is a separate issue (ChatSession Array `==`
         // in SwiftUI's transaction flush; an A/B test confirmed the font
         // injection is not its cause), so per-column injection is safe here.
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            sessionList(useNavigationLinks: false)
-                .appFontScale()
-        } detail: {
-            detailView
-                .appFontScale()
+        Group {
+            if #available(iOS 16.0, *) {
+                NavigationSplitView(columnVisibility: Binding.constant(.automatic)) {
+                    sessionList(useNavigationLinks: false)
+                        .appFontScale()
+                } detail: {
+                    detailView
+                        .appFontScale()
+                }
+            } else {
+                // [IOS-MCP] iOS 15 fallback: HSplitView approximates the
+                // iPad sidebar + detail layout.
+                HSplitView {
+                    sessionList(useNavigationLinks: false)
+                        .appFontScale()
+                        .frame(minWidth: 320, idealWidth: 380, maxWidth: 500)
+                    detailView
+                        .appFontScale()
+                }
+            }
         }
     }
 
     // MARK: - Stack Layout (iPhone / narrow window)
 
     private var stackLayout: some View {
-        NavigationStack(path: $navigationPath) {
-            sessionList(useNavigationLinks: true)
-                .navigationDestination(for: String.self) { id in
-                    // `.id(id)` mirrors detailView (iPad): navigationDestination
-                    // views are identified by stack depth, not path value, so
-                    // replacing the top element in place (menu "New Chat" swaps
-                    // [current] → [draft]) would otherwise reuse the old view's
-                    // @StateObject vm and nothing visibly changes.
-                    if id.hasPrefix("remote:") {
-                        let parts = id.split(separator: ":", maxSplits: 2)
-                        if parts.count == 3 {
-                            AIChatView(sessionId: String(parts[2]), remoteDeviceId: String(parts[1]))
-                                .id(id)
+        Group {
+            if #available(iOS 16.0, *) {
+                NavigationStack(path: $navigationPath) {
+                    sessionList(useNavigationLinks: true)
+                        .navigationDestination(for: String.self) { id in
+                            sessionDestinationView(for: id)
                         }
-                    } else {
-                        AIChatView(sessionId: Self.isNewSessionId(id) ? nil : id, draftId: Self.isNewSessionId(id) ? id : nil, initialGroupId: Self.extractGroupId(from: id))
-                            .id(id)
-                            .onAppear {
-                                if currentStackSessionId != id {
-                                    currentStackSessionId = id
-                                    // [T-ios-stacknav-transition-attributegraph-race]
-                                    // Keep the outgoing-id tracker in lockstep.
-                                    // This branch fires exactly when the two
-                                    // have DIVERGED — the "swallowed push left
-                                    // currentStackSessionId set to a target
-                                    // that never appeared" case documented on
-                                    // the .moveInputToSession handler — and it
-                                    // mounts a chat WITHOUT a navigationPath
-                                    // change, so the observer that normally
-                                    // maintains previousStackSessionId does not
-                                    // run. Left unsynced, the next real
-                                    // transition would suspend whichever id the
-                                    // last observer pass recorded instead of
-                                    // the vm actually on screen: the wrong vm
-                                    // stalls and the real outgoing one keeps
-                                    // publishing into its teardown.
-                                    previousStackSessionId = id
-                                }
-                                SessionBadgeStore.shared.remove(.unread, for: id)
-                                shareLog.info("🔄SESSION stackNav APPEAR id=\(id)")
-                            }
-                            .onDisappear { shareLog.info("🔄SESSION stackNav DISAPPEAR id=\(id)") }
-                    }
                 }
+            } else {
+                // [IOS-MCP] iOS 15 fallback: NavigationView + destination links.
+                NavigationView {
+                    sessionList(useNavigationLinks: true)
+                }
+                .navigationViewStyle(.stack)
+            }
+        }
+    }
+
+    /// [IOS-MCP] Session destination view shared by the iOS 16
+    /// `navigationDestination(for:)` and the iOS 15
+    /// `NavigationLink(destination:)` path.
+    @ViewBuilder
+    private func sessionDestinationView(for id: String) -> some View {
+        if id.hasPrefix("remote:") {
+            let parts = id.split(separator: ":", maxSplits: 2)
+            if parts.count == 3 {
+                AIChatView(sessionId: String(parts[2]), remoteDeviceId: String(parts[1]))
+                    .id(id)
+            }
+        } else {
+            AIChatView(sessionId: Self.isNewSessionId(id) ? nil : id, draftId: Self.isNewSessionId(id) ? id : nil, initialGroupId: Self.extractGroupId(from: id))
+                .id(id)
+                .onAppear {
+                    if currentStackSessionId != id {
+                        currentStackSessionId = id
+                        // [T-ios-stacknav-transition-attributegraph-race]
+                        // Keep the outgoing-id tracker in lockstep with the id
+                        // actually on screen (see the original inline comment
+                        // on the .moveInputToSession handler).
+                        previousStackSessionId = id
+                    }
+                    SessionBadgeStore.shared.remove(.unread, for: id)
+                    shareLog.info("🔄SESSION stackNav APPEAR id=\(id)")
+                }
+                .onDisappear { shareLog.info("🔄SESSION stackNav DISAPPEAR id=\(id)") }
         }
     }
 
@@ -3260,8 +3269,16 @@ struct ContentView: View {
                 }
             }
             .background(
-                NavigationLink(value: session.id) { EmptyView() }
-                    .opacity(0)
+                Group {
+                    if #available(iOS 16.0, *) {
+                        NavigationLink(value: session.id) { EmptyView() }
+                            .opacity(0)
+                    } else {
+                        // [IOS-MCP] iOS 15: destination-based navigation.
+                        NavigationLink(destination: sessionDestinationView(for: session.id)) { EmptyView() }
+                            .opacity(0)
+                    }
+                }
             )
             .listRowInsets(EdgeInsets())
             .listRowSeparator(.hidden)
@@ -3555,7 +3572,8 @@ struct ContentView: View {
 
         }
         .listStyle(.plain)
-        .navigationSplitViewColumnWidth(min: 340, ideal: 380, max: 500)
+        // [IOS-MCP] navigationSplitViewColumnWidth is iOS 16-only; the iOS 15
+        // HSplitView fallback sets the sidebar width via frame() instead.
         // [T-macos27-liquid-glass-navbar] See MacOS27GlassWorkaround. Applied to
         // the Mac sidebar List only; the iPhone compact list (the other branch
         // of sessionList) is unaffected and does not get it.
@@ -4036,7 +4054,7 @@ struct ContentView: View {
     ///      root WITHOUT animation — animated transitions race the
     ///      subsequent `openSession()` and the new chat sometimes never
     ///      appears (push coalesced into the running pop).
-    ///   2. Once the unwind has settled (NavigationStack path empty on
+    ///   2. Once the unwind has settled (NavigationView path empty on
     ///      iPhone, `selectedSessionId == nil` on iPad), open the new
     ///      draft session.
     ///   3. AIChatView's onAppear then consumes any
@@ -4410,8 +4428,18 @@ struct ContentView: View {
             Section {
                 ForEach(entry.ids, id: \.self) { sessionId in
                     if let session = byId["\(entry.deviceId):\(sessionId)"] {
-                        NavigationLink(value: "remote:\(entry.deviceId):\(session.id)") {
-                            RemoteSessionRow(session: session)
+                        let remoteLinkValue = "remote:\(entry.deviceId):\(session.id)"
+                        Group {
+                            if #available(iOS 16.0, *) {
+                                NavigationLink(value: remoteLinkValue) {
+                                    RemoteSessionRow(session: session)
+                                }
+                            } else {
+                                // [IOS-MCP] iOS 15: destination-based navigation.
+                                NavigationLink(destination: sessionDestinationView(for: remoteLinkValue)) {
+                                    RemoteSessionRow(session: session)
+                                }
+                            }
                         }
                         .listRowInsets(EdgeInsets())
                         .listRowSeparator(.hidden)
@@ -4603,12 +4631,12 @@ struct ContentView: View {
         .frame(maxHeight: .infinity)
         .padding(.horizontal, 32)
         .sheet(isPresented: $showAddProvider) {
-            NavigationStack {
+            NavigationView {
                 AddProviderView()
             }
         }
         .sheet(isPresented: $showSelectModels) {
-            NavigationStack {
+            NavigationView {
                 OnboardingModelSelectionView()
             }
         }
@@ -4617,7 +4645,7 @@ struct ContentView: View {
             // the Restore tab. Not auto-dismissed on success — the result
             // report is worth reading; the steps above refresh on their own
             // (restore reloads ProviderConfigStore and the session list).
-            NavigationStack {
+            NavigationView {
                 BackupAndRestoreView(initialTab: .restore)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
@@ -6295,7 +6323,7 @@ private struct DeleteConfirmSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        NavigationView {
             VStack(spacing: 0) {
                 if isLoading || info == nil {
                     Spacer()
@@ -6419,7 +6447,7 @@ private struct ExportPreviewSheet: View {
     private let previewLimit = 10000
 
     var body: some View {
-        NavigationStack {
+        NavigationView {
             VStack(spacing: 0) {
                 // Preview — summary for multi-select, full content for single.
                 if let summary {
@@ -7478,7 +7506,7 @@ struct SessionEditSheet: View {
     ]
 
     var body: some View {
-        NavigationStack {
+        NavigationView {
             List {
                 Section("Title") {
                     TextField("Session title", text: $editTitle)
@@ -8104,11 +8132,13 @@ private struct SettingsSheet: View {
     @AppStorage("appearanceMode") private var appearanceMode: Int = 0
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var deepLink = DeepLinkCoordinator.shared
-    @State private var navPath = NavigationPath()
+    @State private var settingsDestination: SettingsDestination?
     @State private var showFeedbackDialog = false
 
     var body: some View {
-        NavigationStack(path: $navPath) {
+        // [IOS-MCP] NavigationView works on iOS 15 as well as 16+ (the
+        // NavigationStack(path:) variant is iOS 16-only).
+        NavigationView {
             List {
                 Section {
                     NavigationLink {
@@ -8445,67 +8475,29 @@ private struct SettingsSheet: View {
                     Button("Done") { dismiss() }
                 }
             }
-            .navigationDestination(for: SettingsDestination.self) { dest in
-                switch dest {
-                case .providers:
-                    ProviderInstancesView()
-                case .providerDetail(let id):
-                    ProviderInstanceDetailView(instanceId: id)
-                case .modelGroups:
-                    ModelGroupsView()
-                case .modelGroupDetail(let id):
-                    ModelGroupDetailView(groupId: id)
-                case .usage:
-                    UsageStatsView()
-                case .skills:
-                    SkillsManagementView()
-                case .soul:
-                    SoulSettingsView()
-                case .tools:
-                    ToolsSettingsView()
-                case .memory:
-                    MemoryManagementView()
-                case .storage:
-                    StorageManagementView()
-                case .mountedFolders:
-                    MountedFoldersSettingsView()
-                case .sharedFolders:
-                    SharedFoldersSettingsView()
-                case .logs:
-                    // Pull a one-shot tab hint from the deep link router
-                    // (e.g. `?tab=config-audit`). LogManagementView clears
-                    // its local state independently; the published value
-                    // here is consumed once and reset to nil.
-                    LogManagementView(initialTab: deepLink.pendingLogsTab ?? "logs")
-                        .onAppear { deepLink.pendingLogsTab = nil }
-                case .appearance:
-                    AppearanceSettingsView()
-                case .background:
-                    EnhancedBackgroundSettingsView()
-                case .about:
-                    AboutView()
-                case .environments:
-                    EnvironmentVariablesView()
-                case .permissions:
-                    OffloadPermissionSettingsView()
-                // [T-mcp-oauth-deeplink] Detail = the list view told to open
-                // the server's edit sheet on appear; a deleted/unknown server
-                // just lands on the list (no crash, sensible fallback).
-                case .mcpIntegrations:
-                    MCPIntegrationsView()
-                case .mcpServerDetail(let serverId):
-                    MCPIntegrationsView(initialEditServerId: serverId)
-                }
-            }
+            // [IOS-MCP] iOS 15-compatible deep-link navigation: a hidden
+            // destination-based NavigationLink driven by settingsDestination.
+            // Works identically on iOS 16+; the old NavigationView path
+            // mechanism (iOS 16-only) is replaced by this.
+            .background(
+                NavigationLink(
+                    destination: settingsDestinationView(for: settingsDestination),
+                    isActive: Binding(
+                        get: { settingsDestination != nil },
+                        set: { if !$0 { settingsDestination = nil } }
+                    )
+                ) { EmptyView() }
+                .opacity(0)
+            )
             .onAppear {
                 applyPendingDeepLink()
                 // Legacy flags — kept so older call sites keep working.
                 if deepLink.showEnvironmentVariables {
-                    navPath.append(SettingsDestination.environments)
+                    settingsDestination = SettingsDestination.environments)
                     deepLink.showEnvironmentVariables = false
                 }
                 if deepLink.showPermissions {
-                    navPath.append(SettingsDestination.permissions)
+                    settingsDestination = SettingsDestination.permissions)
                     deepLink.showPermissions = false
                 }
                 // Restore the user's location after a language-change rebuild.
@@ -8519,7 +8511,7 @@ private struct SettingsSheet: View {
                     UserDefaults.standard.removeObject(forKey: "pendingSettingsReopen")
                     switch dest {
                     case "appearance":
-                        navPath.append(SettingsDestination.appearance)
+                        settingsDestination = SettingsDestination.appearance)
                     default:
                         break
                     }
@@ -8533,8 +8525,67 @@ private struct SettingsSheet: View {
         .appFontScale()
     }
 
+    /// [IOS-MCP] Destination view for Settings deep links. Replaces the
+    /// iOS 16-only `navigationDestination(for: SettingsDestination.self)`
+    /// switch; drives the hidden NavigationLink on iOS 15 and 16 alike.
+    @ViewBuilder
+    private func settingsDestinationView(for dest: SettingsDestination?) -> some View {
+        if let dest {
+            switch dest {
+            case .providers:
+                ProviderInstancesView()
+            case .providerDetail(let id):
+                ProviderInstanceDetailView(instanceId: id)
+            case .modelGroups:
+                ModelGroupsView()
+            case .modelGroupDetail(let id):
+                ModelGroupDetailView(groupId: id)
+            case .usage:
+                UsageStatsView()
+            case .skills:
+                SkillsManagementView()
+            case .soul:
+                SoulSettingsView()
+            case .tools:
+                ToolsSettingsView()
+            case .memory:
+                MemoryManagementView()
+            case .storage:
+                StorageManagementView()
+            case .mountedFolders:
+                MountedFoldersSettingsView()
+            case .sharedFolders:
+                SharedFoldersSettingsView()
+            case .logs:
+                // Pull a one-shot tab hint from the deep link router
+                // (e.g. `?tab=config-audit`). LogManagementView clears
+                // its local state independently; the published value
+                // here is consumed once and reset to nil.
+                LogManagementView(initialTab: deepLink.pendingLogsTab ?? "logs")
+                    .onAppear { deepLink.pendingLogsTab = nil }
+            case .appearance:
+                AppearanceSettingsView()
+            case .background:
+                EnhancedBackgroundSettingsView()
+            case .about:
+                AboutView()
+            case .environments:
+                EnvironmentVariablesView()
+            case .permissions:
+                OffloadPermissionSettingsView()
+            // [T-mcp-oauth-deeplink] Detail = the list view told to open
+            // the server's edit sheet on appear; a deleted/unknown server
+            // just lands on the list (no crash, sensible fallback).
+            case .mcpIntegrations:
+                MCPIntegrationsView()
+            case .mcpServerDetail(let serverId):
+                MCPIntegrationsView(initialEditServerId: serverId)
+            }
+        }
+    }
+
     /// Translate `DeepLinkCoordinator.pendingSettingsTarget` into a
-    /// NavigationStack push and clear the pending value. Called from
+    /// settings navigation and clear the pending value. Called from
     /// `onAppear` (cold-start deep link) and `onChange` (deep link
     /// arriving while the sheet is already open).
     ///
@@ -8546,52 +8597,52 @@ private struct SettingsSheet: View {
         // Reset path so deep links are predictable: a deep link always
         // lands on the requested destination as the only stack entry,
         // not on top of whatever the user was browsing earlier.
-        navPath = NavigationPath()
+        settingsDestination = nil
         switch target {
         case .home:
             break // already at Settings root
         case .providers:
-            navPath.append(SettingsDestination.providers)
+            settingsDestination = SettingsDestination.providers)
         case .providerDetail(let id):
-            navPath.append(SettingsDestination.providers)
-            navPath.append(SettingsDestination.providerDetail(instanceId: id))
+            settingsDestination = SettingsDestination.providers)
+            settingsDestination = SettingsDestination.providerDetail(instanceId: id))
         case .modelGroups:
-            navPath.append(SettingsDestination.modelGroups)
+            settingsDestination = SettingsDestination.modelGroups)
         case .modelGroupDetail(let id):
-            navPath.append(SettingsDestination.modelGroups)
-            navPath.append(SettingsDestination.modelGroupDetail(groupId: id))
+            settingsDestination = SettingsDestination.modelGroups)
+            settingsDestination = SettingsDestination.modelGroupDetail(groupId: id))
         case .usage:
-            navPath.append(SettingsDestination.usage)
+            settingsDestination = SettingsDestination.usage)
         case .skills:
-            navPath.append(SettingsDestination.skills)
+            settingsDestination = SettingsDestination.skills)
         case .soul:
-            navPath.append(SettingsDestination.soul)
+            settingsDestination = SettingsDestination.soul)
         case .tools:
-            navPath.append(SettingsDestination.tools)
+            settingsDestination = SettingsDestination.tools)
         case .memory:
-            navPath.append(SettingsDestination.memory)
+            settingsDestination = SettingsDestination.memory)
         case .storage:
-            navPath.append(SettingsDestination.storage)
+            settingsDestination = SettingsDestination.storage)
         case .mountedFolders:
-            navPath.append(SettingsDestination.mountedFolders)
+            settingsDestination = SettingsDestination.mountedFolders)
         case .sharedFolders:
-            navPath.append(SettingsDestination.sharedFolders)
+            settingsDestination = SettingsDestination.sharedFolders)
         case .logs:
-            navPath.append(SettingsDestination.logs)
+            settingsDestination = SettingsDestination.logs)
         case .appearance:
-            navPath.append(SettingsDestination.appearance)
+            settingsDestination = SettingsDestination.appearance)
         case .background:
-            navPath.append(SettingsDestination.background)
+            settingsDestination = SettingsDestination.background)
         case .about:
-            navPath.append(SettingsDestination.about)
+            settingsDestination = SettingsDestination.about)
         case .permissions:
-            navPath.append(SettingsDestination.permissions)
+            settingsDestination = SettingsDestination.permissions)
         case .environments:
-            navPath.append(SettingsDestination.environments)
+            settingsDestination = SettingsDestination.environments)
         case .mcpIntegrations:
-            navPath.append(SettingsDestination.mcpIntegrations)
+            settingsDestination = SettingsDestination.mcpIntegrations)
         case .mcpServerDetail(let id):
-            navPath.append(SettingsDestination.mcpServerDetail(serverId: id))
+            settingsDestination = SettingsDestination.mcpServerDetail(serverId: id))
         }
         deepLink.pendingSettingsTarget = nil
     }

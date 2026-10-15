@@ -571,7 +571,7 @@ struct AsyncCacheURLImageTile: View {
 /// Cell-level views (MessageRowView, MarkdownBlockView) live inside UICollectionView
 /// cells whose window hierarchy is unstable. Presenting a sheet from those views causes
 /// SwiftUI to drop the transition animation. To fix this, the actual sheet state and
-/// presentation lives on AIChatView (a stable NavigationStack root), and cell-level
+/// presentation lives on AIChatView (a stable NavigationView root), and cell-level
 /// views forward URL taps up through this environment action.
 struct OpenMinisURLAction {
     var handler: (URL) -> OpenURLAction.Result
@@ -1131,11 +1131,9 @@ struct MinisHTMLPreviewView: View {
                                       sourceSessionId: AIChatViewModel.activeSessionId)
                 }
         }
-        .presentationDetents([.large])
         // [T-ios-html-preview-wide-sheet] Widen to a page-style sheet on
         // iPad/Mac, matching MinisMarkdownPreviewView. iPhone unaffected.
         .modifier(WideSheetSizingModifier())
-        .presentationDragIndicator(.hidden)
         .preferredColorScheme(appearanceMode == 1 ? .light : appearanceMode == 2 ? .dark : nil)
     }
 }

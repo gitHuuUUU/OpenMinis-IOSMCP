@@ -162,13 +162,27 @@ build_fakefsify() {
 }
 
 # ============================================================================
+# Install IOS-MCP tooling into the minirootfs (before fakefs conversion)
+# ============================================================================
+install_tooling() {
+    if [ "${IOSMCP_TOOLING:-1}" = "0" ]; then
+        log_info "IOS-MCP tooling disabled (IOSMCP_TOOLING=0)"
+        return
+    fi
+    log_info "Installing IOS-MCP device toolchain (Python/Theos/rev-tools)..."
+    local CUSTOM_TAR="$CACHE_DIR/alpine-iosmcp-${ALPINE_VERSION}.${ALPINE_MINOR}-${ALPINE_ARCH}.tar.gz"
+    "$SCRIPT_DIR/install_iosmcp_tooling.sh" "$ROOTFS_PATH" "$CUSTOM_TAR"
+    ROOTFS_PATH="$CUSTOM_TAR"
+    log_success "IOS-MCP tooling installed"
+}
+
+# ============================================================================
 # Create fakefs rootfs
 # ============================================================================
 create_fakefs() {
     log_info "Creating fakefs rootfs..."
 
-    local ROOTFS_FILE="alpine-minirootfs-${ALPINE_VERSION}.${ALPINE_MINOR}-${ALPINE_ARCH}.tar.gz"
-    local ROOTFS_PATH="$CACHE_DIR/$ROOTFS_FILE"
+    local ROOTFS_PATH="${ROOTFS_PATH:-$CACHE_DIR/$ROOTFS_FILE}"
     local FAKEFSIFY="$ISH_DIR/build-native/tools/fakefsify"
     local OUTPUT_ROOTFS="$OUTPUT_DIR/alpine-rootfs"
 
@@ -356,6 +370,7 @@ main() {
 
     check_prerequisites
     download_alpine
+    install_tooling
     build_fakefsify
     create_fakefs
     configure_rootfs

@@ -54,7 +54,7 @@ actor ISHExecutionCoordinator {
     ///
     /// Serial on purpose: concurrent sweeps would contend on the same kernel
     /// lock and multiply the wait rather than shorten it.
-    static let killQueue = DispatchQueue(label: "com.openminis.ish.killpg", qos: .userInitiated)
+    static let killQueue = DispatchQueue(label: "com.iosmcp.ish.killpg", qos: .userInitiated)
 
     /// [T-ish-shell-timeout-preserve-output] Cap on the partial output a
     /// timed-out command may hand back.
@@ -203,6 +203,9 @@ actor ISHExecutionCoordinator {
         // they're hooked by MinisFsRouter.
         if !staticMountsInitialized.isEmpty { return }
         performMount(sessionId)
+        // [IOS-MCP] On a jailbroken device, expose the real iOS filesystem
+        // inside the guest (/ios, /var/ios, /usr/ios) after the static layer.
+        JailbreakFullAccessManager.shared.enableIfJailbroken()
         staticMountsInitialized.insert(sessionId)
     }
 

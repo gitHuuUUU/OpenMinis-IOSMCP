@@ -1,0 +1,105 @@
+name: Build IOS-MCP IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      alpine_version:
+        description: 'Alpine version for the rootfs (default 3.21)'
+        required: false
+        default: '3.21'
+      sdk_version:
+        description: 'iOS SDK version for Theos minimal headers (default 16.5)'
+        required: false
+        default: '16.5'
+  push:
+    branches: [main]
+
+env:
+  ALPINE_VERSION: ${{ github.event.inputs.alpine_version || '3.21' }}
+  IOSMCP_SDK_VER: ${{ github.event.inputs.sdk_version || '16.5' }}
+
+jobs:
+  build-ipa:
+    name: Build unsigned IPA (macOS runner)
+    runs-on: macos-14
+    timeout-minutes: 180
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Set up Go (rclone / ish tooling)
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+
+      - name: Install host dependencies
+        run: |
+          brew install ninja libarchive qemu || true
+          pip3 install meson
+
+      - name: Download Xcode Metal Toolchain
+        run: |
+          xcodebuild -downloadComponent MetalToolchain || echo "MetalToolchain download skipped (already present or unavailable)"
+
+      - name: Build LAME
+        run: ./deps/build_lame.sh
+
+      - name: Build FFmpeg (links against LAME)
+        run: ./deps/build_ffmpeg.sh
+
+      - name: Build iSH kernel + fakefsify
+        run: ./deps/build_ish.sh
+
+      - name: Prepare Alpine rootfs (with IOS-MCP toolchain)
+        env:
+          ALPINE_VER: ${{ env.ALPINE_VERSION }}
+          IOSMCP_SDK_VER: ${{ env.IOSMCP_SDK_VER }}
+        run: ./deps/prepare_alpine_rootfs.sh $ALPINE_VER
+
+      - name: Build rclone (iOS)
+        run: ./deps/build_rclone_ios.sh
+
+      - name: Build Minis app (unsigned)
+        run: |
+          xcodebuild -project src/ios/Minis.xcodeproj \
+            -scheme Minis \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_REQUIRED=NO \
+            build
+
+      - name: Package unsigned IPA
+        run: |
+          APP_PATH="build/DerivedData/Build/Products/Release-iphoneos/Minisi.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "::error::Minis.app not found at $APP_PATH"
+            ls -R build/DerivedData/Build/Products 2>/dev/null | head -40
+            exit 1
+          fi
+          mkdir -p build/Payload
+          cp -R "$APP_PATH" build/Payload/
+          # Preserve the payload .app name as Minis (bundle id com.iosmcp.app)
+          cd build && zip -q -r ../IOS-MCP.ipa Payload && cd ..
+          echo "IPA size: $(du -h IOS-MCP.ipa | cut -f1)"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: IOS-MCP-unsigned-ipa
+          path: IOS-MCP.ipa
+          retention-days: 30
+
+      - name: Upload rootfs zip (optional, for inspection)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alpine-rootfs-iosmcp
+          path: deps/resources/alpine-rootfs.zip
+          retention-days: 7
+          if-no-files-found: ignore

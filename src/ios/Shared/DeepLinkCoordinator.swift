@@ -59,7 +59,7 @@ final class DeepLinkCoordinator: ObservableObject {
     @Published var pendingEnvVarCreate: EnvVarCreate?
 
     /// When non-nil, ContentView opens the SettingsSheet (if not already
-    /// open) and SettingsSheet navigates its NavigationStack to the
+    /// open) and SettingsSheet navigates its NavigationView to the
     /// matching destination, then clears this back to nil. `.home` opens
     /// the sheet without pushing anything.
     @Published var pendingSettingsTarget: SettingsDeepLinkTarget?

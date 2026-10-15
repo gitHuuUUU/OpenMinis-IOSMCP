@@ -5864,7 +5864,7 @@ private struct SheetOverlayView: View {
             // root has no title and no toolbar, so that state computes as
             // "automatic -> hidden", and it is re-applied on presentation
             // events -- i.e. exactly when the tool sheet dismisses. When the
-            // containing page is a NavigationStack ROOT (the agent transcript
+            // containing page is a NavigationView ROOT (the agent transcript
             // page) that hides the page's bar for good. Pin visible so the
             // bridged state can never be "hidden"; a no-op where the bar is
             // already shown.

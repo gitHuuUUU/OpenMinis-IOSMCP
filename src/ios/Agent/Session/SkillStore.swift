@@ -381,12 +381,46 @@ Do not create extraneous files: README.md, INSTALLATION_GUIDE.md, CHANGELOG.md, 
 """
 
     private func installBundledSkills() {
+        // 1) Bundled skill-creator (upgrade if the bundled version is newer)
         let bundledId = "skill-creator"
+        let shouldInstallCreator: Bool
         if let existing = skills.first(where: { $0.id == bundledId }) {
-            // Upgrade if the bundled version is newer
-            guard existing.version < Self.skillCreatorVersion else { return }
+            shouldInstallCreator = existing.version < Self.skillCreatorVersion
+        } else {
+            shouldInstallCreator = true
         }
-        _ = try? importSkill(content: Self.skillCreatorContent, source: .bundled)
+        if shouldInstallCreator {
+            _ = try? importSkill(content: Self.skillCreatorContent, source: .bundled)
+        }
+        // 2) IOS-MCP: scan the app bundle's BundledSkills directory and import
+        //    every SKILL.md it contains (source = .bundled). Drop a SKILL.md
+        //    folder into `src/ios/BundledSkills/<name>/` before building and it
+        //    ships inside the IPA, imported on first launch.
+        installBundledSkillsFromDirectory()
+    }
+
+    /// [IOS-MCP] Import any skills bundled under `BundledSkills/<name>/SKILL.md`.
+    /// Existing skills with the same id are left untouched so user edits win.
+    private func installBundledSkillsFromDirectory() {
+        let fm = FileManager.default
+        guard let bundledDir = Bundle.main.url(forResource: "BundledSkills", withExtension: nil) else {
+            return
+        }
+        guard let entries = try? fm.contentsOfDirectory(at: bundledDir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) else {
+            return
+        }
+        for dir in entries where dir.hasDirectoryPath {
+            let skillFile = dir.appendingPathComponent("SKILL.md")
+            guard fm.fileExists(atPath: skillFile.path),
+                  let content = try? String(contentsOf: skillFile, encoding: .utf8) else {
+                continue
+            }
+            let candidateId = dir.lastPathComponent
+            if skills.contains(where: { $0.id == candidateId }) {
+                continue // user's own copy already present — keep it
+            }
+            _ = try? importSkill(content: content, source: .bundled)
+        }
     }
 
     // MARK: - One-time Migration: re-sync skills with bundled files

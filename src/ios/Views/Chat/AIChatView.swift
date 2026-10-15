@@ -53,7 +53,7 @@ private final class CachedViewModel: ObservableObject {
         cancellable = vm.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
 
-        // iOS 16 fix: When NavigationStack recreates the @StateObject, the new
+        // iOS 16 fix: When NavigationView recreates the @StateObject, the new
         // CachedViewModel may wrap a VM that already has messages loaded. Force
         // a re-render so SwiftUI picks up the current state, since objectWillChange
         // events between the old and new subscription may have been lost.
@@ -399,7 +399,6 @@ struct AIChatView: View {
     @State private var pendingProviderImport: PendingProviderImport?
     @State private var providerImportResult: String?
     @State private var screenshotPreview: ChatScreenshotPreview?
-    @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var attachmentGridHeight: CGFloat = 0
     @State private var transcriptHeight: CGFloat = 0
     /// Tracks how much of recognizedText has already been appended to inputText.
@@ -821,7 +820,7 @@ struct AIChatView: View {
         }
         .sheet(item: $locateDownloadTarget) { target in
             if let sid = vm.sessionId {
-                NavigationStack {
+                NavigationView {
                     FileBrowserView(
                         rootPath: AIChatViewModel.minisWorkspacePersistentDir(for: sid),
                         rootLabel: "/var/minis/workspace",
@@ -962,8 +961,6 @@ struct AIChatView: View {
         }
         .sheet(item: $previewAudioFile) { fileURL in
             MinisAudioPreviewView(fileURL: fileURL)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.hidden)
         }
         .sheet(item: $previewTextFile) { fileURL in
             MinisTextPreviewView(fileURL: fileURL)
@@ -1047,7 +1044,7 @@ struct AIChatView: View {
             })
         }
         .sheet(isPresented: $showFileBrowser) {
-            NavigationStack {
+            NavigationView {
                 let base = RootfsManager.shared.dataPath
                 FileBrowserView(rootPath: base, initialPath: base.appendingPathComponent("var/minis"), rootLabel: "/")
             }
@@ -1058,16 +1055,14 @@ struct AIChatView: View {
             })
         }
         .sheet(isPresented: $showModelPicker) {
-            NavigationStack {
+            NavigationView {
                 SessionModelPicker(sessionId: vm.sessionId) {
                     await vm.ensureSessionReturningId()
                 }
             }
-            .presentationDetents([.large])
         }
         .sheet(isPresented: $showTokenUsage) {
             TokenUsageSheet(vm: cached.vm)
-                .presentationDetents([.fraction(0.8), .large])
         }
         .sheet(item: $screenshotPreview) { preview in
             ChatScreenshotPreviewSheet(image: preview.image)
@@ -1154,7 +1149,7 @@ struct AIChatView: View {
         .fullScreenCover(isPresented: $showTerminal) {
             terminalInitCommand = nil
         } content: {
-            NavigationStack {
+            NavigationView {
                 ISHTerminalView(sessionId: vm.sessionId, showCloseButton: true, initCommand: terminalInitCommand)
                     .onAppear {
                         if let sid = vm.sessionId {
@@ -1198,10 +1193,9 @@ struct AIChatView: View {
                 }
             )
         }
-        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotoItems,
-                      maxSelectionCount: 50, matching: .any(of: [.images, .videos]))
-        .onChange(of: selectedPhotoItems) { items in
-            guard !items.isEmpty else { return }
+        // [IOS-MCP] PHPicker bridge (iOS 14+), replacing PhotosPicker (iOS 16+).
+        .pickedPhotos(isPresented: $showPhotoPicker, maxSelectionCount: 50) { assets in
+            guard !assets.isEmpty else { return }
             // [T-ios-photo-pick-placeholder] 1) Insert a loading placeholder chip
             // for every picked item RIGHT NOW (one main-actor batch update), so the
             // user immediately sees how many they picked instead of watching photos
@@ -1209,41 +1203,31 @@ struct AIChatView: View {
             // TaskGroup. 3) Resolve each placeholder in place as its bytes arrive
             // (success → real thumbnail, failure → error chip). The send button is
             // gated on `hasLoadingAttachments` until every item settles.
-            let kinds = items.map { item -> InputAttachment.Kind in
-                item.supportedContentTypes.contains(where: { $0.conforms(to: .movie) }) ? .video : .image
+            let kinds = assets.map { asset -> InputAttachment.Kind in
+                asset.isVideo ? .video : .image
             }
             let placeholderIDs = vm.addLoadingPlaceholders(kinds: kinds)
 
-            // Snapshot per-item metadata synchronously (PHAsset fetch + UTI) so the
-            // concurrent loaders don't touch SwiftUI state or PhotosUI mid-flight.
-            struct PickJob { let id: UUID; let item: PhotosPickerItem; let isVideo: Bool; let ext: String?; let date: Date? }
-            let jobs: [PickJob] = zip(placeholderIDs, items).map { pid, item in
-                let isVideo = item.supportedContentTypes.contains(where: { $0.conforms(to: .movie) })
-                var assetDate: Date?
-                if let aid = item.itemIdentifier,
-                   let asset = PHAsset.fetchAssets(withLocalIdentifiers: [aid], options: nil).firstObject {
-                    assetDate = asset.creationDate
-                }
-                let ext = item.supportedContentTypes
-                    .first(where: { $0.conforms(to: .image) })?
-                    .preferredFilenameExtension
-                return PickJob(id: pid, item: item, isVideo: isVideo, ext: ext, date: assetDate)
+            // Snapshot per-item metadata synchronously so the loaders don't
+            // touch SwiftUI state mid-flight.
+            struct PickJob { let id: UUID; let isVideo: Bool; let ext: String?; let date: Date?; let data: Data?; let videoURL: URL? }
+            let jobs: [PickJob] = zip(placeholderIDs, assets).map { pid, asset in
+                PickJob(id: pid, isVideo: asset.isVideo, ext: asset.ext, date: asset.date, data: asset.data, videoURL: asset.videoURL)
             }
-            selectedPhotoItems = []
 
             Task {
                 await withTaskGroup(of: Void.self) { group in
                     for job in jobs {
                         group.addTask {
                             if job.isVideo {
-                                if let videoURL = try? await job.item.loadTransferable(type: VideoFileTransferable.self) {
+                                if let videoURL = job.videoURL {
                                     await MainActor.run {
-                                        vm.finalizeVideoPlaceholder(id: job.id, from: videoURL.url, originalDate: job.date)
+                                        vm.finalizeVideoPlaceholder(id: job.id, from: videoURL, originalDate: job.date)
                                     }
                                 } else {
                                     await MainActor.run { vm.markPlaceholderFailed(id: job.id) }
                                 }
-                            } else if let data = try? await job.item.loadTransferable(type: Data.self) {
+                            } else if let data = job.data {
                                 // Preserve original encoded bytes (PNG transparency,
                                 // HEIC, animated GIFs, EXIF) — written verbatim.
                                 await MainActor.run {
@@ -1327,7 +1311,7 @@ struct AIChatView: View {
             if let sessionId {
                 if cached.isNew || (vm.messages.isEmpty && !vm.isLoadingSession) {
                     // Load session if: (a) VM is freshly created, or (b) cache hit but messages
-                    // are empty — this can happen on iOS 16 where NavigationStack may recreate
+                    // are empty — this can happen on iOS 16 where NavigationView may recreate
                     // @StateObject unexpectedly, causing isNew=false but an empty VM.
                     minisLogger.info("🔄SESSION AIChatView.onAppear loading session \(sessionId) isNew=\(cached.isNew) msgs=\(vm.messages.count)")
                     // [T-ios-session-coldload-listsessions-block] .userInitiated
@@ -2562,7 +2546,6 @@ struct AIChatView: View {
                     showThinkingLevelSheet = false
                 }
             )
-            .presentationDetents([.medium])
         }
     }
 
@@ -4424,7 +4407,6 @@ struct AIChatView: View {
                 // reserves the top/bottom share.
                 .padding(Self.popupRowInset)
             }
-            .scrollIndicators(.visible)
             .frame(height: Self.slashPickerFixedHeight)
         }
     }
@@ -4495,7 +4477,6 @@ struct AIChatView: View {
                         // [T-slash-picker-fixed-height] Match slash popup:
                         // exactly 4 rows tall, scrolls on overflow with the
                         // visible indicator above.
-                        .scrollIndicators(.visible)
                         .frame(height: Self.slashPickerFixedHeight)
                         .onChange(of: vm.mentionSelectedIndex) { newIndex in
                             guard newIndex >= 0, newIndex < rows.count else { return }
@@ -5232,8 +5213,6 @@ private struct ProviderImportSheet: View {
             }
         }
         .padding(24)
-        .presentationDetents([.height(360), .medium])
-        .presentationDragIndicator(.visible)
         // Swipe-to-dismiss without tapping a button still needs cleanup.
         .onDisappear { if !chose { onCancel() } }
     }
@@ -5295,7 +5274,7 @@ struct NavBarStyleModifier: ViewModifier {
     /// the safe-area measuring overlay entirely.
     ///
     /// That overlay writes `topSafeAreaInset` from an `onGeometryChange`
-    /// action. A tool sheet presented from OUTSIDE the page's NavigationStack
+    /// action. A tool sheet presented from OUTSIDE the page's NavigationView
     /// (SheetOverlayView, a child VC of the message list) changes the top inset
     /// as it presents and dismisses, so the action fires DURING the dismissal's
     /// view-graph update. On the agent transcript page that update ends with
@@ -5317,7 +5296,6 @@ struct NavBarStyleModifier: ViewModifier {
             // starting below the bar.
             content
                 .ignoresSafeArea(.container, edges: .top)
-                .toolbarBackgroundVisibility(.visible, for: .navigationBar)
                 // [T-macos27-liquid-glass-navbar] See MacOS27GlassWorkaround in
                 // ContentView. `toolbarBackgroundVisibility(.visible)` only
                 // declares "there should be a backdrop"; the material is still
@@ -5333,8 +5311,6 @@ struct NavBarStyleModifier: ViewModifier {
         } else {
             // iOS 16–18: opaque navbar background
             content
-                .toolbarBackground(ChatColors.background, for: .navigationBar)
-                .toolbarBackground(.visible, for: .navigationBar)
                 .overlay(alignment: .top) {
                     if measuresSafeArea {
                         // [T-ios-geometry-observer-crash] onGeometryChange
@@ -5471,7 +5447,7 @@ private struct ChatToolbarKey: Equatable {
 
 /// [T-ios-navbar-toolbar-host] Zero-footprint host that owns the navigation
 /// toolbar. Attached via .background on the chat content, so it sits inside
-/// the NavigationStack destination (toolbar registers from any descendant),
+/// the NavigationView destination (toolbar registers from any descendant),
 /// occupies no layout, and — being Equatable on the toolbar's displayed
 /// inputs — its body (the ToolbarContent builder) only re-runs when something
 /// the toolbar actually shows changes. Streaming ticks leave the key equal,
@@ -6032,7 +6008,7 @@ private struct MoveToSessionSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationView {
             List {
                 if !isSearching {
                     Button {
@@ -6448,7 +6424,7 @@ private struct SpeechLanguagePickerSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationView {
             List {
                 let preferred = filteredLocales.filter { preferredCodes.contains($0.language.languageCode?.identifier ?? "") }
                 let others = filteredLocales.filter { !preferredCodes.contains($0.language.languageCode?.identifier ?? "") }
@@ -6480,7 +6456,6 @@ private struct SpeechLanguagePickerSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
     }
 
     private func languageRow(_ loc: Locale) -> some View {
@@ -6520,7 +6495,7 @@ struct CompactSummarySheet: View {
     @State private var showRevertConfirm = false
 
     var body: some View {
-        NavigationStack {
+        NavigationView {
             VStack(spacing: 0) {
                 SelectableTextView(text: summary)
                     .padding(.horizontal, 16)
@@ -6573,7 +6548,6 @@ struct CompactSummarySheet: View {
                 Text("The summary will be discarded and the messages it covered will become active again. This may push the conversation past the model's context window — if that happens, long-press a message to re-compact from that point.")
             }
         }
-        .presentationDetents([.large])
     }
 }
 
@@ -6616,7 +6590,7 @@ private struct TokenUsageSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        NavigationView {
             List {
                 let s = vm.sessionTokenStats
 

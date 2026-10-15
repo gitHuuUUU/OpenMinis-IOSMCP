@@ -239,7 +239,21 @@ struct LogDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                ShareLink(item: url)
+                // [IOS-MCP] ShareLink is iOS 16+; keep an iOS 15-compatible
+                // fallback via UIActivityViewController.
+                if #available(iOS 16.0, *) {
+                    ShareLink(item: url)
+                } else {
+                    Button {
+                        let activityVC = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+                        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                           let root = scene.windows.first?.rootViewController {
+                            root.present(activityVC, animated: true)
+                        }
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                }
             }
         }
         .task {

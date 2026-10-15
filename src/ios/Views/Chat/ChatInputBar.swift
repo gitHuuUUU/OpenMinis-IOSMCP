@@ -277,7 +277,7 @@ private struct AttachmentChip: View {
         .onAppear { loadThumbnailIfNeeded() }
         .onTapGesture { showPreview = true }
         .sheet(isPresented: $showPreview) {
-            NavigationStack {
+            NavigationView {
                 AttachmentPreviewView(url: attachment.cacheURL)
                     .navigationTitle(attachment.fileName)
                     .navigationBarTitleDisplayMode(.inline)
@@ -549,7 +549,7 @@ struct PastedTextChipRow: View {
             .padding(.trailing, 4)
         }
         .sheet(item: $previewEntry) { entry in
-            NavigationStack {
+            NavigationView {
                 ScrollView {
                     // Read-only by construction: selectable text (copyable),
                     // deliberately NOT a TextEditor.
@@ -603,7 +603,11 @@ private struct AttachmentPreviewView: UIViewControllerRepresentable {
 }
 
 // MARK: - Video File Transferable (for PhotosPicker video export)
+// [IOS-MCP] Transferable is iOS 16+; the PhotosPicker path that used this was
+// replaced by the PHPicker bridge (PhotoPickerBridge.swift), so gate this
+// definition behind @available to keep the iOS 15 build green.
 
+@available(iOS 16, *)
 struct VideoFileTransferable: Transferable {
     let url: URL
 
