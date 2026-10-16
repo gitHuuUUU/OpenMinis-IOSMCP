@@ -99,7 +99,7 @@ download_alpine() {
     mkdir -p "$CACHE_DIR"
 
     local ROOTFS_FILE="alpine-minirootfs-${ALPINE_VERSION}.${ALPINE_MINOR}-${ALPINE_ARCH}.tar.gz"
-    local ROOTFS_PATH="$CACHE_DIR/$ROOTFS_FILE"
+    ROOTFS_PATH="$CACHE_DIR/$ROOTFS_FILE"
     local ROOTFS_URL="${ALPINE_MIRROR}/v${ALPINE_VERSION}/releases/${ALPINE_ARCH}/${ROOTFS_FILE}"
 
     if [ -f "$ROOTFS_PATH" ]; then
@@ -182,7 +182,7 @@ install_tooling() {
 create_fakefs() {
     log_info "Creating fakefs rootfs..."
 
-    local ROOTFS_PATH="${ROOTFS_PATH:-$CACHE_DIR/$ROOTFS_FILE}"
+    ROOTFS_PATH="${ROOTFS_PATH:-$CACHE_DIR/alpine-minirootfs-${ALPINE_VERSION}.${ALPINE_MINOR}-${ALPINE_ARCH}.tar.gz}"
     local FAKEFSIFY="$ISH_DIR/build-native/tools/fakefsify"
     local OUTPUT_ROOTFS="$OUTPUT_DIR/alpine-rootfs"
 
