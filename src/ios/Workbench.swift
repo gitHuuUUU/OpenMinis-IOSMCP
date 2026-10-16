@@ -290,6 +290,16 @@ enum WorkbenchError: LocalizedError {
     }
     func buildWorkbench(_ args:[String:Any]) async throws -> String {
         let action=args["action"] as? String ?? "doctor"
+        if action=="build", args["remote"] as? String == "windows" {
+            guard let output=args["output"] as? String else { throw WorkbenchError.unavailable("缺少电脑输出路径") }
+            let payload=try JSONSerialization.data(withJSONObject:args).base64EncodedString()
+            let script="$a=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('"+payload+"')) | ConvertFrom-Json; & (Join-Path $env:USERPROFILE '.minis/minis-build.ps1') -Target $a.target -Project $a.project -Output $a.output -Sdk $a.sdk"
+            let built=try await desktopTool(["action":"run","command":script])
+            let name=URL(fileURLWithPath:output.replacingOccurrences(of:"\\",with:"/")).lastPathComponent
+            let local="/var/minis/shared/"+name
+            _ = try await desktopTool(["action":"download","path":local,"remotePath":output])
+            return built+"\n已下载到手机共享产物目录："+local
+        }
         guard ["doctor","install-sdks","build"].contains(action),
               let bundle=Bundle.main.url(forResource:"BuildWorkbench",withExtension:"bundle") else {
             throw WorkbenchError.unavailable("构建工作台资源或动作不可用")
@@ -346,7 +356,7 @@ enum WorkbenchError: LocalizedError {
             else { throw WorkbenchError.unavailable("动作需要 probe、run、upload 或 download") }
             let utf8script="[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);$OutputEncoding=[Console]::OutputEncoding;"+script
             let encoded=(utf8script.data(using:.utf16LittleEndian) ?? Data()).base64EncodedString()
-            command="ssh -p \(port)"+options+q(user+"@"+host)+" powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand "+encoded
+            command="ssh -p \(port)"+options+q(user+"@"+host)+" powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand "+encoded
         }
         let result=try await run(command,timeout:1800)
         guard result.exitCode==0 else { throw WorkbenchError.unavailable("电脑操作失败 rc=\(result.exitCode)\n\(result.output)") }
@@ -567,7 +577,8 @@ struct MultiPlatformWorkbenchView:View {
                 TextField("源码／项目／APP 目录",text:$project).textInputAutocapitalization(.never).autocorrectionDisabled()
                 TextField("产物输出路径",text:$output).textInputAutocapitalization(.never).autocorrectionDisabled()
                 Picker("SDK",selection:$sdk) { ForEach(["15.6","16.5","17.5","18.6"],id:\.self) { Text($0).tag($0) } }
-                TextField("可选 SSH 主机别名",text:$remote).textInputAutocapitalization(.never).autocorrectionDisabled()
+                Picker("执行位置",selection:$remote) { Text("手机本地").tag("");Text("当前 Windows 电脑").tag("windows") }
+                TextField("可选 Mac/Linux SSH 主机别名",text:$remote).textInputAutocapitalization(.never).autocorrectionDisabled()
                 Button("构建并校验产物") { perform(["action":"build","target":target,"project":project,"output":output,"sdk":sdk,"remote":remote]) }.disabled(model.busy)
                 Text("dylib 为 C/ObjC 交叉编译；DEB 需要 DEBIAN/control；IPA 打包已有 .app，Swift/Xcode 项目需 macOS 构建；APK 需 Gradle/Android SDK；EXE 需 MinGW。SSH 使用已有主机配置与密钥，远端还须具备对应工具链。缺失即报告失败。").font(.caption)
             }

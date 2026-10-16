@@ -259,7 +259,7 @@ extension AIChatViewModel {
                 "project":AgentToolParam(type:.string,description:"Source file, project directory, package root or built .app"),
                 "output":AgentToolParam(type:.string,description:"Absolute artifact output path"),
                 "sdk":AgentToolParam(type:.string,description:"15.6,16.5,17.5,18.6"),
-                "remote":AgentToolParam(type:.string,description:"Optional existing SSH host alias with configured toolchain")
+                "remote":AgentToolParam(type:.string,description:"windows for the configured Windows PC (project/output then use Windows paths), or an existing Mac/Linux SSH host alias")
             ],required:["action"]
         ))
         tools.append(AgentToolDefinition(
