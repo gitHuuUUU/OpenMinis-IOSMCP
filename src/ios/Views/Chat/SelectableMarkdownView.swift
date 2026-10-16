@@ -7184,7 +7184,27 @@ final class SelectableMarkdownTextView: UITextView, UIGestureRecognizerDelegate 
 
     // MARK: Layout
 
+    private var legacySizingWidth: CGFloat = 0
+    private var legacySizing = false
+
+    // iOS15 never calls UIViewRepresentable.sizeThatFits(ProposedViewSize).
+    // Supply a width-constrained intrinsic HEIGHT, never the unwrapped text width.
+    override var intrinsicContentSize: CGSize {
+        if #available(iOS 16.0, *) { return super.intrinsicContentSize }
+        guard !legacySizing else { return CGSize(width: UIView.noIntrinsicMetric, height: max(1, contentSize.height)) }
+        legacySizing = true
+        defer { legacySizing = false }
+        let width = max(1, bounds.width > 1 ? bounds.width : UIScreen.main.bounds.width - 32)
+        let measured = super.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+        textContainer.size.height = .greatestFiniteMagnitude
+        return CGSize(width: UIView.noIntrinsicMetric, height: ceil(max(1, measured.height)))
+    }
+
     override func layoutSubviews() {
+        if #available(iOS 16.0, *) { } else if bounds.width > 1 && abs(bounds.width - legacySizingWidth) > 0.5 {
+            legacySizingWidth = bounds.width
+            DispatchQueue.main.async { [weak self] in self?.invalidateIntrinsicContentSize() }
+        }
         // TEMP(2026-05-13) — layoutSubviews slow-path probe. Most layout
         // work is fast; emit a direct-write line when a single
         // layoutSubviews pass takes >=50ms so a watchdog hang can be
@@ -8019,6 +8039,8 @@ struct SelectableMarkdownView: UIViewRepresentable {
     func makeUIView(context: Context) -> SelectableMarkdownTextView {
         let textView = SelectableMarkdownTextView()
         textView.delegate = context.coordinator
+        textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        textView.setContentHuggingPriority(.defaultLow, for: .horizontal)
         textView.setContentHuggingPriority(.required, for: .vertical)
         textView.setContentCompressionResistancePriority(.required, for: .vertical)
         context.coordinator.lastMarkdown = ""

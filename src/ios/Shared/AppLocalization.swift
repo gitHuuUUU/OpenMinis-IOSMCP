@@ -220,28 +220,57 @@ struct MinisHostingConfiguration<Content: View>: UIContentConfiguration {
     }
 }
 private final class MinisHostingContentView<Content: View>: UIView, UIContentView {
-    private let host: UIHostingController<Content>
+    private let host: UIHostingController<AnyView>
+    private var measuredWidth: CGFloat = 0
+    private var sizing = false
     var configuration: UIContentConfiguration {
         didSet {
-            if let config = configuration as? MinisHostingConfiguration<Content> {
-                host.rootView = config.content; host.view.invalidateIntrinsicContentSize(); invalidateIntrinsicContentSize()
-            }
+            updateRoot(width: bounds.width > 1 ? bounds.width : UIScreen.main.bounds.width)
+            invalidateIntrinsicContentSize()
         }
     }
     init(_ config: MinisHostingConfiguration<Content>) {
-        configuration = config; host = UIHostingController(rootView: config.content)
+        configuration = config
+        host = UIHostingController(rootView: AnyView(config.content))
         super.init(frame: .zero)
-        backgroundColor = .clear; host.view.backgroundColor = .clear
-        host.view.translatesAutoresizingMaskIntoConstraints = false; addSubview(host.view)
+        backgroundColor = .clear
+        host.view.backgroundColor = .clear
+        host.view.translatesAutoresizingMaskIntoConstraints = false
+        host.view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        addSubview(host.view)
         NSLayoutConstraint.activate([
             host.view.topAnchor.constraint(equalTo: topAnchor), host.view.bottomAnchor.constraint(equalTo: bottomAnchor),
             host.view.leadingAnchor.constraint(equalTo: leadingAnchor), host.view.trailingAnchor.constraint(equalTo: trailingAnchor)
         ])
+        updateRoot(width: UIScreen.main.bounds.width)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+    private func updateRoot(width: CGFloat) {
+        guard width > 1, let config = configuration as? MinisHostingConfiguration<Content> else { return }
+        measuredWidth = width
+        host.rootView = AnyView(config.content.frame(width: width, alignment: .leading).fixedSize(horizontal: false, vertical: true))
+    }
+    override func layoutSubviews() {
+        if bounds.width > 1 && abs(measuredWidth - bounds.width) > 0.5 {
+            updateRoot(width: bounds.width)
+            invalidateIntrinsicContentSize()
+        }
+        super.layoutSubviews()
+    }
     override var intrinsicContentSize: CGSize {
-        host.sizeThatFits(in: CGSize(width: bounds.width > 0 ? bounds.width : UIScreen.main.bounds.width,
-                                    height: CGFloat.greatestFiniteMagnitude))
+        guard !sizing else { return CGSize(width: UIView.noIntrinsicMetric, height: max(1, bounds.height)) }
+        sizing = true
+        defer { sizing = false }
+        let width = bounds.width > 1 ? bounds.width : UIScreen.main.bounds.width
+        if abs(measuredWidth - width) > 0.5 { updateRoot(width: width) }
+        let fitted = host.sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude))
+        return CGSize(width: UIView.noIntrinsicMetric, height: ceil(max(1, fitted.height)))
+    }
+    override func systemLayoutSizeFitting(_ targetSize: CGSize, withHorizontalFittingPriority horizontal: UILayoutPriority, verticalFittingPriority vertical: UILayoutPriority) -> CGSize {
+        let width = targetSize.width > 1 ? targetSize.width : (bounds.width > 1 ? bounds.width : UIScreen.main.bounds.width)
+        if abs(measuredWidth - width) > 0.5 { updateRoot(width: width) }
+        let fitted = host.sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude))
+        return CGSize(width: width, height: ceil(max(1, fitted.height)))
     }
 }
 
