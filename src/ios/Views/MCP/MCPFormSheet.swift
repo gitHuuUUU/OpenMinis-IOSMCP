@@ -115,8 +115,8 @@ struct MCPFormSheet: View {
                 }
 
                 Section(AppLocalized("Note (shown to the agent)")) {
-                    TextField(AppLocalized("Optional description"), text: $note, axis: .vertical)
-                        .lineLimit(1...4)
+                    MinisMultilineTextField(AppLocalized("Optional description"), text: $note)
+                        .minisLineLimit(1...4)
                 }
             }
             .navigationTitle(Text(isEditing ? "Edit Server" : "Add Server"))

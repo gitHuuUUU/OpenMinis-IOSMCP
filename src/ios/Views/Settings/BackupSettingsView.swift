@@ -332,7 +332,7 @@ struct BackupSettingsView: View {
                 // spanned the middle of the card (user report: the divider
                 // above Stop Backup looked broken). Pin it to the row's
                 // leading edge so it runs the full card width.
-                .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
+                .alignmentGuide(.minisListRowSeparatorLeading) { _ in 0 }
 
                 // A disabled button with no explanation is a dead end — say
                 // which requirement is unmet rather than leaving the user to
@@ -350,28 +350,28 @@ struct BackupSettingsView: View {
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity)
                             .multilineTextAlignment(.center)
-                            .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
+                            .alignmentGuide(.minisListRowSeparatorLeading) { _ in 0 }
                     } else if selected.isEmpty {
                         Text("Choose at least one thing to include.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity)
                             .multilineTextAlignment(.center)
-                            .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
+                            .alignmentGuide(.minisListRowSeparatorLeading) { _ in 0 }
                     } else if encryptBackup && passphrase.isEmpty {
                         Text("Set a passphrase to encrypt this backup.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity)
                             .multilineTextAlignment(.center)
-                            .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
+                            .alignmentGuide(.minisListRowSeparatorLeading) { _ in 0 }
                     } else if encryptBackup && passphrase != confirmPassphrase {
                         Text("Confirm the passphrase to continue.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity)
                             .multilineTextAlignment(.center)
-                            .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
+                            .alignmentGuide(.minisListRowSeparatorLeading) { _ in 0 }
                     }
                 }
 

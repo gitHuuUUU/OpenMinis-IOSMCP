@@ -354,21 +354,11 @@ struct SendPromptIntent: AppIntent {
         return name
     }
 
-    /// Extracts the full response text from the last assistant message in the VM.
     @MainActor
     static func extractResponseText(from vm: AIChatViewModel) -> String {
-        // [T-bgnotif-internal-text-leak] Skip internal bridge turns — they are
-        // instructions addressed to the model, not a response, and returning one
-        // to a Shortcut (or any intent caller) leaks prompt text verbatim.
-        guard let lastAssistant = vm.messages.last(where: { $0.role == .assistant && !$0.isInternalBridge }) else {
-            return "No response."
-        }
-        let textBlocks = lastAssistant.blocks
-            .filter { $0.kind == .text }
-            .map { $0.content }
-        let text = textBlocks.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-        return text.isEmpty ? "Task completed." : text
+        MinisResponseText.extractResponseText(from: vm)
     }
+
 }
 
 /// Helper for posting local notifications from Shortcuts intents.
@@ -536,5 +526,24 @@ final class ShortcutNotificationDelegate: NSObject, UNUserNotificationCenterDele
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         completionHandler([.banner, .sound])
+    }
+}
+
+// Shared response extraction also works on iOS 15, without AppIntents.
+enum MinisResponseText {
+    /// Extracts the full response text from the last assistant message in the VM.
+    @MainActor
+    static func extractResponseText(from vm: AIChatViewModel) -> String {
+        // [T-bgnotif-internal-text-leak] Skip internal bridge turns — they are
+        // instructions addressed to the model, not a response, and returning one
+        // to a Shortcut (or any intent caller) leaks prompt text verbatim.
+        guard let lastAssistant = vm.messages.last(where: { $0.role == .assistant && !$0.isInternalBridge }) else {
+            return "No response."
+        }
+        let textBlocks = lastAssistant.blocks
+            .filter { $0.kind == .text }
+            .map { $0.content }
+        let text = textBlocks.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? "Task completed." : text
     }
 }

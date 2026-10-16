@@ -296,3 +296,43 @@ extension View {
         } else { self.background(MinisKeyboardDismissProbe(mode: mode).frame(width: 0, height: 0)) }
     }
 }
+
+
+enum MinisTextViewFactory {
+    static func make(usingTextLayoutManager enabled: Bool) -> UITextView {
+        if #available(iOS 16.0, *) { return UITextView(usingTextLayoutManager: enabled) }
+        return UITextView(frame: .zero, textContainer: nil)
+    }
+}
+extension HorizontalAlignment {
+    static var minisListRowSeparatorLeading: HorizontalAlignment {
+        if #available(iOS 16.0, *) { return .listRowSeparatorLeading }
+        return .leading
+    }
+}
+extension View {
+    @ViewBuilder func minisLineLimit(_ range: ClosedRange<Int>) -> some View {
+        if #available(iOS 16.0, *) { self.lineLimit(range) }
+        else { self.lineLimit(range.upperBound) }
+    }
+}
+
+/// Multiline input fallback for iOS 15; preserves editing instead of hiding the field.
+struct MinisMultilineTextField: View {
+    let title: String
+    @Binding var text: String
+    init(_ title: String, text: Binding<String>) {
+        self.title = title
+        self._text = text
+    }
+    @ViewBuilder var body: some View {
+        if #available(iOS 16.0, *) {
+            TextField(title, text: $text, axis: .vertical)
+        } else {
+            ZStack(alignment: .topLeading) {
+                if text.isEmpty { Text(title).foregroundColor(.secondary).padding(.top, 8).padding(.leading, 5) }
+                TextEditor(text: $text).opacity(text.isEmpty ? 0.75 : 1).frame(minHeight: 70)
+            }
+        }
+    }
+}

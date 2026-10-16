@@ -164,7 +164,7 @@ struct BrowserSheetView: View {
                     }
                 }
             }
-            .toolbar(isFullscreen ? .hidden : .visible, for: .navigationBar)
+            .minisToolbarVisibility(isFullscreen ? .hidden : .visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     HStack(spacing: 12) {
