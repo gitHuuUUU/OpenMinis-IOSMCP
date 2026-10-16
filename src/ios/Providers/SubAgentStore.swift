@@ -51,6 +51,7 @@ final class SubAgentStore: ObservableObject {
         try? FileManager.default.createDirectory(at: baseURL, withIntermediateDirectories: true)
         self.fileURL = baseURL.appendingPathComponent("sub-agents.json")
         self.subAgents = Self.load(from: fileURL)
+        Task { @MainActor in DeviceWorkbench.shared.importAgents() }
     }
 
     // MARK: - Persistence

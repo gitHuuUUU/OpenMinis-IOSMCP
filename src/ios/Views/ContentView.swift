@@ -8193,6 +8193,7 @@ private struct SettingsSheet: View {
                 }
 
                 Section("Agent Runtime") {
+                    NavigationLink { DevelopmentWorkbenchView() } label: { Label("开发环境与诊断", systemImage: "wrench.and.screwdriver") }
                     // [T-tools-granular-switches] First row: per-tool switches.
                     NavigationLink {
                         ToolsSettingsView()

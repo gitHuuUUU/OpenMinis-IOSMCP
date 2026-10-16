@@ -370,6 +370,14 @@ extension AIChatViewModel {
 
         do {
         switch tu.name {
+        case "device_app":
+            let deviceSession = sessionId ?? draftId ?? "vm-\(vmInstanceId)"
+            if DeviceWorkbench.shared.selected(deviceSession).isEmpty, let draftId,
+               let data = UserDefaults.standard.data(forKey: "workbench.apps.\(draftId)") {
+                UserDefaults.standard.set(data, forKey: "workbench.apps.\(deviceSession)")
+            }
+            toolOutput = try await DeviceWorkbench.shared.tool(toolArgs, session: deviceSession)
+            toolSuccess = true
         case "shell_execute":
             let (command, timeout, delay) = parseToolInput(from: argsJson)
 

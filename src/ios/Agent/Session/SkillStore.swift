@@ -396,12 +396,12 @@ Do not create extraneous files: README.md, INSTALLATION_GUIDE.md, CHANGELOG.md, 
         //    every SKILL.md it contains (source = .bundled). Drop a SKILL.md
         //    folder into `src/ios/BundledSkills/<name>/` before building and it
         //    ships inside the IPA, imported on first launch.
-        installBundledSkillsFromDirectory()
+        Task { @MainActor [weak self] in await self?.installBundledSkillsFromDirectory() }
     }
 
     /// [IOS-MCP] Import any skills bundled under `BundledSkills/<name>/SKILL.md`.
     /// Existing skills with the same id are left untouched so user edits win.
-    private func installBundledSkillsFromDirectory() {
+    private func installBundledSkillsFromDirectory() async {
         let fm = FileManager.default
         guard let bundledDir = Bundle.main.url(forResource: "BundledSkills", withExtension: nil) else {
             return
@@ -410,6 +410,7 @@ Do not create extraneous files: README.md, INSTALLATION_GUIDE.md, CHANGELOG.md, 
             return
         }
         for dir in entries where dir.hasDirectoryPath {
+            await Task.yield()
             let skillFile = dir.appendingPathComponent("SKILL.md")
             guard fm.fileExists(atPath: skillFile.path),
                   let content = try? String(contentsOf: skillFile, encoding: .utf8) else {
@@ -419,7 +420,18 @@ Do not create extraneous files: README.md, INSTALLATION_GUIDE.md, CHANGELOG.md, 
             if skills.contains(where: { $0.id == candidateId }) {
                 continue // user's own copy already present — keep it
             }
-            _ = try? importSkill(content: content, source: .bundled)
+            guard let imported = try? importSkill(content: content, source: .bundled) else { continue }
+            let destination = skillDirectoryURL(for: imported.id)
+            if let files = fm.enumerator(at: dir, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles]) {
+                for case let file as URL in files {
+                    guard (try? file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true, file.lastPathComponent != "SKILL.md" else { continue }
+                    let relative = String(file.path.dropFirst(dir.path.count + 1))
+                    let target = destination.appendingPathComponent(relative)
+                    guard !fm.fileExists(atPath: target.path) else { continue }
+                    try? fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try? fm.copyItem(at: file, to: target)
+                }
+            }
         }
     }
 

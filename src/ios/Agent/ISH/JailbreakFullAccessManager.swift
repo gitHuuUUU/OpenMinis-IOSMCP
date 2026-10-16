@@ -44,8 +44,7 @@ final class JailbreakFullAccessManager {
     /// Bind the real iOS filesystem into the guest. Idempotent; no-ops on
     /// stock (non-jailbroken) devices or before the kernel has booted.
     func enableIfJailbroken() {
-        guard isJailbroken, !enabled, ISHKernel.shared.isBooted else { return }
-        enabled = true
+        guard UserDefaults.standard.bool(forKey: "workbench.fullRead"), !enabled, ISHKernel.shared.isBooted else { return }
 
         // Ensure the guest mount points exist in meta.db before binding.
         ensureFakefsDir("/ios")
@@ -57,13 +56,21 @@ final class JailbreakFullAccessManager {
         let roSys = kernel.bindMountPath("/ios", toHostPath: "/", readOnly: true)
         logger.info("JB: bind / -> /ios  rc=\(roSys)")
 
-        let rwVar = kernel.bindMountPath("/var/ios", toHostPath: "/var", readOnly: false)
+        let rwVar = kernel.bindMountPath("/var/ios", toHostPath: "/var", readOnly: true)
         logger.info("JB: bind /var -> /var/ios  rc=\(rwVar)")
 
         let roUsr = kernel.bindMountPath("/usr/ios", toHostPath: "/usr", readOnly: true)
         logger.info("JB: bind /usr -> /usr/ios  rc=\(roUsr)")
 
+        enabled = roSys == 0 && rwVar == 0 && roUsr == 0
         logger.info("JB: full-access mounts applied (iOS \(UIDevice.current.systemVersion))")
+    }
+
+    func disableAccess() {
+        if ISHKernel.shared.isBooted {
+            for path in ["/ios", "/var/ios", "/usr/ios"] { _ = ISHKernel.shared.bindUnmountPath(path) }
+        }
+        enabled = false
     }
 
     // MARK: - meta.db helpers (mirrors AIChatViewModel.ensureFakefsMetadata)

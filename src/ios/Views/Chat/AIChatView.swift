@@ -341,6 +341,8 @@ struct AIChatView: View {
     @State private var showTerminal = false
     @State private var terminalInitCommand: String?
     @State private var showAttachmentMenu = false
+    @State private var showDeviceApps = false
+    @State private var showWorkbenchArtifacts = false
     @State private var isDropTargeted = false
     @State private var showCamera = false
     @State private var showPhotoPicker = false
@@ -1194,7 +1196,7 @@ struct AIChatView: View {
             )
         }
         // [IOS-MCP] PHPicker bridge (iOS 14+), replacing PhotosPicker (iOS 16+).
-        .pickedPhotos(isPresented: $showPhotoPicker, maxSelectionCount: 50) { assets in
+        .pickedPhotos(isPresented: $showPhotoPicker, maxSelectionCount: 8) { assets in
             guard !assets.isEmpty else { return }
             // [T-ios-photo-pick-placeholder] 1) Insert a loading placeholder chip
             // for every picked item RIGHT NOW (one main-actor batch update), so the
@@ -3277,24 +3279,24 @@ struct AIChatView: View {
             .clipShape(Circle())
             .overlay(Circle().stroke(ChatColors.inputIconBorder, lineWidth: 0.5))
 
-        if #available(iOS 17, *) {
-            Menu {
-                Button { showCamera = true } label: { Label("Take Photo", systemImage: "camera") }
-                Button { showPhotoPicker = true } label: { Label("Choose Photos & Videos", systemImage: "photo.on.rectangle") }
-                Button { showDocumentPicker = true } label: { Label("Add File", systemImage: "doc") }
-            } label: {
-                icon
+        Button { showAttachmentMenu = true } label: { icon }
+            .sheet(isPresented: $showAttachmentMenu) {
+                AttachmentWorkbenchSheet { choice in
+                    switch choice {
+                    case "apps": showDeviceApps = true
+                    case "photos": showPhotoPicker = true
+                    case "camera": showCamera = true
+                    case "artifacts": showWorkbenchArtifacts = true
+                    default: showDocumentPicker = true
+                    }
+                }
             }
-        } else {
-            Button { showAttachmentMenu = true } label: {
-                icon
+            .sheet(isPresented: $showDeviceApps) {
+                DeviceAppPicker(session: vm.sessionId ?? vm.draftId ?? "vm-\(vm.vmInstanceId)") { url in vm.addFileAttachment(from: url) }
             }
-            .confirmationDialog("Add Attachment", isPresented: $showAttachmentMenu) {
-                Button { showCamera = true } label: { Label("Take Photo", systemImage: "camera") }
-                Button { showPhotoPicker = true } label: { Label("Choose Photos & Videos", systemImage: "photo.on.rectangle") }
-                Button { showDocumentPicker = true } label: { Label("Add File", systemImage: "doc") }
+            .sheet(isPresented: $showWorkbenchArtifacts) {
+                WorkbenchArtifactsView { url in vm.addFileAttachment(from: url) }
             }
-        }
     }
 
     /// Bottom toolbar under the text field (+ / edit-exit / mic / send).

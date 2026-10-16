@@ -246,6 +246,18 @@ extension AIChatViewModel {
             ))
         }
 
+        tools.append(AgentToolDefinition(
+            name: "device_app",
+            description: "Inspect or open applications explicitly added to this conversation. Read/list/write native iOS files under selected app roots (not Linux guest paths). get_ui/tap/type/screenshot require a configured running WebDriverAgent session. Always inspect actual capabilities before claiming control.",
+            parameters: [
+                "tool_title": AgentToolParam(type: .string, description: "Short description in the user language"),
+                "action": AgentToolParam(type: .string, description: "Operation", enumValues: ["list", "inspect", "open", "list_files", "read_file", "write_file", "get_ui", "tap", "type", "screenshot"]),
+                "bundle_id": AgentToolParam(type: .string, description: "Selected application bundle identifier"),
+                "path": AgentToolParam(type: .string, description: "Absolute native iOS path"),
+                "text": AgentToolParam(type: .string, description: "Text to type or write, only for those actions"),
+                "x": AgentToolParam(type: .integer, description: "Tap x coordinate"),
+                "y": AgentToolParam(type: .integer, description: "Tap y coordinate")
+            ], required: ["tool_title", "action"], propertyOrdering: ["tool_title", "action", "bundle_id", "path", "text", "x", "y"]))
         return tools
     }
 

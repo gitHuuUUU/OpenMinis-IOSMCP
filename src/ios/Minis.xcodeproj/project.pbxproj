@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AEFE6D0D52B54498B10A8F71 /* WorkbenchBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = C750EAE1C4194A9BBB57C7D9 /* WorkbenchBridge.m */; };
+		FFF8F8476EAD43AEACE06025 /* Workbench.swift in Sources */ = {isa = PBXBuildFile; fileRef = B821A73AC4F54A39B02503A1 /* Workbench.swift */; };
 		21FED4B7BB6F6D9476C9992E /* VoiceProvider+System.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88993FC8E3F0199C6638F664 /* VoiceProvider+System.swift */; };
 		241D530017827D7F0EB604DE /* VoiceProviderFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2941B643B8A2F048A2B154E /* VoiceProviderFactory.swift */; };
 		2A4FD49F872431D703328384 /* VoiceOutputPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 424510790AF3FB2452D3CCE3 /* VoiceOutputPlayer.swift */; };
@@ -638,6 +640,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		5A71E40627414A22AC4433B5 /* WorkbenchBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WorkbenchBridge.h; sourceTree = "<group>"; };
+		C750EAE1C4194A9BBB57C7D9 /* WorkbenchBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WorkbenchBridge.m; sourceTree = "<group>"; };
+		B821A73AC4F54A39B02503A1 /* Workbench.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Workbench.swift; sourceTree = "<group>"; };
 		0ED149397BEA7E0408C92688 /* GroupVoiceModelsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GroupVoiceModelsView.swift; sourceTree = "<group>"; };
 		0F5379380323FA8C6477708C /* GroupSlotPicker.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GroupSlotPicker.swift; sourceTree = "<group>"; };
 		16FF3462D09402F14B610CD6 /* VoiceWaveformView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VoiceWaveformView.swift; sourceTree = "<group>"; };
@@ -1520,6 +1525,9 @@
 			isa = PBXGroup;
 			children = (
 				E51000011 /* MinisApp.swift */,
+				5A71E40627414A22AC4433B5 /* WorkbenchBridge.h */,
+				C750EAE1C4194A9BBB57C7D9 /* WorkbenchBridge.m */,
+				B821A73AC4F54A39B02503A1 /* Workbench.swift */,
 				E5QA0102 /* AppDelegate.swift */,
 				E5E000018 /* Minis.entitlements */,
 				E5PV00002 /* PrivacyInfo.xcprivacy */,
@@ -2826,6 +2834,8 @@
 				AA26CCBC2F324FE400AECF2D /* FileBrowserView.swift in Sources */,
 				AA26CCBE2F31080100AECF2D /* RootfsManager.swift in Sources */,
 				E51000001 /* MinisApp.swift in Sources */,
+				AEFE6D0D52B54498B10A8F71 /* WorkbenchBridge.m in Sources */,
+				FFF8F8476EAD43AEACE06025 /* Workbench.swift in Sources */,
 				E5FPBH02 /* FileProviderBootHealth.swift in Sources */,
 				E5QA0001 /* QuickActionRouter.swift in Sources */,
 				E5QA0003 /* QuickActionWorkflow.swift in Sources */,

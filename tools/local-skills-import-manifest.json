@@ -1,0 +1,644 @@
+{
+  "included": [
+    {
+      "id": "local-aimbot-calc",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\aimbot-calc",
+      "files": 2
+    },
+    {
+      "id": "local-aob-scan",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\aob-scan",
+      "files": 2
+    },
+    {
+      "id": "local-brute-force",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\brute-force",
+      "files": 2
+    },
+    {
+      "id": "local-code-inject",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\code-inject",
+      "files": 2
+    },
+    {
+      "id": "local-creative-writing",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\creative-writing",
+      "files": 1
+    },
+    {
+      "id": "local-dn-decompile",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\dn-decompile",
+      "files": 2
+    },
+    {
+      "id": "local-dn-edit",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\dn-edit",
+      "files": 2
+    },
+    {
+      "id": "local-dn-save",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\dn-save",
+      "files": 2
+    },
+    {
+      "id": "local-dns-enum",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\dns-enum",
+      "files": 2
+    },
+    {
+      "id": "local-dotnet-bypass",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\dotnet-bypass",
+      "files": 2
+    },
+    {
+      "id": "local-encrypt-detect",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\encrypt-detect",
+      "files": 2
+    },
+    {
+      "id": "local-entity-list",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\entity-list",
+      "files": 2
+    },
+    {
+      "id": "local-esp-law",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\esp-law",
+      "files": 2
+    },
+    {
+      "id": "local-exact-scan",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\exact-scan",
+      "files": 2
+    },
+    {
+      "id": "local-exec-hook",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\exec-hook",
+      "files": 2
+    },
+    {
+      "id": "local-file-backup",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\file-backup",
+      "files": 2
+    },
+    {
+      "id": "local-frida-intercept",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\frida-intercept",
+      "files": 2
+    },
+    {
+      "id": "local-full-crack",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\full-crack",
+      "files": 1
+    },
+    {
+      "id": "local-full-game",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\full-game",
+      "files": 1
+    },
+    {
+      "id": "local-full-pentest",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\full-pentest",
+      "files": 1
+    },
+    {
+      "id": "local-full-reverse",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\full-reverse",
+      "files": 1
+    },
+    {
+      "id": "local-full-unpack",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\full-unpack",
+      "files": 1
+    },
+    {
+      "id": "local-function-decompile",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\function-decompile",
+      "files": 2
+    },
+    {
+      "id": "local-iat-rebuild",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\iat-rebuild",
+      "files": 2
+    },
+    {
+      "id": "local-import-analyze",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\import-analyze",
+      "files": 2
+    },
+    {
+      "id": "local-ios15-swiftui-cloud-build",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\ios15-swiftui-cloud-build",
+      "files": 1
+    },
+    {
+      "id": "local-ipa-h5-menu-workflow",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\ipa-h5-menu-workflow",
+      "files": 7
+    },
+    {
+      "id": "local-jmp-modify",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\jmp-modify",
+      "files": 2
+    },
+    {
+      "id": "local-jump-patch",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\jump-patch",
+      "files": 2
+    },
+    {
+      "id": "local-keygen-build",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\keygen-build",
+      "files": 2
+    },
+    {
+      "id": "local-legacy-d3d-software-cursor",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\legacy-d3d-software-cursor",
+      "files": 1
+    },
+    {
+      "id": "local-memory-breakpoint",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\memory-breakpoint",
+      "files": 2
+    },
+    {
+      "id": "local-network-bypass",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\network-bypass",
+      "files": 2
+    },
+    {
+      "id": "local-network-pentest",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\network-pentest",
+      "files": 1
+    },
+    {
+      "id": "local-nop-remove",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\nop-remove",
+      "files": 2
+    },
+    {
+      "id": "local-overlay-render",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\overlay-render",
+      "files": 2
+    },
+    {
+      "id": "local-packet-replay",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\packet-replay",
+      "files": 2
+    },
+    {
+      "id": "local-patch-apply",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\patch-apply",
+      "files": 2
+    },
+    {
+      "id": "local-patch-rollback",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\patch-rollback",
+      "files": 2
+    },
+    {
+      "id": "local-phishing-kit",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\phishing-kit",
+      "files": 1
+    },
+    {
+      "id": "local-pointer-chain",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\pointer-chain",
+      "files": 2
+    },
+    {
+      "id": "local-port-scan",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\port-scan",
+      "files": 2
+    },
+    {
+      "id": "local-post-exploit",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\post-exploit",
+      "files": 1
+    },
+    {
+      "id": "local-pre-execution-malware-triage",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\pre-execution-malware-triage",
+      "files": 3
+    },
+    {
+      "id": "local-sqli-test",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\sqli-test",
+      "files": 2
+    },
+    {
+      "id": "local-string-extract",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\string-extract",
+      "files": 2
+    },
+    {
+      "id": "local-time-reset",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\time-reset",
+      "files": 2
+    },
+    {
+      "id": "local-unknown-scan",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\unknown-scan",
+      "files": 2
+    },
+    {
+      "id": "local-view-matrix",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\view-matrix",
+      "files": 2
+    },
+    {
+      "id": "local-vuln-scan",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\vuln-scan",
+      "files": 2
+    },
+    {
+      "id": "local-web-scan",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\web-scan",
+      "files": 3
+    },
+    {
+      "id": "local-world-to-screen",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\world-to-screen",
+      "files": 2
+    },
+    {
+      "id": "local-xref-trace",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\xref-trace",
+      "files": 2
+    },
+    {
+      "id": "local-zxwn-activation",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\zxwn-activation",
+      "files": 1
+    },
+    {
+      "id": "local-imagegen",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\.system\\imagegen",
+      "files": 11
+    },
+    {
+      "id": "local-openai-docs",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\.system\\openai-docs",
+      "files": 13
+    },
+    {
+      "id": "local-review-agent",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\.system\\review-agent",
+      "files": 2
+    },
+    {
+      "id": "local-skill-creator",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\.system\\skill-creator",
+      "files": 8
+    },
+    {
+      "id": "local-skill-installer",
+      "source": "C:\\Users\\launca\\.codex\\Skills\\.system\\skill-installer",
+      "files": 7
+    },
+    {
+      "id": "local-game-hacking",
+      "source": "C:\\Users\\launca\\.agents\\skills\\game-hacking",
+      "files": 18
+    },
+    {
+      "id": "local-local-ai-research-toolkit",
+      "source": "C:\\Users\\launca\\.agents\\skills\\local-ai-research-toolkit",
+      "files": 3
+    },
+    {
+      "id": "local-local-crypto-recovery",
+      "source": "C:\\Users\\launca\\.agents\\skills\\local-crypto-recovery",
+      "files": 3
+    },
+    {
+      "id": "local-red-team-command-doctrine",
+      "source": "C:\\Users\\launca\\.agents\\skills\\red-team-command-doctrine",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-ad-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-ad-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-api-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-api-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-auth-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-auth-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-cache-poison-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-cache-poison-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-clickjacking-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-clickjacking-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-cloud-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-cloud-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-cmdi-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-cmdi-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-code-audit-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-code-audit-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-container-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-container-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-cors-miscfg-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-cors-miscfg-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-crypto-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-crypto-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-csrf-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-csrf-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-cve-lookup",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-cve-lookup",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-cve-validation",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-cve-validation",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-deserialize-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-deserialize-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-evasion-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-evasion-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-file-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-file-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-injection-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-injection-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-logic-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-logic-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-mobile-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-mobile-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-network-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-network-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-open-redirect-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-open-redirect-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-payload-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-payload-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-postex-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-postex-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-recon-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-recon-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-recon-intake",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-recon-intake",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-reverse-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-reverse-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-sqli-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-sqli-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-ssrf-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-ssrf-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-ssti-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-ssti-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-subdomain-takeover-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-subdomain-takeover-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-web-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-web-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-xss-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-xss-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-redteam-xxe-detail-pack",
+      "source": "C:\\Users\\launca\\.agents\\skills\\redteam-xxe-detail-pack",
+      "files": 1
+    },
+    {
+      "id": "local-reverse-engineer-anything",
+      "source": "C:\\Users\\launca\\.agents\\skills\\reverse-engineer-anything",
+      "files": 7
+    },
+    {
+      "id": "local-reverse-engineering",
+      "source": "C:\\Users\\launca\\.agents\\skills\\reverse-engineering",
+      "files": 5
+    },
+    {
+      "id": "local-computer-use",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-bundled\\computer-use\\26.1007.71326\\skills\\computer-use",
+      "files": 1
+    },
+    {
+      "id": "local-visualize",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-bundled\\visualize\\1.0.49\\skills\\visualize",
+      "files": 13
+    },
+    {
+      "id": "local-artifact-template-analytics-dashboard",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\openai-templates\\0.1.1\\skills\\artifact-template-analytics-dashboard",
+      "files": 3
+    },
+    {
+      "id": "local-artifact-template-business-review",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\openai-templates\\0.1.1\\skills\\artifact-template-business-review",
+      "files": 3
+    },
+    {
+      "id": "local-artifact-template-design-report",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\openai-templates\\0.1.1\\skills\\artifact-template-design-report",
+      "files": 3
+    },
+    {
+      "id": "local-artifact-template-experiment-analysis",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\openai-templates\\0.1.1\\skills\\artifact-template-experiment-analysis",
+      "files": 3
+    },
+    {
+      "id": "local-artifact-template-financial-budget",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\openai-templates\\0.1.1\\skills\\artifact-template-financial-budget",
+      "files": 3
+    },
+    {
+      "id": "local-artifact-template-investment-committee-memo",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\openai-templates\\0.1.1\\skills\\artifact-template-investment-committee-memo",
+      "files": 3
+    },
+    {
+      "id": "local-artifact-template-legal-memorandum",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\openai-templates\\0.1.1\\skills\\artifact-template-legal-memorandum",
+      "files": 3
+    },
+    {
+      "id": "local-artifact-template-market-trends-report",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\openai-templates\\0.1.1\\skills\\artifact-template-market-trends-report",
+      "files": 3
+    },
+    {
+      "id": "local-artifact-template-minimal-letterhead",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\openai-templates\\0.1.1\\skills\\artifact-template-minimal-letterhead",
+      "files": 3
+    },
+    {
+      "id": "local-artifact-template-operating-calendar",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\openai-templates\\0.1.1\\skills\\artifact-template-operating-calendar",
+      "files": 3
+    },
+    {
+      "id": "local-artifact-template-operating-review",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\openai-templates\\0.1.1\\skills\\artifact-template-operating-review",
+      "files": 3
+    },
+    {
+      "id": "local-artifact-template-project-kickoff",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\openai-templates\\0.1.1\\skills\\artifact-template-project-kickoff",
+      "files": 3
+    },
+    {
+      "id": "local-artifact-template-project-tracker",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\openai-templates\\0.1.1\\skills\\artifact-template-project-tracker",
+      "files": 3
+    },
+    {
+      "id": "local-artifact-template-sales-pipeline",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\openai-templates\\0.1.1\\skills\\artifact-template-sales-pipeline",
+      "files": 3
+    },
+    {
+      "id": "local-artifact-template-simple-dark-mode",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\openai-templates\\0.1.1\\skills\\artifact-template-simple-dark-mode",
+      "files": 3
+    },
+    {
+      "id": "local-artifact-template-simple-light-mode",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\openai-templates\\0.1.1\\skills\\artifact-template-simple-light-mode",
+      "files": 3
+    },
+    {
+      "id": "local-artifact-template-strategy-memorandum",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\openai-templates\\0.1.1\\skills\\artifact-template-strategy-memorandum",
+      "files": 3
+    },
+    {
+      "id": "local-artifact-template-system-design",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\openai-templates\\0.1.1\\skills\\artifact-template-system-design",
+      "files": 3
+    },
+    {
+      "id": "local-artifact-template-team-alignment",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\openai-templates\\0.1.1\\skills\\artifact-template-team-alignment",
+      "files": 3
+    },
+    {
+      "id": "local-artifact-template-three-statement-forecast",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\openai-templates\\0.1.1\\skills\\artifact-template-three-statement-forecast",
+      "files": 3
+    },
+    {
+      "id": "local-plugin-management",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\plugin-management\\0.1.0\\skills\\plugin-management",
+      "files": 1
+    },
+    {
+      "id": "local-sites",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\sites\\1.0.2-remix-a.1\\skills\\sites",
+      "files": 52
+    },
+    {
+      "id": "local-create-pet",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\work-pets\\0.1.6\\skills\\create-pet",
+      "files": 21
+    },
+    {
+      "id": "local-pets",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\work-pets\\0.1.6\\skills\\pets",
+      "files": 2
+    },
+    {
+      "id": "local-update-pet",
+      "source": "C:\\Users\\launca\\.codex\\plugins\\cache\\openai-curated-remote\\work-pets\\0.1.6\\skills\\update-pet",
+      "files": 2
+    }
+  ],
+  "excluded": [
+    {
+      "path": "C:\\Users\\launca\\.agents\\skills\\redteam-jailbreak-detail-pack",
+      "reason": "model safeguard bypass configuration"
+    }
+  ],
+  "notes": [
+    "Skill resources retained as source; Windows binaries and service credentials are not embedded. Desktop-only tool namespaces are not supplied by the phone.",
+    "No standalone local agent role definitions found in .codex/agents; skill agents/openai.yaml preserved. Four mobile roles are merged separately."
+  ]
+}

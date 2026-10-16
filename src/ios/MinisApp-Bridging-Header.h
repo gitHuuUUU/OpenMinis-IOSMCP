@@ -21,6 +21,7 @@
 
 // ISH Kernel Wrapper
 #import "ISHKernel.h"
+#import "WorkbenchBridge.h"
 
 // ISH Shell Executor (pipe-based process execution)
 #import "ISHShellExecutor.h"
