@@ -5,6 +5,23 @@ import Foundation
 enum SharedContainerStore {
     static let appGroupID = "group.com.iosmcp.app"
 
+    /// Resolve once per process. Missing App Group permissions must not trap
+    /// during launch. The fallback is persistent Library storage, never tmp.
+    static func resolveStorageContainer(appGroupURL: URL?, libraryURL: URL) -> URL {
+        appGroupURL ?? libraryURL.appendingPathComponent("MinisLocalContainer", isDirectory: true)
+    }
+
+    static let storageContainerURL: URL = {
+        let fm = FileManager.default
+        let library = fm.urls(for: .libraryDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library", isDirectory: true)
+        let url = resolveStorageContainer(
+            appGroupURL: fm.containerURL(forSecurityApplicationGroupIdentifier: appGroupID),
+            libraryURL: library)
+        try? fm.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }()
+
     private static let pendingShareKey = "pendingShare"
 
     static var sharedDefaults: UserDefaults? {

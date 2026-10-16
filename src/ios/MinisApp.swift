@@ -22,8 +22,8 @@ extension Bundle {
 
     /// Call once at launch to swizzle `localizedString(forKey:value:table:)`.
     static func enableLanguageOverride() {
-        let original = class_getInstanceMethod(Bundle.self, #selector(localizedString(forKey:value:table:)))!
-        let swizzled = class_getInstanceMethod(Bundle.self, #selector(overrideLocalizedString(forKey:value:table:)))!
+        guard let original = class_getInstanceMethod(Bundle.self, #selector(localizedString(forKey:value:table:))),
+              let swizzled = class_getInstanceMethod(Bundle.self, #selector(overrideLocalizedString(forKey:value:table:))) else { return }
         method_exchangeImplementations(original, swizzled)
     }
 
@@ -1165,7 +1165,7 @@ struct MinisApp: App {
     private static func migrateSharedDirToAppGroup() {
         let fm = FileManager.default
         let library = fm.urls(for: .libraryDirectory, in: .userDomainMask).first!
-        let container = fm.containerURL(forSecurityApplicationGroupIdentifier: "group.com.iosmcp.app")!
+        let container = SharedContainerStore.storageContainerURL
 
         let migrations: [(source: URL, dest: URL, label: String)] = [
             // Legacy Library/MinisChat/shared → new shared

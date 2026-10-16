@@ -45,6 +45,11 @@ jobs:
       - name: Swift syntax preflight
         run: find src/ios \( -path '*/MinisTests' -o -path '*/MinisUITests' \) -prune -o -name '*.swift' -print0 | xargs -0 xcrun swiftc -frontend -parse
 
+      - name: Test missing App Group storage fallback
+        run: |
+          xcrun swiftc src/ios/Shared/PendingShare.swift src/ios/Shared/SharedContainerStore.swift tools/StorageFallbackTests.swift -o /tmp/minis-storage-tests
+          /tmp/minis-storage-tests
+
       - name: Set up Go (rclone / ish tooling)
         uses: actions/setup-go@v5
         with:
@@ -95,6 +100,7 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
+            DEBUG_INFORMATION_FORMAT=dwarf-with-dsym \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGN_REQUIRED=NO \
@@ -128,5 +134,9 @@ jobs:
           OUTPUT="IOS-MCP-${GITHUB_SHA:0:7}.ipa"
           cp IOS-MCP.ipa "$OUTPUT"
           shasum -a 256 "$OUTPUT" > "$OUTPUT.sha256"
-          gh release upload rootfs-tooling-v1 "$OUTPUT" "$OUTPUT.sha256" --repo "$GITHUB_REPOSITORY"
+          SYMBOLS="IOS-MCP-${GITHUB_SHA:0:7}-symbols.zip"
+          DSYM="build/DerivedData/Build/Products/Release-iphoneos/Minis.app.dSYM"
+          test -d "$DSYM"
+          ditto -c -k --keepParent "$DSYM" "$SYMBOLS"
+          gh release upload rootfs-tooling-v1 "$OUTPUT" "$OUTPUT.sha256" "$SYMBOLS" --repo "$GITHUB_REPOSITORY"
           echo "Uploaded $OUTPUT"
