@@ -881,9 +881,10 @@ private struct SkillFileDetailView: View {
             .navigationTitle(fileName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                if hasChanges {
-                    ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    if hasChanges {
                         Button(AppLocalized("Save")) { save() }
+
                     }
                 }
             }

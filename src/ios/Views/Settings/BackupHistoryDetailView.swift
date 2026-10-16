@@ -36,13 +36,14 @@ struct BackupHistoryDetailView: View {
             // Hidden while the run is live: a delete that dropped the record
             // while the upload kept running would strand a job with nothing
             // tracking it. Stop it first — this button is then right here.
-            if !isLive {
-                ToolbarItem(placement: .navigationBarTrailing) {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                if !isLive {
                     Button(role: .destructive) {
                         showDeleteConfirm = true
                     } label: {
                         Label("Delete", systemImage: "trash")
                     }
+
                 }
             }
         }

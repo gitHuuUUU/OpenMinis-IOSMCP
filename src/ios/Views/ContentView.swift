@@ -2505,6 +2505,14 @@ struct ContentView: View {
                 // [IOS-MCP] iOS 15 fallback: NavigationView + destination links.
                 NavigationView {
                     sessionList(useNavigationLinks: true)
+                        .background(
+                            NavigationLink(isActive: Binding(
+                                get: { !navigationPath.isEmpty },
+                                set: { if !$0 { navigationPath.removeAll() } }
+                            )) {
+                                if let id = navigationPath.last { sessionDestinationView(for: id) }
+                            } label: { EmptyView() }
+                        )
                 }
                 .navigationViewStyle(.stack)
             }
