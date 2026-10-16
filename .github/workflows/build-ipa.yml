@@ -40,7 +40,8 @@ jobs:
           sudo xcode-select -s "$XCODE_APP/Contents/Developer"
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
-          xcodebuild -version | head -1 | grep -Eq 'Xcode (2[6-9]|[3-9][0-9])' || { echo "iOS26 SDK is required for guarded APIs"; exit 1; }
+          XCODE_VERSION="$(xcodebuild -version)"
+          [[ "$XCODE_VERSION" =~ Xcode[[:space:]](2[6-9]|[3-9][0-9]) ]] || { echo "iOS26 SDK is required for guarded APIs"; exit 1; }
 
       - name: Workbench source contract checks
         run: python3 tools/test_workbench_static.py
