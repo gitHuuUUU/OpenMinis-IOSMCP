@@ -17,6 +17,16 @@ extension AIChatViewModel {
     /// Execute a command via ISHExecutionCoordinator (serialized, mount-safe).
     /// Returns clean stdout+stderr output without any TTY artifacts, plus the exit code.
     func executeCommand(_ command: String, timeout: TimeInterval? = nil, lineCallback: @escaping (String) -> Void) async throws -> CommandResult {
+        if !ISHKernel.shared.isBooted {
+            ensureKernelBooted()
+            while kernelStatus == .booting {
+                try Task.checkCancellation()
+                try await Task.sleep(nanoseconds:100_000_000)
+            }
+            guard ISHKernel.shared.isBooted else {
+                throw NSError(domain:"MinisKernel",code:1,userInfo:[NSLocalizedDescriptionKey:"Linux 环境启动失败，请导出内核诊断 TXT；普通对话无需启动 Linux。"])
+            }
+        }
         let effectiveTimeout = timeout ?? defaultCommandTimeout
         logger.info("Executing command via coordinator (timeout: \(Int(effectiveTimeout))s): \(command)")
 

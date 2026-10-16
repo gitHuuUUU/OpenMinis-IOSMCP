@@ -35,6 +35,9 @@ typedef void (^ISHCommandCompletionCallback)(NSString *output, NSError * _Nullab
 /// @return 0 on success, negative error code on failure
 - (int)bootWithRootPath:(NSString *)rootPath;
 
+/// Serialized background bootstrap; callers never block UIKit on fakefs/SQLite.
+- (void)bootAsyncWithRootPath:(NSString *)rootPath completion:(void (^)(int))completion NS_SWIFT_NAME(bootAsync(rootPath:completion:));
+
 /// Execute a command (starts interactive shell)
 /// @param command Command and arguments array, e.g. @[@"/bin/sh", @"-l"]
 /// @return 0 on success, negative error code on failure

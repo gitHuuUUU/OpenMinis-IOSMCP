@@ -33,6 +33,9 @@
 #include <sys/syslimits.h> // PATH_MAX
 #include <signal.h>
 #include <setjmp.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>     // usleep
 #import <mach/mach.h>   // task_info / TASK_VM_INFO (phys_footprint)
 #include <execinfo.h>
@@ -69,6 +72,21 @@
 #import "ScheduledOffload.h"
 #import "BrowserUseOffload.h"
 #import "DebugOffload.h"
+
+// Durable bootstrap trace independent of buffered NSLog and Swift logging.
+static void minis_boot_checkpoint(const char *stage) {
+    @autoreleasepool {
+        NSString *path = [NSHomeDirectory() stringByAppendingPathComponent:@"Library/minis-kernel-boot.txt"];
+        int fd = open(path.fileSystemRepresentation, O_WRONLY | O_CREAT | O_APPEND | O_SYNC, 0600);
+        if (fd < 0) return;
+        struct stat st;
+        if (fstat(fd, &st) == 0 && st.st_size > 32768) ftruncate(fd, 0);
+        char line[192];
+        int n = snprintf(line, sizeof(line), "%lld %s\n", (long long)time(NULL), stage);
+        if (n > 0) write(fd, line, (size_t)n < sizeof(line) ? (size_t)n : sizeof(line)-1);
+        close(fd);
+    }
+}
 
 NSNotificationName const ISHProcessExitedNotification = @"ISHProcessExited";
 NSNotificationName const ISHTerminalOutputNotification = @"ISHTerminalOutput";
@@ -386,6 +404,7 @@ extern void jit_crash_trampoline(void);
 
 /// Handles SIGSEGV/SIGBUS from JIT code (stale TLB pointers from concurrent CoW).
 /// Uses ucontext PC manipulation to redirect to jit_crash_trampoline.
+static struct sigaction minis_previous_signal_actions[NSIG];
 static void jit_crash_handler(int sig, siginfo_t *info, void *ctx) {
 #ifdef __aarch64__
     if ((sig == SIGSEGV || sig == SIGBUS) && in_jit) {
@@ -437,9 +456,9 @@ static void jit_crash_handler(int sig, siginfo_t *info, void *ctx) {
     extern __thread int ish_thread_marker;
     if (!ish_thread_marker) {
         // Not an iSH thread — restore default handler and re-raise
-        struct sigaction sa_default = {0};
-        sa_default.sa_handler = SIG_DFL;
-        sigaction(sig, &sa_default, NULL);
+        struct sigaction previous = minis_previous_signal_actions[sig];
+        if (previous.sa_handler == SIG_IGN) previous.sa_handler = SIG_DFL;
+        sigaction(sig, &previous, NULL);
         raise(sig);
         return;
     }
@@ -555,6 +574,9 @@ static void embedded_die_handler(const char *msg) {
 }
 
 static void install_jit_crash_handler(void) {
+    static BOOL installed = NO;
+    if (installed) return;
+    installed = YES;
     static char altstack[SIGSTKSZ];
     stack_t ss = {.ss_sp = altstack, .ss_size = SIGSTKSZ};
     sigaltstack(&ss, NULL);
@@ -562,10 +584,10 @@ static void install_jit_crash_handler(void) {
     struct sigaction sa = {0};
     sa.sa_sigaction = jit_crash_handler;
     sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
-    sigaction(SIGSEGV, &sa, NULL);
-    sigaction(SIGBUS, &sa, NULL);
-    sigaction(SIGILL, &sa, NULL);
-    sigaction(SIGTRAP, &sa, NULL);
+    sigaction(SIGSEGV, &sa, &minis_previous_signal_actions[SIGSEGV]);
+    sigaction(SIGBUS, &sa, &minis_previous_signal_actions[SIGBUS]);
+    sigaction(SIGILL, &sa, &minis_previous_signal_actions[SIGILL]);
+    sigaction(SIGTRAP, &sa, &minis_previous_signal_actions[SIGTRAP]);
     // Note: SIGABRT intentionally NOT handled — it's used by the system
     // (assert(), Swift runtime, malloc failure) and intercepting it prevents
     // normal crash reporting and can mask OOM conditions.
@@ -688,7 +710,26 @@ static void handle_process_exit(struct task *task, int code) {
     return _isBooted;
 }
 
+- (void)bootAsyncWithRootPath:(NSString *)rootPath completion:(void (^)(int))completion {
+    static dispatch_queue_t bootQueue;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ bootQueue = dispatch_queue_create("com.minisapp.ish.bootstrap", DISPATCH_QUEUE_SERIAL); });
+    dispatch_async(bootQueue, ^{
+        @autoreleasepool {
+            int result;
+            @try { result = [self bootWithRootPath:rootPath]; }
+            @catch (NSException *exception) {
+                minis_boot_checkpoint("objc-exception");
+                NSLog(@"ISHKernel: boot exception %@: %@", exception.name, exception.reason);
+                result = -EIO;
+            }
+            completion(result);
+        }
+    });
+}
+
 - (int)bootWithRootPath:(NSString *)rootPath {
+    minis_boot_checkpoint("boot-enter");
     if (_isBooted) {
         NSLog(@"ISHKernel: Already booted");
         return 0;
@@ -697,7 +738,9 @@ static void handle_process_exit(struct task *task, int code) {
     int err;
 
     // 0. Install JIT crash recovery handler (must be before any JIT code runs)
+    minis_boot_checkpoint("signal-handlers-start");
     install_jit_crash_handler();
+    minis_boot_checkpoint("signal-handlers-finished");
 
     // [T-ish-anon-cap-dynamic] Derive the guest anonymous-memory cap from what
     // THIS device can actually spare, instead of one compile-time number that
@@ -775,14 +818,20 @@ static void handle_process_exit(struct task *task, int code) {
     // follows real jetsam headroom instead — see mm.h for the design. The
     // ledger install stays because it is the fallback regime if the governor
     // can never measure (footprint mode never activates).
+    minis_boot_checkpoint("memory-governor-start");
     ish_memory_governor_start();
+    minis_boot_checkpoint("memory-governor-finished");
     // [T-ish-cpu-top] Continuous per-thread CPU attribution in the daily log
     // (defined with the governor code further down).
     extern void ish_cpu_top_start(void);
+    minis_boot_checkpoint("cpu-monitor-start");
     ish_cpu_top_start();
+    minis_boot_checkpoint("cpu-monitor-finished");
     // [T-ish-fork-rate] Thermal-driven fork-rate governor (defined next to [CPUTop]).
     extern void ish_fork_rate_governor_start(void);
+    minis_boot_checkpoint("fork-governor-start");
     ish_fork_rate_governor_start();
+    minis_boot_checkpoint("fork-governor-finished");
 
     // Override die() to terminate only the iSH thread instead of abort()ing the app.
     extern void (*die_handler)(const char *msg);
@@ -791,7 +840,9 @@ static void handle_process_exit(struct task *task, int code) {
     // 1. Mount root filesystem
     _rootPath = rootPath;
     _dataPath = [rootPath stringByAppendingPathComponent:@"data"];
+    minis_boot_checkpoint("mount-root-start");
     err = mount_root(&fakefs, _dataPath.fileSystemRepresentation);
+    minis_boot_checkpoint("mount-root-finished");
     if (err < 0) {
         NSLog(@"ISHKernel: mount_root failed: %d", err);
         return err;
@@ -814,7 +865,9 @@ static void handle_process_exit(struct task *task, int code) {
     }
 
     // 2. Become init process (PID 1)
+    minis_boot_checkpoint("init-process-start");
     err = become_first_process();
+    minis_boot_checkpoint("init-process-finished");
     if (err < 0) {
         NSLog(@"ISHKernel: become_first_process failed: %d", err);
         return err;
@@ -823,10 +876,14 @@ static void handle_process_exit(struct task *task, int code) {
     NSLog(@"ISHKernel: Init process created (PID 1)");
 
     // 3. Create device nodes
+    minis_boot_checkpoint("device-nodes-start");
     [self createDeviceNodes];
+    minis_boot_checkpoint("device-nodes-finished");
 
     // 3.5. Apply rootfs overlay patches (e.g. fetch-polyfill.js)
+    minis_boot_checkpoint("overlay-start");
     FsApplyOverlay();
+    minis_boot_checkpoint("overlay-finished");
 
     // 4. Mount proc and devpts filesystems
     do_mount(&procfs, "proc", "/proc", "", 0);
@@ -834,7 +891,9 @@ static void handle_process_exit(struct task *task, int code) {
     NSLog(@"ISHKernel: /proc and /dev/pts mounted");
 
     // 5. Bind-mount and configure DNS
+    minis_boot_checkpoint("dns-start");
     [self mountDnsConfig];
+    minis_boot_checkpoint("dns-finished");
 
     // 6. Set exit hook
     exit_hook = handle_process_exit;
@@ -884,7 +943,9 @@ static void handle_process_exit(struct task *task, int code) {
     NSLog(@"ISHKernel: TTY driver registered, console device set");
 
     // 8. Create stdio for init process (stdin/stdout/stderr connected to console)
+    minis_boot_checkpoint("stdio-start");
     err = create_stdio("/dev/console", TTY_CONSOLE_MAJOR, 1);
+    minis_boot_checkpoint("stdio-finished");
     if (err < 0) {
         NSLog(@"ISHKernel: create_stdio failed: %d (non-fatal)", err);
     } else {
@@ -892,41 +953,70 @@ static void handle_process_exit(struct task *task, int code) {
     }
 
     // 9. Register native binary bindings (ffmpeg, etc.)
+    minis_boot_checkpoint("ffmpeg_offload_register");
     ffmpeg_offload_register();
+    minis_boot_checkpoint("calendar_offload_register");
     calendar_offload_register();
+    minis_boot_checkpoint("location_offload_register");
     location_offload_register();
+    minis_boot_checkpoint("weather_offload_register");
     weather_offload_register();
+    minis_boot_checkpoint("vision_offload_register");
     vision_offload_register();
+    minis_boot_checkpoint("open_offload_register");
     open_offload_register();
+    minis_boot_checkpoint("clipboard_offload_register");
     clipboard_offload_register();
+    minis_boot_checkpoint("healthkit_offload_register");
     healthkit_offload_register();
+    minis_boot_checkpoint("photos_offload_register");
     photos_offload_register();
+    minis_boot_checkpoint("maps_offload_register");
     maps_offload_register();
+    minis_boot_checkpoint("nlp_offload_register");
     nlp_offload_register();
+    minis_boot_checkpoint("alarm_offload_register");
     alarm_offload_register();
+    minis_boot_checkpoint("media_offload_register");
     media_offload_register();
+    minis_boot_checkpoint("speak_offload_register");
     speak_offload_register();
+    minis_boot_checkpoint("speech_offload_register");
     speech_offload_register();
+    minis_boot_checkpoint("device_offload_register");
     device_offload_register();
+    minis_boot_checkpoint("homekit_offload_register");
     homekit_offload_register();
+    minis_boot_checkpoint("notification_offload_register");
     notification_offload_register();
+    minis_boot_checkpoint("player_offload_register");
     player_offload_register();
+    minis_boot_checkpoint("model_use_offload_register");
     model_use_offload_register();
+    minis_boot_checkpoint("reminders_offload_register");
     reminders_offload_register();
+    minis_boot_checkpoint("bluetooth_offload_register");
     bluetooth_offload_register();
+    minis_boot_checkpoint("nfc_offload_register");
     nfc_offload_register();
+    minis_boot_checkpoint("sessions_offload_register");
     sessions_offload_register();
+    minis_boot_checkpoint("scheduled_offload_register");
     scheduled_offload_register();
+    minis_boot_checkpoint("browser_use_offload_register");
     browser_use_offload_register();
+    minis_boot_checkpoint("config_offload_register");
     config_offload_register();
     // Registered in every build: the `minis-debug logs` subcommand reads the
     // app's own runtime log in-process (OSLogStore + LoggingManager) and must
     // work on Release devices (T-ios-minis-debug-logs-oslogstore). The
     // RPC-backed subcommands inside the handler stay DEBUG-gated and
     // self-report as unavailable in Release.
+    minis_boot_checkpoint("debug_offload_register");
     debug_offload_register();
 
     _isBooted = YES;
+    minis_boot_checkpoint("boot-complete");
     NSLog(@"ISHKernel: Kernel initialized successfully");
 
     return 0;

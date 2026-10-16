@@ -156,7 +156,7 @@ enum WorkbenchError: LocalizedError {
                 throw WorkbenchError.unavailable("已有 Linux 环境的架构标记不完整；保留原数据，请在环境设置中人工检查")
             }
             try await Task.detached(priority: .userInitiated) { try RootfsManager.shared.installIfNeeded() }.value
-            let code = ISHKernel.shared.isBooted ? 0 : ISHKernel.shared.boot(withRootPath: manager.rootfsPath.path)
+            let code = await minisBootKernel(rootPath: manager.rootfsPath.path)
             guard code == 0 else { throw WorkbenchError.unavailable("iSH 启动失败：\(code)") }
             installSessionFileChangeTracker(kernel: ISHKernel.shared)
             MinisFsRouter.shared.installHook()
@@ -367,7 +367,7 @@ struct DevelopmentWorkbenchView: View {
                 NavigationLink("Agent 配置") { HelperSettingsView() }
                 Button("合并本地调试 Agent") { model.importAgents(); status="已合并；原 Agent 保留" }
                 NavigationLink("运行诊断") { WorkbenchDiagnosticsView() }
-                NavigationLink("日志") { ScrollView { Text(model.log).font(.system(.caption,design:.monospaced)).textSelection(.enabled).padding() }.navigationTitle("工作台日志").toolbar { ToolbarItem(placement:.navigationBarTrailing) { Button("复制") { UIPasteboard.general.string=model.log } } } }
+                NavigationLink("日志") { WorkbenchLogView() }
             }
             Section(header:Text("文件与应用调试权限")) {
                 Toggle("扩展文件访问（全权限请求）",isOn:$fullRead).onChange(of:fullRead) { value in

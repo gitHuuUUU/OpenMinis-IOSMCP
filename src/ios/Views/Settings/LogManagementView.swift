@@ -206,7 +206,7 @@ struct LogManagementView: View {
             }
         }
         .sheet(isPresented: $showShareSheet) {
-            LogShareSheet(urls: vm.logFiles.map(\.url))
+            LogTXTExportSheet(urls: vm.logFiles.map(\.url))
         }
         .alert("Delete All Logs?", isPresented: $showDeleteAllConfirm) {
             Button("Delete All", role: .destructive) {
@@ -227,6 +227,8 @@ struct LogDetailView: View {
     let name: String
     @State private var content: String = ""
     @State private var isLoading = true
+    @State private var exportTXT = false
+    @State private var shareLog = false
 
     var body: some View {
         Group {
@@ -239,24 +241,16 @@ struct LogDetailView: View {
         .navigationTitle(name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                // [IOS-MCP] ShareLink is iOS 16+; keep an iOS 15-compatible
-                // fallback via UIActivityViewController.
-                if #available(iOS 16.0, *) {
-                    ShareLink(item: url)
-                } else {
-                    Button {
-                        let activityVC = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-                        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                           let root = scene.windows.first?.rootViewController {
-                            root.present(activityVC, animated: true)
-                        }
-                    } label: {
-                        Image(systemName: "square.and.arrow.up")
-                    }
-                }
+            ToolbarItem(placement:.navigationBarTrailing) {
+                Menu {
+                    Button("导出 TXT／存储到文件") { exportTXT = true }
+                    Button("分享日志文件") { shareLog = true }
+                    Button("复制全部") { UIPasteboard.general.string = content }
+                } label: { Image(systemName:"square.and.arrow.up") }
             }
         }
+        .sheet(isPresented:$exportTXT) { LogTXTExportSheet(urls:[url]) }
+        .sheet(isPresented:$shareLog) { LogShareSheet(urls:[url]) }
         .task {
             let fileURL = url
             let loaded = await Task.detached(priority: .userInitiated) {
@@ -302,4 +296,55 @@ private struct LogShareSheet: UIViewControllerRepresentable {
         return UIActivityViewController(activityItems: safe, applicationActivities: nil)
     }
     func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
+}
+
+/// Uses iOS14+ document export directly: real .txt files, no share/pasteboard fallback.
+struct LogTXTExportSheet: UIViewControllerRepresentable {
+    let urls:[URL]
+    func makeUIViewController(context:Context)->UIDocumentPickerViewController {
+        let directory=FileManager.default.temporaryDirectory.appendingPathComponent("LogExport-"+UUID().uuidString,isDirectory:true)
+        var files:[URL]=[]
+        do {
+            try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
+            for (index,url) in urls.enumerated() {
+                let name="\(index+1)-"+url.deletingPathExtension().lastPathComponent+".txt"
+                let output=directory.appendingPathComponent(name)
+                try FileManager.default.copyItem(at:url,to:output)
+                files.append(output)
+            }
+        } catch {
+            let failure=directory.appendingPathComponent("导出错误.txt")
+            try? Data(error.localizedDescription.utf8).write(to:failure,options:.atomic)
+            files.append(failure)
+        }
+        let picker=UIDocumentPickerViewController(forExporting:files,asCopy:true)
+        picker.shouldShowFileExtensions=true
+        return picker
+    }
+    func updateUIViewController(_ vc:UIDocumentPickerViewController,context:Context) {}
+}
+struct WorkbenchLogView:View {
+    @ObservedObject private var model=DeviceWorkbench.shared
+    @State private var showExport=false
+    @State private var exportURL:URL?
+    @State private var error=""
+    var body:some View {
+        ScrollView { VStack(alignment:.leading) {
+            if !error.isEmpty { Text(error).foregroundColor(.red) }
+            Text(model.log).font(.system(.caption,design:.monospaced)).textSelection(.enabled)
+        }.padding() }.navigationTitle("工作台日志")
+        .toolbar { ToolbarItem(placement:.navigationBarTrailing) {
+            Menu {
+                Button("导出 TXT／存储到文件") {
+                    do {
+                        let file=FileManager.default.temporaryDirectory.appendingPathComponent("Minis-工作台日志.txt")
+                        try Data(model.log.utf8).write(to:file,options:.atomic)
+                        exportURL=file; showExport=true
+                    } catch { self.error=error.localizedDescription }
+                }
+                Button("复制全部") { UIPasteboard.general.string=model.log }
+            } label: { Image(systemName:"square.and.arrow.up") }
+        } }
+        .sheet(isPresented:$showExport) { if let file=exportURL { LogTXTExportSheet(urls:[file]) } }
+    }
 }

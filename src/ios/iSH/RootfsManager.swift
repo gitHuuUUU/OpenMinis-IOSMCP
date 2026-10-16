@@ -800,3 +800,12 @@ private class ZIPArchive {
         return nil
     }
 }
+
+/// The native queue serializes bootstrap across chat, terminal and diagnostics.
+func minisBootKernel(rootPath: String) async -> Int32 {
+    await withCheckedContinuation { continuation in
+        ISHKernel.shared.bootAsync(rootPath: rootPath) { result in
+            continuation.resume(returning: result)
+        }
+    }
+}

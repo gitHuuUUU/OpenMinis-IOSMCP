@@ -22,6 +22,22 @@ class WorkbenchContracts(unittest.TestCase):
         code=read('src/ios/Diagnostics/CrashReporter.swift')
         self.assertIn('cause unknown — stale launch marker',code)
         self.assertIn('Last Send Checkpoint',code)
+    def test_background_native_bootstrap(self):
+        code=read('src/ios/iSH/ISHKernel.m')
+        self.assertIn('dispatch_queue_create("com.minisapp.ish.bootstrap", DISPATCH_QUEUE_SERIAL)',code)
+        self.assertIn('minis_boot_checkpoint("mount-root-start")',code)
+        self.assertIn('minis_previous_signal_actions[SIGTRAP]',code)
+        self.assertNotIn('ISHKernel.shared.boot(withRootPath:',read('src/ios/Agent/Chat/AIChatViewModel+Misc.swift'))
+    def test_plain_chat_lazy_kernel_with_real_shell_boot(self):
+        self.assertIn('ensureKernelBooted(eager: false)',read('src/ios/Agent/Chat/AIChatViewModel.swift'))
+        self.assertIn('ensureKernelBooted()',read('src/ios/Agent/Chat/AIChatViewModel+ISHCommand.swift'))
+        self.assertIn('while kernelStatus == .booting',read('src/ios/Agent/Chat/AIChatViewModel+ISHCommand.swift'))
+    def test_txt_export_not_clipboard_only(self):
+        code=read('src/ios/Views/Settings/LogManagementView.swift')
+        self.assertIn('UIDocumentPickerViewController(forExporting:files,asCopy:true)',code)
+        self.assertIn('copyItem(at:url,to:output)',code)
+        self.assertIn('LogTXTExportSheet(urls:[url])',code)
+        self.assertIn('WorkbenchLogView()',read('src/ios/Workbench.swift'))
     def test_sources_registered(self):
         pbx=read('src/ios/Minis.xcodeproj/project.pbxproj')
         for name in ['Workbench.swift','WorkbenchBridge.m']:

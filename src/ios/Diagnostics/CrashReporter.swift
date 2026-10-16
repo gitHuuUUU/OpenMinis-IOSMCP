@@ -1022,6 +1022,10 @@ final class CrashReporter: NSObject, MXMetricManagerSubscriber {
         if let stage = try? String(contentsOf: stageFile, encoding: .utf8) {
             report += "\n--- Last Send Checkpoint (durable) ---\n\(stage)\n"
         }
+        let kernelTrace = URL(fileURLWithPath:NSHomeDirectory()).appendingPathComponent("Library/minis-kernel-boot.txt")
+        if let trace = try? String(contentsOf:kernelTrace,encoding:.utf8) {
+            report += "\n--- Native Kernel Bootstrap Trace ---\n\(trace.suffix(16000))\n"
+        }
         report += "\n--- Last Shell Commands (before exit) ---\n"
 
         if savedShellCommands.isEmpty {

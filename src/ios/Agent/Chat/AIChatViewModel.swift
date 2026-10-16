@@ -3073,7 +3073,7 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
         logger.info("🔄SESSION [vm=\(self.vmInstanceId)] send START session=\(self.sessionId ?? "nil")")
 
         // Ensure kernel is booted before running
-        ensureKernelBooted()
+        ensureKernelBooted(eager: false)
         CrashReporter.recordSendStage("kernel-requested")
         beginBackgroundProcessing()
         CrashReporter.recordSendStage("background-processing-started")
@@ -3558,7 +3558,7 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
         isNearBottom = true
         forceScrollToBottom.send()
 
-        ensureKernelBooted()
+        ensureKernelBooted(eager: false)
         beginBackgroundProcessing()
 
         currentTask = Task { [weak self] in
@@ -3712,7 +3712,7 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
         let existingBlockCount = lastMsg.blocks.count
         isProcessing = true
 
-        ensureKernelBooted()
+        ensureKernelBooted(eager: false)
         beginBackgroundProcessing()
 
         currentTask = Task { [weak self] in
@@ -3833,7 +3833,7 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
         isNearBottom = true
         forceScrollToBottom.send()
 
-        ensureKernelBooted()
+        ensureKernelBooted(eager: false)
         beginBackgroundProcessing()
 
         currentTask = Task { [weak self] in
@@ -4233,7 +4233,7 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
         isProcessing = true
         forceScrollToBottom.send()
 
-        ensureKernelBooted()
+        ensureKernelBooted(eager: false)
         beginBackgroundProcessing()
 
         currentTask = Task { [weak self] in

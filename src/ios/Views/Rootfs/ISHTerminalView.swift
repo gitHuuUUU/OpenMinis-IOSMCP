@@ -276,6 +276,9 @@ class ISHTerminalViewModel: ObservableObject {
     }
 
     func startShell(sessionId: String? = nil, initCommand: String? = nil) {
+        Task { @MainActor in await startShellAsync(sessionId:sessionId,initCommand:initCommand) }
+    }
+    private func startShellAsync(sessionId: String?, initCommand: String?) async {
         // Always (re)install the output callback first. This is safe to call
         // multiple times — each call overwrites the previous global closure.
         // Doing it here instead of in init() avoids the iOS 16 @StateObject
@@ -310,7 +313,7 @@ class ISHTerminalViewModel: ObservableObject {
         if !ISHKernel.shared.isBooted {
             do {
                 stepStart = CFAbsoluteTimeGetCurrent()
-                try RootfsManager.shared.installIfNeeded()
+                try await Task.detached(priority:.userInitiated) { try RootfsManager.shared.installIfNeeded() }.value
                 logger.info("[StartShell] installIfNeeded: \(String(format: "%.1f", (CFAbsoluteTimeGetCurrent() - stepStart) * 1000))ms")
             } catch {
                 let msg = "Failed to install rootfs: \(error.localizedDescription)\r\n"
@@ -322,7 +325,7 @@ class ISHTerminalViewModel: ObservableObject {
 
             stepStart = CFAbsoluteTimeGetCurrent()
             let rootPath = RootfsManager.shared.rootfsPath.path
-            let err = ISHKernel.shared.boot(withRootPath: rootPath)
+            let err = await minisBootKernel(rootPath: rootPath)
             logger.info("[StartShell] boot: \(String(format: "%.1f", (CFAbsoluteTimeGetCurrent() - stepStart) * 1000))ms")
             if err < 0 {
                 let msg = "Failed to boot kernel: \(err)\r\n"

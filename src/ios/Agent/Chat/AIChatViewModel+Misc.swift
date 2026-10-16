@@ -9,7 +9,10 @@ extension AIChatViewModel {
 
     // MARK: - Kernel Boot
 
-    func ensureKernelBooted() {
+    func ensureKernelBooted(eager: Bool = true) {
+        // Plain chat does not require a Linux process. On iOS15 boot on the
+        // first shell tool, not while inserting the user's first bubble.
+        if #available(iOS 16.0, *) {} else if !eager { return }
         guard kernelStatus == .notBooted else { return }
         kernelStatus = .booting
 
@@ -30,7 +33,7 @@ extension AIChatViewModel {
 
                     let kernelStart = CFAbsoluteTimeGetCurrent()
                     let rootPath = RootfsManager.shared.rootfsPath.path
-                    let err = ISHKernel.shared.isBooted ? 0 : ISHKernel.shared.boot(withRootPath: rootPath)
+                    let err = await minisBootKernel(rootPath: rootPath)
                     let kernelElapsed = (CFAbsoluteTimeGetCurrent() - kernelStart) * 1000
                     logger.info("[KernelBoot] kernel boot call: \(String(format: "%.1f", kernelElapsed))ms")
                     if err < 0 {
