@@ -105,7 +105,7 @@ enum WorkbenchError: LocalizedError {
         var body: [String: Any]?
         switch action {
         case "tap": suffix = "wda/tap/0"; guard let x=args["x"] as? NSNumber, let y=args["y"] as? NSNumber else { throw WorkbenchError.unavailable("缺少 x/y") }; body=["x":x,"y":y]
-        case "type": suffix="wda/keys"; body=["value":Array((args["text"] as? String ?? "").map(String.init))]
+        case "type": suffix="wda/keys"; body=["value":Array((args["text"] as? String ?? "").map { String($0) })]
         case "screenshot": suffix="screenshot"
         default: suffix="source"
         }
@@ -114,6 +114,10 @@ enum WorkbenchError: LocalizedError {
         if let body { request.httpMethod="POST"; request.setValue("application/json", forHTTPHeaderField:"Content-Type"); request.httpBody=try JSONSerialization.data(withJSONObject:body) }
         let (data,response)=try await URLSession.shared.data(for: request)
         guard let http=response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw WorkbenchError.unavailable("WDA 请求失败：\((response as? HTTPURLResponse)?.statusCode ?? 0)") }
+        if let object = try? JSONSerialization.jsonObject(with: data) as? [String:Any],
+           let value = object["value"] as? [String:Any], let error = value["error"] as? String {
+            throw WorkbenchError.unavailable("WDA：\(error) \(value["message"] as? String ?? "")")
+        }
         if action == "screenshot", let object=try JSONSerialization.jsonObject(with:data) as? [String:Any], let text=object["value"] as? String, let image=Data(base64Encoded:text) {
             try fm.createDirectory(at: root, withIntermediateDirectories:true)
             let file=root.appendingPathComponent("screen-\(UUID().uuidString).png"); try image.write(to:file)
@@ -174,8 +178,11 @@ enum WorkbenchError: LocalizedError {
             guard (response as? HTTPURLResponse)?.statusCode == 200,
                   let release=try JSONSerialization.jsonObject(with:data) as? [String:Any], let assets=release["assets"] as? [[String:Any]],
                   let asset=assets.first(where: { $0["name"] as? String == "codex-aarch64-unknown-linux-musl.tar.gz" }),
+                  let digest=asset["digest"] as? String, digest.hasPrefix("sha256:"), digest.count == 71,
                   let link=asset["browser_download_url"] as? String, link.hasPrefix("https://github.com/openai/codex/releases/") else { throw WorkbenchError.unavailable("未找到官方 ARM64 musl 资产；未安装") }
-            command="set -e; apk add --no-cache curl ca-certificates tar; d=$(mktemp -d /tmp/minis-codex.XXXXXX); curl --fail --location --retry 2 '\(link)' -o \"$d/codex.tar.gz\"; tar -xzf \"$d/codex.tar.gz\" -C \"$d\"; b=$(find \"$d\" -type f -name 'codex*' ! -name '*.tar.gz' | head -1); test -n \"$b\"; install -m 755 \"$b\" /usr/local/bin/codex; codex --version"
+            let hash = String(digest.dropFirst(7))
+            guard hash.allSatisfy({ $0.isHexDigit }) else { throw WorkbenchError.unavailable("官方资产摘要无效") }
+            command="set -e; apk add --no-cache curl ca-certificates tar; d=$(mktemp -d /tmp/minis-codex.XXXXXX); curl --fail --location --retry 2 '\(link)' -o \"$d/codex.tar.gz\"; printf '%s  %s\\n' '\(hash)' \"$d/codex.tar.gz\" | sha256sum -c -; tar -xzf \"$d/codex.tar.gz\" -C \"$d\"; b=$(find \"$d\" -type f -name 'codex*' ! -name '*.tar.gz' | head -1); test -n \"$b\"; install -m 755 \"$b\" /usr/local/bin/codex; codex --version"
         default: throw WorkbenchError.unavailable("未知组件")
         }
         let result=try await run(command,timeout:1800); record("安装 \(name) rc=\(result.exitCode)\n\(result.output)")
@@ -193,18 +200,21 @@ enum WorkbenchError: LocalizedError {
         record("Agent 配置已合并，未覆盖已有项")
     }
     var artifacts: [URL] {
-        let home=fm.urls(for:.documentDirectory,in:.userDomainMask).first ?? root
-        guard let enumerator=fm.enumerator(at:home,includingPropertiesForKeys:[.isRegularFileKey],options:[.skipsHiddenFiles]) else { return [] }
+        let documents=fm.urls(for:.documentDirectory,in:.userDomainMask).first ?? root
         var files:[URL]=[]
-        for case let file as URL in enumerator {
-            if files.count>=300 { break }
-            if ["ipa","dylib","zip","deb","png","pdf","json","txt"].contains(file.pathExtension.lowercased()) {
-                files.append(file)
+        var seen=Set<String>()
+        for directory in [AIChatViewModel.minisSharedPersistentDir, root, documents] {
+            guard let enumerator=fm.enumerator(at:directory,includingPropertiesForKeys:[.isRegularFileKey],options:[.skipsHiddenFiles]) else { continue }
+            for case let file as URL in enumerator {
+                if files.count>=300 { break }
+                if file.lastPathComponent=="alpine-rootfs" { enumerator.skipDescendants(); continue }
+                if ["ipa","dylib","zip","deb","png","pdf","json","txt"].contains(file.pathExtension.lowercased()), seen.insert(file.path).inserted,
+                   (try? file.resourceValues(forKeys:[.isRegularFileKey]).isRegularFile)==true { files.append(file) }
             }
-            if file.lastPathComponent=="alpine-rootfs" { enumerator.skipDescendants() }
         }
         return files
     }
+
 }
 struct WorkbenchCheck: Identifiable { let id=UUID(); let name:String; let ok:Bool; let detail:String }
 
@@ -275,6 +285,8 @@ struct DevelopmentWorkbenchView: View {
                 }
                 Text("Codex 来自官方 Linux ARM64 musl Release，运行于内置 iSH；不等同原生 iOS Codex。Theos 完整 iOS 编译还需要匹配的 SDK/交叉工具链，诊断会单独检查。 ").font(.caption).foregroundColor(.secondary)
                 Link("工具源：Codex",destination:URL(string:"https://github.com/openai/codex/releases")!)
+                Link("工具源：Python",destination:URL(string:"https://github.com/python/cpython")!)
+                Link("工具源：LLVM",destination:URL(string:"https://github.com/llvm/llvm-project")!)
                 Link("工具源：Theos",destination:URL(string:"https://github.com/theos/theos")!)
                 Link("逆向工具源：LLVM / Frida / radare2",destination:URL(string:"https://github.com/frida/frida/releases")!)
                 Link("WebDriverAgent 源码与部署说明",destination:URL(string:"https://github.com/appium/WebDriverAgent")!)
