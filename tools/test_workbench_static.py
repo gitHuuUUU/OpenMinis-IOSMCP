@@ -38,6 +38,14 @@ class WorkbenchContracts(unittest.TestCase):
         self.assertIn('copyItem(at:url,to:output)',code)
         self.assertIn('LogTXTExportSheet(urls:[url])',code)
         self.assertIn('WorkbenchLogView()',read('src/ios/Workbench.swift'))
+    def test_legacy_host_growth_updates_layout_async(self):
+        code=read('src/ios/Shared/AppLocalization.swift')
+        self.assertIn('onPreferenceChange(MinisLegacyHostedHeight.self)',code)
+        self.assertIn('revision == self.rootRevision',code)
+        self.assertIn('cell.clearCachedHeight()',code)
+        self.assertIn('cell.seedMeasuredHeight(rounded,width:width)',code)
+        self.assertIn('layout.setCachedHeight(rounded,at:indexPath.item)',code)
+        self.assertIn('collection.collectionViewLayout.invalidateLayout()',code)
     def test_sources_registered(self):
         pbx=read('src/ios/Minis.xcodeproj/project.pbxproj')
         for name in ['Workbench.swift','WorkbenchBridge.m']:

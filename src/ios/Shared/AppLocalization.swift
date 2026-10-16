@@ -219,12 +219,19 @@ struct MinisHostingConfiguration<Content: View>: UIContentConfiguration {
         return MinisHostingContentView(self)
     }
 }
+private struct MinisLegacyHostedHeight: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
 private final class MinisHostingContentView<Content: View>: UIView, UIContentView {
     private let host: UIHostingController<AnyView>
     private var measuredWidth: CGFloat = 0
     private var sizing = false
     private var widthUpdatePending = false
     private var cachedHeight: CGFloat = 44
+    private var rootRevision: UInt = 0
+    private var lastReportedHeight: CGFloat = 0
+    private var lastReportedWidth: CGFloat = 0
     var configuration: UIContentConfiguration {
         didSet {
             updateRoot(width: bounds.width > 1 ? bounds.width : UIScreen.main.bounds.width)
@@ -236,6 +243,8 @@ private final class MinisHostingContentView<Content: View>: UIView, UIContentVie
         host = UIHostingController(rootView: AnyView(config.content))
         super.init(frame: .zero)
         backgroundColor = .clear
+        clipsToBounds = true
+        host.view.clipsToBounds = true
         host.view.backgroundColor = .clear
         host.view.translatesAutoresizingMaskIntoConstraints = false
         host.view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -250,7 +259,48 @@ private final class MinisHostingContentView<Content: View>: UIView, UIContentVie
     private func updateRoot(width: CGFloat) {
         guard width > 1, let config = configuration as? MinisHostingConfiguration<Content> else { return }
         measuredWidth = width
-        host.rootView = AnyView(config.content.frame(width: width, alignment: .leading).fixedSize(horizontal: false, vertical: true))
+        rootRevision &+= 1
+        lastReportedHeight = 0
+        lastReportedWidth = 0
+        let revision = rootRevision
+        host.rootView = AnyView(config.content
+            .frame(width: width, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .background(GeometryReader { proxy in
+                Color.clear.preference(key:MinisLegacyHostedHeight.self,value:proxy.size.height)
+            })
+            .onPreferenceChange(MinisLegacyHostedHeight.self) { [weak self] height in
+                self?.reportHostedHeight(height, width:width, revision:revision)
+            })
+    }
+    private func reportHostedHeight(_ height:CGFloat, width:CGFloat, revision:UInt) {
+        guard height.isFinite, height > 0, revision == rootRevision else { return }
+        let rounded = ceil(height)
+        guard abs(rounded-lastReportedHeight)>0.5 || abs(width-lastReportedWidth)>0.5 else { return }
+        lastReportedHeight=rounded; lastReportedWidth=width
+        // UIHostingConfiguration does this on iOS16. The iOS15 compatibility
+        // host must propagate ObservedObject-driven growth to the outer layout.
+        DispatchQueue.main.async { [weak self] in
+            guard let self=self, revision == self.rootRevision else { return }
+            self.cachedHeight=rounded
+            self.invalidateIntrinsicContentSize()
+            var ancestor: UIView? = self.superview
+            while let view=ancestor, !(view is SelfSizingCell) { ancestor=view.superview }
+            guard let cell=ancestor as? SelfSizingCell else { return }
+            ancestor=cell.superview
+            while let view=ancestor, !(view is UICollectionView) { ancestor=view.superview }
+            guard let collection=ancestor as? UICollectionView,
+                  let indexPath=collection.indexPath(for:cell),
+                  abs(collection.bounds.width-width)<1 else { return }
+            cell.clearCachedHeight()
+            cell.seedMeasuredHeight(rounded,width:width)
+            if let layout=collection.collectionViewLayout as? MessageListLayout {
+                layout.invalidateHeight(at:indexPath.item)
+                layout.setCachedHeight(rounded,at:indexPath.item)
+                if let key=cell.contentKey { layout.recordMeasuredHeight(forKey:key,height:rounded,boundsWidth:width) }
+            }
+            collection.collectionViewLayout.invalidateLayout()
+        }
     }
     override func layoutSubviews() {
         super.layoutSubviews()

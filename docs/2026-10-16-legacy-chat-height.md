@@ -1,0 +1,9 @@
+# iOS15消息重叠修订
+
+现象：用户截图显示回复文本覆盖上一条消息、标题和思考栏。iOS15自建UIContentView宿主没有iOS16 UIHostingConfiguration的自动尺寸失效传播，内部ObservedObject流式增长后，外层SelfSizingCell和MessageListLayout可能仍用旧高度。
+
+变更：只对iOS15兼容宿主，读取已布局内容的自然高度，异步同步到当前cell和layout；清旧cell高度、播种新真实高度、更新布局cache与content-key memo后invalidate。rootRevision防止cell重用后的旧回调生效；限宽及测量重入保护保留。新增宿主裁剪作为过渡保护，不以裁剪代替更新高度。
+
+普通Skills包只读核对：23个Markdown文件，21参考文件与已内置版本相同，两份SKILL.md仅name加local-前缀；不重复导入。不读入或内置所提供的模型越狱提示词、系统提示提取或触发词绕过配置。未执行外来文件。
+
+验证：16静态契约、语法预检、56例实际生产Skills函数Swift回归；聊天UI动态高度仍需iOS15.4真机检查（中文多段、长代码、流式回复、思考展开收起、图片加载、横竖屏）。编译或静态接线通过不等于像素级回归通过。
