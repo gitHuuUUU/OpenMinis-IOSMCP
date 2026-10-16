@@ -72,6 +72,9 @@ jobs:
 
       - name: Build Minis app (unsigned)
         run: |
+          # The repo ships only the .example config; the pbxproj references the
+          # real file. Create it from the template before building.
+          cp src/ios/Configs/ProviderCustomization.xcconfig.example src/ios/Configs/ProviderCustomization.xcconfig
           xcodebuild -project src/ios/Minis.xcodeproj \
             -scheme Minis \
             -configuration Release \
@@ -96,18 +99,34 @@ jobs:
           cd build && zip -q -r ../IOS-MCP.ipa Payload && cd ..
           echo "IPA size: $(du -h IOS-MCP.ipa | cut -f1)"
 
-      - name: Upload IPA artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: IOS-MCP-unsigned-ipa
-          path: IOS-MCP.ipa
-          retention-days: 30
-
-      - name: Upload rootfs zip (optional, for inspection)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: alpine-rootfs-iosmcp
-          path: deps/resources/alpine-rootfs.zip
-          retention-days: 7
-          if-no-files-found: ignore
+      - name: Upload IPA to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Actions artifact storage quota is exhausted on this account, so the
+          # IPA is delivered via the release assets (separate quota).
+          RELEASE_ID="414545959"   # rootfs-tooling-v1
+          REPO="${{ github.repository }}"
+          # Remove any previous IOS-MCP.ipa asset so re-uploads succeed
+          OLD_ID=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/$REPO/releases/$RELEASE_ID/assets" \
+            | python3 -c "import json,sys
+d=json.load(sys.stdin)
+ids=[a['id'] for a in d if a['name']=='IOS-MCP.ipa']
+print(ids[0] if ids else '')")
+          if [ -n "$OLD_ID" ]; then
+            curl -s -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/$REPO/releases/assets/$OLD_ID" -o /dev/null
+            echo "Removed previous IOS-MCP.ipa asset ($OLD_ID)"
+          fi
+          curl -s -X POST -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Content-Type: application/octet-stream" \
+            "https://uploads.github.com/repos/$REPO/releases/$RELEASE_ID/assets?name=IOS-MCP.ipa" \
+            --data-binary @IOS-MCP.ipa -o /tmp/upload.json
+          python3 -c "
+import json
+d=json.load(open('/tmp/upload.json'))
+print('uploaded:', d.get('name'), d.get('size'), 'bytes')
+print('download_url:', d.get('browser_download_url'))
+print('message:', d.get('message') or 'OK')
+"
