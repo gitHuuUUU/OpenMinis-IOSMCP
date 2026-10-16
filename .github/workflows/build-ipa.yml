@@ -95,9 +95,12 @@ jobs:
           fi
           mkdir -p build/Payload
           cp -R "$APP_PATH" build/Payload/
-          # Preserve the payload .app name as Minis (bundle id com.iosmcp.app)
-          cd build && zip -q -r ../IOS-MCP.ipa Payload && cd ..
+          # FileProvider extension targets iOS 16 API — exclude it from the
+          # payload so the IPA installs on iOS 15.x (core iSH functionality
+          # is unaffected).
+          cd build && zip -q -r ../IOS-MCP.ipa Payload -x "Payload/*/PlugIns/*" && cd ..
           echo "IPA size: $(du -h IOS-MCP.ipa | cut -f1)"
+          unzip -l ../IOS-MCP.ipa | tail -5
 
       - name: Upload IPA to GitHub Release
         env:
