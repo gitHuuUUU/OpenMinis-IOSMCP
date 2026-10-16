@@ -344,7 +344,8 @@ enum WorkbenchError: LocalizedError {
                 script="$names=@('python','git','node','rea','frida','idat64','hopper','dotnet','adb','gradle','wsl','ssh'); $r=@{}; foreach($n in $names){$c=Get-Command $n -ErrorAction SilentlyContinue; $r[$n]=if($c){$c.Source}else{$null}}; @{computer=$env:COMPUTERNAME;user=$env:USERNAME;tools=$r} | ConvertTo-Json -Depth 4"
             } else if action=="run",let text=args["command"] as? String,!text.isEmpty { script=text }
             else { throw WorkbenchError.unavailable("动作需要 probe、run、upload 或 download") }
-            let encoded=(script.data(using:.utf16LittleEndian) ?? Data()).base64EncodedString()
+            let utf8script="[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);$OutputEncoding=[Console]::OutputEncoding;"+script
+            let encoded=(utf8script.data(using:.utf16LittleEndian) ?? Data()).base64EncodedString()
             command="ssh -p \(port)"+options+q(user+"@"+host)+" powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand "+encoded
         }
         let result=try await run(command,timeout:1800)

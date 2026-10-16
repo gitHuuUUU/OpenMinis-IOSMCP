@@ -161,8 +161,9 @@ def build(args):
                 with zipfile.ZipFile(unsigned,'a',compression=zipfile.ZIP_DEFLATED) as z:
                     for f in dex.glob('*.dex'):z.write(f,f.name)
                 run([bt/('zipalign'+suffix),'-f','4',unsigned,aligned])
-                ks=d/'debug.keystore'
-                run(['keytool','-genkeypair','-keystore',ks,'-storepass','android','-keypass','android','-alias','androiddebugkey','-dname','CN=Minis Debug','-keyalg','RSA','-validity','3650'])
+                ks=pathlib.Path.home()/'.android/debug.keystore'
+                ks.parent.mkdir(parents=True,exist_ok=True)
+                if not ks.exists():run(['keytool','-genkeypair','-keystore',ks,'-storepass','android','-keypass','android','-alias','androiddebugkey','-dname','CN=Minis Debug','-keyalg','RSA','-validity','3650'])
                 signer=bt/('apksigner.bat' if os.name=='nt' else 'apksigner')
                 run([signer,'sign','--ks',ks,'--ks-pass','pass:android','--key-pass','pass:android','--out',out,aligned])
                 run([signer,'verify','--verbose',out])

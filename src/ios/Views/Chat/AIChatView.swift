@@ -2892,15 +2892,21 @@ struct AIChatView: View {
                             .fixedSize(horizontal:false,vertical:true)
                             .id(message.id)
                         }
-                        Color.clear.frame(height:1).id("legacy-bottom")
+                        Color.clear.frame(height:inputBarHeight + (hasFloatingPreview ? 96 : 20))
+                            .background(GeometryReader { proxy in Color.clear.preference(key:LegacyTranscriptBottomKey.self,value:proxy.frame(in:.named("legacyTranscript")).maxY) })
+                            .id("legacy-bottom")
                     }
                     .padding(.horizontal,16)
                     .padding(.top,12)
-                    .padding(.bottom,inputBarHeight + (hasFloatingPreview ? 96 : 20))
+                }
+                .coordinateSpace(name:"legacyTranscript")
+                .onPreferenceChange(LegacyTranscriptBottomKey.self) { bottom in
+                    let near=bottom <= geometry.size.height+40
+                    if near != vm.isNearBottom { DispatchQueue.main.async { vm.isNearBottom=near } }
                 }
                 .minisScrollDismissesKeyboard(.interactively)
                 .onReceive(vm.forceScrollToBottom) { _ in proxy.scrollTo("legacy-bottom",anchor:.bottom) }
-                .onReceive(vm.scrollToBottomSignal) { _ in proxy.scrollTo("legacy-bottom",anchor:.bottom) }
+                .onReceive(vm.scrollToBottomSignal) { _ in if vm.isNearBottom { proxy.scrollTo("legacy-bottom",anchor:.bottom) } }
                 .onReceive(vm.forceScrollToTop) { _ in if let first=vm.messages.first { proxy.scrollTo(first.id,anchor:.top) } }
                 .onChange(of:vm.messages.count) { _ in if vm.isNearBottom { proxy.scrollTo("legacy-bottom",anchor:.bottom) } }
             }
@@ -7037,4 +7043,9 @@ final class ComposerActionChannel {
     /// an early arrow/tab key keeps its default text-view behaviour).
     @discardableResult
     func send(_ action: Action) -> Bool { handler?(action) ?? false }
+}
+
+private struct LegacyTranscriptBottomKey:PreferenceKey {
+    static var defaultValue:CGFloat=0
+    static func reduce(value:inout CGFloat,nextValue:()->CGFloat) { value=nextValue() }
 }
