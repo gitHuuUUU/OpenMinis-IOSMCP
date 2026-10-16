@@ -119,10 +119,25 @@ fetch_ffmpeg_source() {
     tmp="$(mktemp -d)"
 
     log_info "FFmpeg source not present — downloading ${version}..."
-    if ! curl -fL# "$url" -o "$tmp/$tarball"; then
+    local urls=(
+        "https://ffmpeg.org/releases/${tarball}"
+        "https://mirror.ghproxy.com/https://ffmpeg.org/releases/${tarball}"
+        "https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n6.1.2.tar.gz"
+    )
+    local ok=0
+    for u in "${urls[@]}"; do
+        log_info "  trying $u ..."
+        if curl -fL# --retry 3 --connect-timeout 20 "$u" -o "$tmp/$tarball" 2>/dev/null; then
+            ok=1
+            break
+        fi
+    done
+    if [ "$ok" != "1" ]; then
         rm -rf "$tmp"
         log_error "Failed to download $url — check your network, or place the source at $FFMPEG_DIR manually."
     fi
+    # GitHub tag tarball extracts as FFmpeg-n6.1.2; normalize to ffmpeg-6.1.2
+    if [ -d "$tmp/FFmpeg-n6.1.2" ]; then mv "$tmp/FFmpeg-n6.1.2" "$tmp/ffmpeg-${version}"; fi
 
     log_info "Extracting..."
     if ! tar -xf "$tmp/$tarball" -C "$tmp"; then
