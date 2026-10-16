@@ -37,7 +37,7 @@ struct BackupHistoryDetailView: View {
             // while the upload kept running would strand a job with nothing
             // tracking it. Stop it first — this button is then right here.
             if !isLive {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button(role: .destructive) {
                         showDeleteConfirm = true
                     } label: {
@@ -120,9 +120,9 @@ struct BackupHistoryDetailView: View {
 
     private var summarySection: some View {
         Section {
-            LabeledContent("Status") {
+            MinisLabeledContent("Status") {
                 // An HStack, NOT a Label. `Label` reserves an icon column and
-                // sizes it from the environment; dropped into LabeledContent's
+                // sizes it from the environment; dropped into MinisLabeledContent's
                 // value slot that column stretched, making this one row 245pt
                 // tall against its siblings' 54pt — a screen-height gap under
                 // "Completed", with the row separator drawn across the middle
@@ -133,25 +133,25 @@ struct BackupHistoryDetailView: View {
                 }
                 .foregroundStyle(BackupHistoryRow.statusColour(record.status))
             }
-            LabeledContent("Started",
+            MinisLabeledContent("Started",
                            value: record.startedAt.formatted(date: .abbreviated, time: .shortened))
             if let d = record.duration {
-                LabeledContent("Duration", value: durationText(d))
+                MinisLabeledContent("Duration", value: durationText(d))
             }
             if record.totalBytes > 0 {
-                LabeledContent("Size", value: ByteCountFormatter.string(
+                MinisLabeledContent("Size", value: ByteCountFormatter.string(
                     fromByteCount: record.totalBytes, countStyle: .file))
             }
             // `value:` takes a plain String, which does NOT route through the
             // string catalog the way a bare `Text("…")` literal does — so the
             // Yes/No here has to be localized explicitly or it stays English
             // in every locale.
-            LabeledContent("Encrypted",
+            MinisLabeledContent("Encrypted",
                            value: record.encrypted ? AppLocalized("Yes") : AppLocalized("No"))
             if let name = record.packageName {
-                // A hand-built HStack, NOT `LabeledContent`.
+                // A hand-built HStack, NOT `MinisLabeledContent`.
                 //
-                // [T-backup-file-row-two-column] `LabeledContent` reflows to a
+                // [T-backup-file-row-two-column] `MinisLabeledContent` reflows to a
                 // VERTICAL stack of its own accord once the value cannot sit
                 // comfortably beside the label, and a package name — now
                 // `iPhone-17-Pro-20260823-m0pyx0fq1dg.minisbak`, longer than
@@ -159,7 +159,7 @@ struct BackupHistoryDetailView: View {
                 // threshold. Asking it to wrap the value (`.fixedSize` for
                 // vertical growth) made the value taller and so pushed it
                 // further past, which is why the row still rendered as
-                // label-above-value on device. The reflow is LabeledContent's
+                // label-above-value on device. The reflow is MinisLabeledContent's
                 // behaviour, not something the value's modifiers can override.
                 //
                 // So the two columns are built directly: a fixed-width label
@@ -191,12 +191,12 @@ struct BackupHistoryDetailView: View {
                 // "how many" but never "which ones", which is the actual
                 // question. Older records predate the list and stay plain.
                 if record.skippedEntries.isEmpty {
-                    LabeledContent("Files excluded", value: "\(record.skippedFiles) file(s)")
+                    MinisLabeledContent("Files excluded", value: "\(record.skippedFiles) file(s)")
                 } else {
                     NavigationLink {
                         BackupSkippedFilesView(record: record)
                     } label: {
-                        LabeledContent("Files excluded",
+                        MinisLabeledContent("Files excluded",
                                        value: "\(record.skippedFiles) file(s)")
                     }
                 }

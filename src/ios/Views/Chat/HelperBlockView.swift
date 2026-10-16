@@ -413,7 +413,7 @@ struct HelperBlockView: View {
         resuming = true
         Task { @MainActor in
             // The parent id comes from the CHILD SESSION ROW, not from the
-            // environment: each cell is its own UIHostingConfiguration, a fresh
+            // environment: each cell is its own MinisHostingConfiguration, a fresh
             // SwiftUI hierarchy that AIChatView's .environment does not reach
             // (see CollectionViewMessageListV3's note on that), so
             // @Environment(\.chatSessionId) would be nil here and the button

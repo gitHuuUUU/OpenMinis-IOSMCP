@@ -195,7 +195,7 @@ struct LogManagementView: View {
         }
         .toolbar {
             if !vm.logFiles.isEmpty && tab == "logs" {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
                         showShareSheet = true
                     } label: {
@@ -238,7 +238,7 @@ struct LogDetailView: View {
         .navigationTitle(name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .navigationBarTrailing) {
                 // [IOS-MCP] ShareLink is iOS 16+; keep an iOS 15-compatible
                 // fallback via UIActivityViewController.
                 if #available(iOS 16.0, *) {

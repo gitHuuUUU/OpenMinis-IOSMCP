@@ -6,7 +6,7 @@ import SwiftUI
 /// an Equatable view keyed on a small value so SwiftUI skips rebuilding the whole
 /// menu subtree on every cell `body` re-evaluation.
 ///
-/// Why this exists: `View.contextMenu(menuItems:)` is **eager** — SwiftUI
+/// Why this exists: `View.minisContextMenu(menuItems:)` is **eager** — SwiftUI
 /// materializes the full menu subtree (Buttons + conditional branches + Labels
 /// with SF-Symbol images + a large captured `fullReplyText`) on *every* body pass
 /// of the cell, not lazily on long-press. During `gh`/shell streaming output the

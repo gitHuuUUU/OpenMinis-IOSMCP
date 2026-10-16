@@ -141,7 +141,7 @@ final class NativeMediaImageCache {
     /// to the final layout on the very first pass — instead of locking at the
     /// 200pt placeholder, then losing the trailing markdown text below the
     /// image to clipsToBounds when the late `invalidateCellSizeIfNeeded` grow
-    /// is rejected by SwiftUI's UIHostingConfiguration cache.
+    /// is rejected by SwiftUI's MinisHostingConfiguration cache.
     ///
     /// Backed by UserDefaults so cold starts (the symptom case: app killed →
     /// re-entered conversation, or message-list session re-load from disk)
@@ -2198,7 +2198,7 @@ final class TableAttachment: NSTextAttachment {
         guard usableWidth > 0 else {
             return CGRect(x: 0, y: 0, width: lineFrag.width, height: Self.minRowHeight)
         }
-        // [TableProbeFix] SwiftUI / UIHostingConfiguration's intrinsic-size
+        // [TableProbeFix] SwiftUI / MinisHostingConfiguration's intrinsic-size
         // probing pass calls `attachmentBounds` with a synthesized lineFrag
         // width of `CGFloat.greatestFiniteMagnitude` (10_000_000pt). If we
         // cache the resulting layout — whose last column has been stretched
@@ -3915,7 +3915,7 @@ final class ImageAttachment: NSTextAttachment {
         //   4. Async image load completes, attachmentBounds now returns 280pt
         //   5. invalidateCellSizeIfNeeded fires prev=271→new=358 delta=+87
         //   6. That late grow is sometimes lost (deferSelfSizing rejects it,
-        //      SwiftUI's UIHostingConfiguration.systemLayoutSizeFitting still
+        //      SwiftUI's MinisHostingConfiguration.systemLayoutSizeFitting still
         //      caches 276pt from step 3, etc.)
         //   7. Cell stays at 276pt; the UITextView inside grows to 358pt and
         //      gets clipped by the cell's clipsToBounds — image bottom cut
@@ -4584,8 +4584,13 @@ final class VideoAttachment: NSTextAttachment {
 
             var thumb: UIImage?
             do {
-                let (cgImage, _) = try await generator.image(at: .zero)
-                thumb = UIImage(cgImage: cgImage)
+                if #available(iOS 16.0, *) {
+                    let (cgImage, _) = try await generator.image(at: .zero)
+                    thumb = UIImage(cgImage: cgImage)
+                } else {
+                    let cgImage = try generator.copyCGImage(at: .zero, actualTime: nil)
+                    thumb = UIImage(cgImage: cgImage)
+                }
             } catch {
                 // Fallback: no thumbnail
             }
@@ -5383,7 +5388,7 @@ final class SelectableMarkdownTextView: UITextView, UIGestureRecognizerDelegate 
     /// When the next call sees the same fingerprint AND every attachment in
     /// storage is already in attachmentViewMap, we can skip the full
     /// enumeration — there's nothing to do. This eliminates the redundant
-    /// 2nd/3rd UAV call SwiftUI's UIHostingConfiguration triggers per BIG-CELL
+    /// 2nd/3rd UAV call SwiftUI's MinisHostingConfiguration triggers per BIG-CELL
     /// onscreen (window=nil → window-set → layoutSubviews chain).
     private var lastUAVStorageLen: Int = -1
     private var lastUAVWidth: CGFloat = -1
@@ -6477,7 +6482,7 @@ final class SelectableMarkdownTextView: UITextView, UIGestureRecognizerDelegate 
         // enumeration below would land in `reuse` and just re-set the same
         // frame. This skip eliminates the redundant 2nd/3rd UAV call per
         // BIG-CELL onscreen (window=nil → window-set chain that SwiftUI
-        // UIHostingConfiguration triggers on cell reuse).
+        // MinisHostingConfiguration triggers on cell reuse).
         if let storage = self.textStorage as? NSTextStorage,
            storage.length == lastUAVStorageLen,
            abs(self.textContainer.size.width - lastUAVWidth) < 0.5,
@@ -7272,7 +7277,7 @@ final class SelectableMarkdownTextView: UITextView, UIGestureRecognizerDelegate 
             if !attachmentViews.isEmpty {
                 refreshAttachmentViews()
             } else if hasUnrenderedAttachments {
-                // Width just became available (e.g. UIHostingConfiguration finished layout)
+                // Width just became available (e.g. MinisHostingConfiguration finished layout)
                 // but updateAttachmentViews was skipped earlier because width was 0.
                 updateAttachmentViews()
                 invalidateIntrinsicContentSize()
@@ -7362,7 +7367,7 @@ final class SelectableMarkdownTextView: UITextView, UIGestureRecognizerDelegate 
 
     /// Called after content changes to detect height growth and invalidate the
     /// parent UICollectionView cell's self-sizing so the layout re-measures it.
-    /// Without this, UIHostingConfiguration may not propagate height changes
+    /// Without this, MinisHostingConfiguration may not propagate height changes
     /// caused by nested @ObservedObject updates (e.g. AssistantBlock.content
     /// growing from 1 line to 2 lines during streaming).
     private let cellSizeLogger = AppLogger(category: "CellSize")
@@ -8304,7 +8309,7 @@ struct SelectableMarkdownView: UIViewRepresentable {
         // becomes a measurable chunk of every updateUIView pass (and
         // updateUIView runs on each SwiftUI body re-evaluation, so it
         // multiplies during streaming and self-sizing measurement loops).
-        let imageMatches = markdown.ranges(of: /!\[([^\]]*)\]\(([^)]+)\)/)
+        let imageMatches = markdown.minisRegularExpressionRanges(#"!\[([^\]]*)\]\(([^)]+)\)"#)
         if !imageMatches.isEmpty {
             for match in imageMatches {
                 let matchStr = String(markdown[match])
@@ -8732,6 +8737,8 @@ struct SelectableMarkdownView: UIViewRepresentable {
     }
 
     @available(iOS 16.0, *)
+    @available(iOS 16.0, *)
+
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: SelectableMarkdownTextView, context: Context) -> CGSize? {
         let width = proposal.width ?? UIScreen.main.bounds.width
         // Key the size cache on the SwiftUI binding length, not

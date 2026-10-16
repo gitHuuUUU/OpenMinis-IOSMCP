@@ -45,13 +45,13 @@ struct SoulSettingsView: View {
             }
 
             Section(AppLocalized("Identity")) {
-                LabeledContent(AppLocalized("Name")) {
+                MinisLabeledContent(AppLocalized("Name")) {
                     TextField("Minis", text: $name)
                         .multilineTextAlignment(.trailing)
                         .textInputAutocapitalization(.words)
                         .submitLabel(.done)
                 }
-                LabeledContent(AppLocalized("Style")) {
+                MinisLabeledContent(AppLocalized("Style")) {
                     TextField(AppLocalized("e.g. Warm, direct, opinionated"), text: $style)
                         .multilineTextAlignment(.trailing)
                 }
@@ -110,7 +110,7 @@ struct SoulSettingsView: View {
         .navigationTitle(AppLocalized("Soul"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .navigationBarTrailing) {
                 Button(AppLocalized("Save")) { save() }
                     .disabled(!isDirty || isBodyOverLimit)
             }
@@ -134,7 +134,6 @@ struct SoulSettingsView: View {
             showEmojiPrompt: $showEmojiPrompt,
             emojiDraft: $emojiDraft,
             showPhotoPicker: $showPhotoPicker,
-            photoItem: $photoItem,
             iconError: $iconError
         ))
         .overlay(alignment: .bottom) {
@@ -480,10 +479,10 @@ private struct SoulEmojiPickerSheet: View {
             .navigationTitle(AppLocalized("Choose Emoji"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .navigationBarLeading) {
                     Button(AppLocalized("Cancel")) { dismiss() }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button(AppLocalized("Set")) {
                         onPick(draft)
                         dismiss()

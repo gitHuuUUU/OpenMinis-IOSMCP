@@ -40,7 +40,7 @@ struct BrowserManagementView: View {
         .navigationTitle("Browser Settings")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .navigationBarTrailing) {
                 Button("Done") { dismiss() }
             }
         }
@@ -100,7 +100,7 @@ struct BrowserManagementView: View {
                 }
             }
         }
-        .contextMenu {
+        .minisContextMenu {
             Button {
                 UIPasteboard.general.string = displayUA(for: profile)
             } label: {
@@ -128,7 +128,7 @@ struct BrowserManagementView: View {
                     }
                 }
             }
-            TextField("Enter custom user agent...", text: $customUA, axis: .vertical)
+            TextField("Enter custom user agent...", text: $customUA)
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .lineLimit(2...4)
@@ -140,7 +140,7 @@ struct BrowserManagementView: View {
         .onAppear {
             customUA = pool.customUserAgentString
         }
-        .contextMenu {
+        .minisContextMenu {
             if !customUA.isEmpty {
                 Button {
                     UIPasteboard.general.string = customUA

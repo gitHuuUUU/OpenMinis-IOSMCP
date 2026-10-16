@@ -71,6 +71,7 @@ struct SwipeToSendHint: View {
 // MARK: - Flow Layout
 
 /// A custom Layout that arranges subviews in a wrapping horizontal flow.
+@available(iOS 16.0, *)
 private struct FlowLayout: Layout {
     var hSpacing: CGFloat = 8
     var vSpacing: CGFloat = 8
@@ -175,7 +176,7 @@ struct InputAttachmentGridView: View {
     @State private var draggingID: UUID?
 
     var body: some View {
-        FlowLayout(hSpacing: 8, vSpacing: 8) {
+        CompatibleFlowLayout(hSpacing: 8, vSpacing: 8) {
             ForEach(attachments) { attachment in
                 AttachmentChip(attachment: attachment) {
                     onRemove(attachment)
@@ -282,7 +283,7 @@ private struct AttachmentChip: View {
                     .navigationTitle(attachment.fileName)
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
+                        ToolbarItem(placement: .navigationBarTrailing) {
                             Button("Done") { showPreview = false }
                         }
                     }
@@ -568,7 +569,7 @@ struct PastedTextChipRow: View {
                 .navigationTitle("Pasted#\(entry.id) · " + String(format: AppLocalized("%d chars"), entry.charCount))
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
+                    ToolbarItem(placement: .navigationBarTrailing) {
                         Button(AppLocalized("Done")) { previewEntry = nil }
                     }
                 }
@@ -738,7 +739,7 @@ struct UserAttachmentList: View {
     }
 
     var body: some View {
-        FlowLayout(hSpacing: UserAttachmentTileMetrics.gap, vSpacing: UserAttachmentTileMetrics.gap, alignment: .trailing) {
+        CompatibleFlowLayout(hSpacing: UserAttachmentTileMetrics.gap, vSpacing: UserAttachmentTileMetrics.gap, alignment: .trailing) {
             ForEach(attachments) { meta in
                 if meta.isImage {
                     AsyncImageTile(meta: meta, tileSize: tileSize) {
@@ -887,7 +888,7 @@ private struct WebAppAddToHomeMenuModifier: ViewModifier {
     func body(content: Content) -> some View {
         if isHTML {
             content
-                .contextMenu {
+                .minisContextMenu {
                     Button {
                         guard let url = URL(string: meta.minisURL),
                               let host = resolveMinisFileURLCached(url: url) else {
@@ -918,7 +919,7 @@ struct QueuedAttachmentPreview: View {
     private let tileSize: CGFloat = UserAttachmentTileMetrics.tile
 
     var body: some View {
-        FlowLayout(hSpacing: UserAttachmentTileMetrics.gap, vSpacing: UserAttachmentTileMetrics.gap, alignment: .trailing) {
+        CompatibleFlowLayout(hSpacing: UserAttachmentTileMetrics.gap, vSpacing: UserAttachmentTileMetrics.gap, alignment: .trailing) {
             ForEach(attachments) { attachment in
                 switch attachment.kind {
                 case .image:
@@ -1649,6 +1650,9 @@ struct PastableTextView: UIViewRepresentable {
 
         return tv
     }
+
+    @available(iOS 16.0, *)
+
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView tv: PastableUITextView, context: Context) -> CGSize? {
         let width = proposal.width ?? UIScreen.main.bounds.width
@@ -2401,6 +2405,26 @@ private extension ContextUsage.Tier {
         // the 0.60 red beside it.
         case .warning: return UIColor.systemOrange.withAlphaComponent(0.50)
         case .critical: return UIColor.systemRed.withAlphaComponent(0.60)
+        }
+    }
+}
+
+
+private struct CompatibleFlowLayout<Content: View>: View {
+    var hSpacing: CGFloat = 8
+    var vSpacing: CGFloat = 8
+    var alignment: HorizontalAlignment = .leading
+    let content: Content
+    init(hSpacing: CGFloat = 8, vSpacing: CGFloat = 8, alignment: HorizontalAlignment = .leading,
+         @ViewBuilder content: () -> Content) {
+        self.hSpacing = hSpacing; self.vSpacing = vSpacing; self.alignment = alignment; self.content = content()
+    }
+    @ViewBuilder var body: some View {
+        if #available(iOS 16.0, *) {
+            FlowLayout(hSpacing: hSpacing, vSpacing: vSpacing, alignment: alignment) { content }
+        } else {
+            // Legacy SwiftUI lacks Layout. All attachment actions remain available via scrolling.
+            ScrollView(.horizontal, showsIndicators: false) { HStack(spacing: hSpacing) { content } }
         }
     }
 }

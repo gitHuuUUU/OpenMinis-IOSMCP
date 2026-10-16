@@ -1531,7 +1531,7 @@ struct AIChatView: View {
                 inputBarHealthProbe?.cancel()
                 let probeBaseline = inputBarGeometryTick
                 inputBarHealthProbe = Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(900))
+                    try? await Task.sleep(nanoseconds: 900000000)
                     guard !Task.isCancelled else { return }
                     let ticked = inputBarGeometryTick != probeBaseline
                     let age = inputBarLastGeometryAt.map { CFAbsoluteTimeGetCurrent() - $0 } ?? -1
@@ -2894,7 +2894,7 @@ struct AIChatView: View {
                 // layout and trips a precondition on the iOS 18 async renderer
                 // (ViewGraphGeometryObservers.needsUpdate SIGTRAP). The action
                 // also fires with the initial value, covering the old onAppear.
-                .onGeometryChange(for: CGFloat.self) { proxy in
+                .minisOnGeometryChange(for: CGFloat.self) { proxy in
                     proxy.size.height
                 } action: { newH in
                     floatingBarHeight = newH
@@ -3858,7 +3858,7 @@ struct AIChatView: View {
                     // [T-ios-geometry-observer-crash] traced an async-renderer
                     // SIGTRAP to that scaffold, and this file already
                     // standardised on the observer for exactly that reason.
-                    .onGeometryChange(for: CGFloat.self) { proxy in
+                    .minisOnGeometryChange(for: CGFloat.self) { proxy in
                         proxy.size.width
                     } action: { w in
                         guard w > 0, abs(w - inputBottomRowWidth) > 0.5 else { return }
@@ -3919,7 +3919,7 @@ struct AIChatView: View {
             // floating-bar site). Fires with the initial value too, so the
             // old onAppear seeding AND its diagnostic log are preserved as
             // a single unified line.
-            .onGeometryChange(for: CGRect.self) { proxy in
+            .minisOnGeometryChange(for: CGRect.self) { proxy in
                 proxy.frame(in: .global)
             } action: { frame in
                 let newH = frame.size.height
@@ -4000,7 +4000,7 @@ struct AIChatView: View {
                     // is taken; we only re-read what onGeometryChange reported.
                     let voiceAtSeed = voiceInputActive
                     inputBarHeightDebounce = Task { @MainActor in
-                        try? await Task.sleep(for: .milliseconds(380))
+                        try? await Task.sleep(nanoseconds: 380000000)
                         guard !Task.isCancelled, voiceAtSeed == voiceInputActive else { return }
                         let settled = latestInputBarFrameH
                         if settled > 0, abs(settled - newH) > 0.5 {
@@ -4031,7 +4031,7 @@ struct AIChatView: View {
                     // 200ms, which is stale), so the timer routinely expired
                     // while the panel was still moving and SwiftUI's final
                     // geometry callback had not landed yet.
-                    try? await Task.sleep(for: .milliseconds(380))
+                    try? await Task.sleep(nanoseconds: 380000000)
                     guard !Task.isCancelled else { return }
                     // [T-voice-inputbar-branch-swap] During rapid streaming
                     // re-renders, voiceInputActive can glitch for one frame,
@@ -4058,7 +4058,7 @@ struct AIChatView: View {
                     // height, which is the bottom-gap symptom. No new
                     // measurement is taken: we only re-read what
                     // onGeometryChange already reported.
-                    try? await Task.sleep(for: .milliseconds(320))
+                    try? await Task.sleep(nanoseconds: 320000000)
                     guard !Task.isCancelled else { return }
                     guard voiceAtCapture == voiceInputActive else { return }
                     let settled = latestInputBarFrameH
@@ -5321,7 +5321,7 @@ struct NavBarStyleModifier: ViewModifier {
                         // before, and the action's initial fire covers the old
                         // onAppear seed.
                         Color.clear
-                            .onGeometryChange(for: CGFloat.self) { proxy in
+                            .minisOnGeometryChange(for: CGFloat.self) { proxy in
                                 proxy.safeAreaInsets.top
                             } action: { topSafeAreaInset = $0 }
                             .ignoresSafeArea()
@@ -5512,7 +5512,7 @@ private struct ChatToolbarHost<Title: View, Trailing: View>: View, Equatable {
             .allowsHitTesting(false)
             .toolbar {
                 ToolbarItem(placement: .principal) { title() }
-                ToolbarItem(placement: .topBarTrailing) { trailing() }
+                ToolbarItem(placement: .navigationBarTrailing) { trailing() }
             }
     }
 }
@@ -5830,6 +5830,8 @@ private struct ChatTrailingMenuButton: UIViewRepresentable {
     /// icon-sized footprint and the system wraps it in the same round glass
     /// as a plain toolbar icon (a representable otherwise accepts the full
     /// proposed width -> stretched capsule, the 2026-07-17 regression).
+    @available(iOS 16.0, *)
+
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UIButton, context: Context) -> CGSize? {
         uiView.intrinsicContentSize
     }
@@ -6420,14 +6422,14 @@ private struct SpeechLanguagePickerSheet: View {
 
     /// Indices where the preferred/non-preferred boundary lies for section headers.
     private var preferredCodes: Set<String> {
-        Set(Locale.preferredLanguages.map { Locale(identifier: $0).language.languageCode?.identifier ?? "" })
+        Set(Locale.preferredLanguages.map { Locale(identifier: $0).languageCode ?? "" })
     }
 
     var body: some View {
         NavigationView {
             List {
-                let preferred = filteredLocales.filter { preferredCodes.contains($0.language.languageCode?.identifier ?? "") }
-                let others = filteredLocales.filter { !preferredCodes.contains($0.language.languageCode?.identifier ?? "") }
+                let preferred = filteredLocales.filter { preferredCodes.contains($0.languageCode ?? "") }
+                let others = filteredLocales.filter { !preferredCodes.contains($0.languageCode ?? "") }
 
                 if !preferred.isEmpty {
                     Section(AppLocalized("Preferred", comment: "Section header for preferred speech languages")) {
@@ -6475,7 +6477,7 @@ private struct SpeechLanguagePickerSheet: View {
                 if loc.identifier == speechManager.locale.identifier {
                     Image(systemName: "checkmark")
                         .foregroundStyle(Color.accentColor)
-                        .fontWeight(.semibold)
+                        .minisFontWeight(.semibold)
                 }
             }
         }
@@ -6520,13 +6522,13 @@ struct CompactSummarySheet: View {
             .navigationTitle("Compact Summary")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button { dismiss() } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.secondary)
                     }
                 }
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .navigationBarLeading) {
                     Button {
                         UIPasteboard.general.string = summary
                         copied = true
@@ -6646,7 +6648,7 @@ private struct TokenUsageSheet: View {
             .navigationTitle("Session Token Usage")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }
                 }
             }

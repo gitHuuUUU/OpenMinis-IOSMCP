@@ -17,14 +17,14 @@ final class MessageListLayout: UICollectionViewLayout {
     var estimatedItemHeight: CGFloat = 200
 
     /// Per-item estimated heights based on content analysis (text length, role, etc.).
-    /// These are cheaper than full UIHostingConfiguration rendering but much more
+    /// These are cheaper than full MinisHostingConfiguration rendering but much more
     /// accurate than the single `estimatedItemHeight` constant, reducing the
     /// contentSize error that causes visible blank gaps during fast scrolling.
     private var estimatedHeights: [Int: CGFloat] = [:]
 
     /// Pre-calculated heights from NSAttributedString.boundingRect() for completed
     /// text blocks. More accurate than estimatedHeights (within ~8px) but cheaper
-    /// than full UIHostingConfiguration rendering. Set during snapshot application
+    /// than full MinisHostingConfiguration rendering. Set during snapshot application
     /// for blocks that have a cachedAttributedString.
     private var precalcHeights: [Int: CGFloat] = [:]
 
@@ -254,7 +254,7 @@ final class MessageListLayout: UICollectionViewLayout {
 
     override func layoutAttributesForElements(in rect: CGRect) -> [UICollectionViewLayoutAttributes]? {
         // Return cells in the visible rect plus half-a-screen above and below.
-        // A full screen caused too many UIHostingConfiguration cells to be created
+        // A full screen caused too many MinisHostingConfiguration cells to be created
         // simultaneously during fast scrolling, each triggering self-sizing that
         // invalidates layout — halving the margin significantly reduces hitch rate.
         let t0 = CACurrentMediaTime()

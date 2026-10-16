@@ -39,7 +39,7 @@ struct MCPIntegrationsView: View {
                     .buttonStyle(.plain)
                     // [T-mcp-tools-refresh] Per-server tools entry: opens the
                     // sheet, which force-reconnects + re-pulls tools/list.
-                    .contextMenu {
+                    .minisContextMenu {
                         Button {
                             toolsServer = server
                         } label: {
@@ -83,7 +83,7 @@ struct MCPIntegrationsView: View {
             }
         }
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
                     Button {
                         showAddForm = true
@@ -215,7 +215,7 @@ struct MCPToolsSheet: View {
             .navigationTitle(Text(verbatim: serverName))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .navigationBarLeading) {
                     Button {
                         Task { await refresh() }
                     } label: {
@@ -224,7 +224,7 @@ struct MCPToolsSheet: View {
                     .disabled(isLoading)
                     .accessibilityLabel(Text("Refresh tools"))
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button(AppLocalized("Done")) { dismiss() }
                 }
             }

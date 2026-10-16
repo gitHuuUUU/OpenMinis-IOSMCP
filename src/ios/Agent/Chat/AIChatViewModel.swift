@@ -1151,9 +1151,9 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     /// NOT change auto-scroll mode (jumping to the top is always a browse action).
     let forceScrollToTop = PassthroughSubject<Void, Never>()
     /// Signal sent when a text block transitions from empty to non-empty content.
-    /// The coordinator reconfigures the affected cell so UIHostingConfiguration
+    /// The coordinator reconfigures the affected cell so MinisHostingConfiguration
     /// re-measures its height (UIKit doesn't always trigger preferredLayoutAttributesFitting
-    /// reliably when the SwiftUI body changes inside a UIHostingConfiguration).
+    /// reliably when the SwiftUI body changes inside a MinisHostingConfiguration).
     let blockContentFilledSignal = PassthroughSubject<(messageId: UUID, blockId: UUID), Never>()
     /// Content offset Y published on each scroll event (for debug jitter monitoring).
     let contentOffsetYSignal = PassthroughSubject<CGFloat, Never>()
@@ -7865,7 +7865,7 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
             cacheAttributedString(for: block)
         }
         // When content transitions from empty to non-empty, signal the collection
-        // view to reconfigure the cell. UIHostingConfiguration doesn't always
+        // view to reconfigure the cell. MinisHostingConfiguration doesn't always
         // trigger preferredLayoutAttributesFitting when the SwiftUI body changes
         // from emitting nothing (EmptyView) to emitting content — the cell can
         // stay at ~0 height indefinitely without this explicit nudge.

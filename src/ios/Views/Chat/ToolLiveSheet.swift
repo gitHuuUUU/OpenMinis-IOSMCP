@@ -1512,7 +1512,7 @@ struct ToolLiveSheet: View {
                     .overlay(RoundedRectangle(cornerRadius: 10)
                         .stroke(Color(UIColor.separator).opacity(0.5), lineWidth: 0.5))
                     .shadow(color: .black.opacity(0.18), radius: 8, x: 0, y: 3)
-                    .contextMenu {
+                    .minisContextMenu {
                         Button { UIPasteboard.general.image = image } label: {
                             Label("Copy Image", systemImage: "doc.on.doc")
                         }
@@ -2510,7 +2510,7 @@ struct ToolLiveSheet: View {
                             .overlay(RoundedRectangle(cornerRadius: 10)
                                 .stroke(Color(UIColor.separator).opacity(0.5), lineWidth: 0.5))
                             .shadow(color: .black.opacity(0.18), radius: 8, x: 0, y: 3)
-                            .contextMenu {
+                            .minisContextMenu {
                                 Button { UIPasteboard.general.image = img } label: {
                                     Label("Copy Image", systemImage: "doc.on.doc")
                                 }
@@ -2886,7 +2886,7 @@ private struct ToolPreviewThumbnail: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 2)
                     .background(Color.black.opacity(0.6))
-                    .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 8, bottomTrailingRadius: 8))
+                    .clipShape(MinisUnevenRoundedRectangle(bottomLeadingRadius: 8, bottomTrailingRadius: 8))
             }
         }
         .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 3)

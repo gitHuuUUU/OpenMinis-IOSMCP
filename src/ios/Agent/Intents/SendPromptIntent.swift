@@ -5,6 +5,7 @@ import UserNotifications
 
 /// Sends a prompt to the Minis AI agent and returns immediately with structured session info.
 /// The agent continues running in the background — use Get Session Status to poll for completion.
+@available(iOS 16.0, *)
 struct SendPromptIntent: AppIntent {
     static var title: LocalizedStringResource = "Send Prompt"
     static var description = IntentDescription("Sends a prompt to the Minis AI agent. Returns session info immediately while the task runs in the background.")
@@ -272,7 +273,7 @@ struct SendPromptIntent: AppIntent {
                 prompt: prompt,
                 responseText: responseText
             )
-            return .result(value: result, dialog: "\(responseText.prefix(500))")
+            return .result(value: result, dialog: "\(String(responseText.prefix(500)))")
         }
 
         // Async mode: return immediately, notify on completion in background

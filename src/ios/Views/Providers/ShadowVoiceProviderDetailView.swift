@@ -21,7 +21,7 @@ struct ShadowVoiceProviderDetailView: View {
     var body: some View {
         List {
             Section {
-                LabeledContent {
+                MinisLabeledContent {
                     Text(instance?.label ?? "—")
                         .foregroundStyle(.secondary)
                 } label: {
@@ -32,7 +32,7 @@ struct ShadowVoiceProviderDetailView: View {
                     }
                 }
                 if let base = instance?.effectiveCustomBaseURL {
-                    LabeledContent {
+                    MinisLabeledContent {
                         Text(base)
                             .font(.system(.caption, design: .monospaced))
                             .foregroundStyle(.secondary)

@@ -13,7 +13,18 @@ import CoreLocation
 
 @objc public class WeatherOffloadBridge: NSObject {
 
-    @objc public static func fetchWeather(
+    @objc public static func fetchWeather(forLatitude lat: Double, longitude lng: Double,
+                                         completion: @escaping (NSDictionary?, Error?) -> Void) {
+        guard #available(iOS 16.0, *) else {
+            completion(nil, NSError(domain: "IOSMCP.Weather", code: 16,
+                       userInfo: [NSLocalizedDescriptionKey: "WeatherKit requires iOS 16 or newer."]))
+            return
+        }
+        fetchWeatherSupported(forLatitude: lat, longitude: lng, completion: completion)
+    }
+
+    @available(iOS 16.0, *)
+    private static func fetchWeatherSupported(
         forLatitude lat: Double,
         longitude lng: Double,
         completion: @escaping (NSDictionary?, Error?) -> Void

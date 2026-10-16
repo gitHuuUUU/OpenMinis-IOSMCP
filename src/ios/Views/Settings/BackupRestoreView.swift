@@ -302,31 +302,31 @@ struct BackupRestoreView: View {
                 }
             }
 
-            LabeledContent("Created",
+            MinisLabeledContent("Created",
                            value: m.createdAt.formatted(date: .abbreviated, time: .shortened))
             // The data cut-off, when the package records one. Distinct from
             // "Created": anything changed after this instant is deliberately
             // not in the package, and the user should see that before
             // deciding this is the backup they want.
             if let snapshotAt = m.snapshotAt, snapshotAt != m.createdAt {
-                LabeledContent("Data as of",
+                MinisLabeledContent("Data as of",
                                value: snapshotAt.formatted(date: .abbreviated, time: .shortened))
             }
-            LabeledContent("From", value: "\(m.deviceName) · \(m.app.platform) \(m.app.version)")
+            MinisLabeledContent("From", value: "\(m.deviceName) · \(m.app.platform) \(m.app.version)")
             if m.encryption != nil {
-                LabeledContent("Encrypted", value: AppLocalized("Yes"))
+                MinisLabeledContent("Encrypted", value: AppLocalized("Yes"))
             }
             if let limits = m.limits.maxFileBytes, limits == 0 {
                 // The package was made with file contents switched off, so it
                 // can restore conversations but none of their attachments.
                 // Saying "size limit" here would be misleading — nothing was
                 // too big, the user chose to leave files out.
-                LabeledContent("File contents",
+                MinisLabeledContent("File contents",
                                value: "Not included (\(m.limits.skippedFiles) file(s) listed)")
             } else if let limits = m.limits.maxFileBytes, limits > 0 {
                 // §3.4 — the package is known-incomplete, and the user should
                 // learn that here rather than after restoring.
-                LabeledContent("Excluded (size limit)",
+                MinisLabeledContent("Excluded (size limit)",
                                value: "\(m.limits.skippedFiles) file(s)")
             }
 
@@ -517,17 +517,17 @@ struct BackupRestoreView: View {
 
     private func reportSection(_ r: BackupImporter.Report) -> some View {
         Section {
-            LabeledContent("Restored", value: "\(r.totalImported)")
-            if r.totalUpdated > 0 { LabeledContent("Updated", value: "\(r.totalUpdated)") }
+            MinisLabeledContent("Restored", value: "\(r.totalImported)")
+            if r.totalUpdated > 0 { MinisLabeledContent("Updated", value: "\(r.totalUpdated)") }
             // "Skipped" is the expected outcome for anything already present,
             // so it is labelled as such rather than looking like a failure.
-            LabeledContent("Already up to date", value: "\(r.totalSkipped)")
+            MinisLabeledContent("Already up to date", value: "\(r.totalSkipped)")
             if r.totalUnreadable > 0 {
-                LabeledContent("Unreadable", value: "\(r.totalUnreadable)")
+                MinisLabeledContent("Unreadable", value: "\(r.totalUnreadable)")
             }
             let credsRestored = r.categories.reduce(0) { $0 + $1.credentialsRestored }
             if credsRestored > 0 {
-                LabeledContent("API keys restored", value: "\(credsRestored)")
+                MinisLabeledContent("API keys restored", value: "\(credsRestored)")
             }
             // [T-restore-result-severity] Two tiers, told apart by colour AND
             // icon so the difference survives for colour-blind users:
@@ -920,7 +920,7 @@ struct FolderPackageListView: View {
         // the server list detaches its rclone calls.
         let id = folder.id
         let found = await Task.detached(priority: .userInitiated) {
-            BackupDestinations.listPackages(folderId: id)
+            await BackupDestinations.listPackages(folderId: id)
         }.value
         packages = found
         loading = false

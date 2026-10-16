@@ -304,7 +304,7 @@ final class SessionDataSimulator: ObservableObject {
 
                 The V3 message list uses `UICollectionView` with cell-per-block architecture. Each block type has its own reuse identifier, enabling efficient recycling:
 
-                - **Text blocks**: `SelfSizingCell` with `UIHostingConfiguration`
+                - **Text blocks**: `SelfSizingCell` with `MinisHostingConfiguration`
                 - **Tool blocks**: Lightweight capsule views, minimal layout cost
                 - **Headers/Footers**: Fixed-height, near-zero layout time
 
@@ -694,12 +694,12 @@ final class SessionDataSimulator: ObservableObject {
 
                 ## 6. Self-Sizing Cells
 
-                For dynamic content heights, use `UIHostingConfiguration` (iOS 16+):
+                For dynamic content heights, use `MinisHostingConfiguration` (iOS 16+):
 
                 ```swift
                 let cellRegistration = UICollectionView.CellRegistration<UICollectionViewCell, Item> {
                     cell, indexPath, item in
-                    cell.contentConfiguration = UIHostingConfiguration {
+                    cell.contentConfiguration = MinisHostingConfiguration {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(item.title)
                                 .font(.headline)

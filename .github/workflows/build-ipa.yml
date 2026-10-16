@@ -14,6 +14,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: write
+
 env:
   ALPINE_VERSION: ${{ github.event.inputs.alpine_version || '3.21' }}
   IOSMCP_SDK_VER: ${{ github.event.inputs.sdk_version || '16.5' }}
@@ -29,6 +32,18 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 1
+
+      - name: Select Xcode 26 or newer
+        run: |
+          XCODE_APP=$(python3 -c 'import glob,re; p=[x for x in glob.glob("/Applications/Xcode_26*.app") if "beta" not in x.lower()]; assert p, "Xcode 26 is not installed"; print(max(p,key=lambda x:tuple(map(int,re.findall(r"\d+",x)))))')
+          test -n "$XCODE_APP" || { echo "No versioned Xcode installation found"; exit 1; }
+          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          xcodebuild -version | head -1 | grep -Eq 'Xcode (2[6-9]|[3-9][0-9])' || { echo "iOS26 SDK is required for guarded APIs"; exit 1; }
+
+      - name: Swift syntax preflight
+        run: find src/ios -name '*.swift' -print0 | xargs -0 xcrun swiftc -frontend -parse
 
       - name: Set up Go (rclone / ish tooling)
         uses: actions/setup-go@v5
@@ -100,27 +115,15 @@ jobs:
           # is unaffected).
           cd build && zip -q -r ../IOS-MCP.ipa Payload -x "Payload/*/PlugIns/*" && cd ..
           echo "IPA size: $(du -h IOS-MCP.ipa | cut -f1)"
-          unzip -l ../IOS-MCP.ipa | tail -5
+          unzip -l IOS-MCP.ipa | tail -5
 
       - name: Upload IPA to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Actions artifact storage quota is exhausted on this account, so the
-          # IPA is delivered via the release assets (separate quota).
-          RELEASE_ID="414545959"   # rootfs-tooling-v1
-          REPO="${{ github.repository }}"
-          # Remove any previous IOS-MCP.ipa asset so re-uploads succeed
-          OLD_ID=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/$REPO/releases/$RELEASE_ID/assets" \
-            | python3 -c 'import json,sys; d=json.load(sys.stdin); ids=[a["id"] for a in d if a["name"]=="IOS-MCP.ipa"]; print(ids[0] if ids else "")')
-          if [ -n "$OLD_ID" ]; then
-            curl -s -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
-              "https://api.github.com/repos/$REPO/releases/assets/$OLD_ID" -o /dev/null
-            echo "Removed previous IOS-MCP.ipa asset ($OLD_ID)"
-          fi
-          curl -s -X POST -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Content-Type: application/octet-stream" \
-            "https://uploads.github.com/repos/$REPO/releases/$RELEASE_ID/assets?name=IOS-MCP.ipa" \
-            --data-binary @IOS-MCP.ipa -o /tmp/upload.json
-          python3 -c 'import json; d=json.load(open("/tmp/upload.json")); print("uploaded:", d.get("name"), d.get("size"), "bytes"); print("download_url:", d.get("browser_download_url")); print("message:", d.get("message") or "OK")'
+          set -euo pipefail
+          OUTPUT="IOS-MCP-${GITHUB_SHA:0:7}.ipa"
+          cp IOS-MCP.ipa "$OUTPUT"
+          shasum -a 256 "$OUTPUT" > "$OUTPUT.sha256"
+          gh release upload rootfs-tooling-v1 "$OUTPUT" "$OUTPUT.sha256" --repo "$GITHUB_REPOSITORY"
+          echo "Uploaded $OUTPUT"

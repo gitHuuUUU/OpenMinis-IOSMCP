@@ -248,7 +248,7 @@ struct InlineVoiceInputView: View {
             // button, etc.) for gesture priority.
             Color.clear
                 .contentShape(Rectangle())
-                .contextMenu {
+                .minisContextMenu {
                     if UIPasteboard.general.hasImages, onPasteImage != nil {
                         Button {
                             guard let images = UIPasteboard.general.images else { return }
@@ -783,10 +783,10 @@ struct InlineVoiceInputView: View {
             // half back into view" freeze. The text view scrolls itself here,
             // which also restores native caret-tracking that the wrapped form
             // lost.
-            TextField("", text: Binding(
+            TextEditor(text: Binding(
                 get: { viewModel.transcript },
                 set: { viewModel.setTranscript($0); inputText = $0 }
-            ), axis: .vertical)
+            ))
                 .focused($editFocused)
                 .font(.body)
                 .multilineTextAlignment(.center)
@@ -829,7 +829,7 @@ struct InlineVoiceInputView: View {
                             Color.clear.preference(key: TranscriptContentHeightKey.self,
                                                    value: geo.size.height)
                         })
-                        .contextMenu {
+                        .minisContextMenu {
                             Button(role: .destructive) {
                                 viewModel.clearTranscript()
                                 VoiceLog.log("cleared transcript via long-press")

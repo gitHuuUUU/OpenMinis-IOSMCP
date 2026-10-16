@@ -795,10 +795,10 @@ struct UnifiedModelPicker: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         if isMulti {
-            ToolbarItem(placement: .topBarLeading) {
+            ToolbarItem(placement: .navigationBarLeading) {
                 Button("Cancel") { dismiss() }
             }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .navigationBarTrailing) {
                 Button("Add (\(selectedEntryIds.count))") {
                     config.onAddMulti?(selectedEntryIds)
                     dismiss()
@@ -807,7 +807,7 @@ struct UnifiedModelPicker: View {
                 .disabled(selectedEntryIds.isEmpty)
             }
         } else {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .navigationBarTrailing) {
                 Button("Done") { dismiss() }
             }
         }
@@ -883,7 +883,7 @@ struct UnifiedModelPicker: View {
             config.onSelectGroup?(group)
             dismissIfNeeded()
         }
-        .contextMenu {
+        .minisContextMenu {
             Button {
                 UIPasteboard.general.string = "group:\(group.id)"
                 MinisToast.show(AppLocalized("Copied: \(group.name)"))
@@ -1127,7 +1127,7 @@ struct UnifiedModelPicker: View {
             }
             dismissIfNeeded()
         }
-        .contextMenu {
+        .minisContextMenu {
             Button {
                 UIPasteboard.general.string = "entry:\(entry.compositeKey)"
                 MinisToast.show(AppLocalized("Copied: \(entry.model.displayName)"))
@@ -1393,7 +1393,7 @@ struct UnifiedModelPicker: View {
                 dismissIfNeeded()
             }
         }
-        .contextMenu {
+        .minisContextMenu {
             Button {
                 UIPasteboard.general.string = "entry:\(entry.compositeKey)"
                 MinisToast.show(AppLocalized("Copied: \(entry.model.displayName)"))

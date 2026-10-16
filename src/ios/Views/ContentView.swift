@@ -394,18 +394,18 @@ private struct FolderSurface: ViewModifier {
             : UIColor(red: 252/255.0, green: 252/255.0, blue: 252/255.0, alpha: 1)
     })
 
-    private var shape: AnyShape {
+    private var shape: MinisAnyShape {
         switch kind {
         case .lone:
-            return AnyShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            return MinisAnyShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         case .top:
-            return AnyShape(UnevenRoundedRectangle(
+            return MinisAnyShape(MinisUnevenRoundedRectangle(
                 topLeadingRadius: 16, bottomLeadingRadius: 0,
                 bottomTrailingRadius: 0, topTrailingRadius: 16, style: .continuous))
         case .middle:
-            return AnyShape(Rectangle())
+            return MinisAnyShape(Rectangle())
         case .bottom:
-            return AnyShape(UnevenRoundedRectangle(
+            return MinisAnyShape(MinisUnevenRoundedRectangle(
                 topLeadingRadius: 0, bottomLeadingRadius: 16,
                 bottomTrailingRadius: 16, topTrailingRadius: 0, style: .continuous))
         }
@@ -474,12 +474,12 @@ private struct FolderCardBackground: ViewModifier {
     let isDropTarget: Bool
     let isExpanded: Bool
 
-    private var dropShape: AnyShape {
+    private var dropShape: MinisAnyShape {
         isExpanded
-            ? AnyShape(UnevenRoundedRectangle(
+            ? MinisAnyShape(MinisUnevenRoundedRectangle(
                 topLeadingRadius: 16, bottomLeadingRadius: 0,
                 bottomTrailingRadius: 0, topTrailingRadius: 16, style: .continuous))
-            : AnyShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            : MinisAnyShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     func body(content: Content) -> some View {
@@ -949,7 +949,7 @@ private struct FolderPickerSheet: View {
                              : LocalizedStringKey("Move \(sessionCount) to Group"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Cancel") { dismiss() }
                 }
             }
@@ -1513,7 +1513,7 @@ struct ContentView: View {
     /// Whether the current window is wide enough for two-column layout.
     @State private var isWideLayout = false
     /// Navigation path for stack (compact) layout.
-    @State private var navigationPath = NavigationPath()
+    @State private var navigationPath = [String]()
     /// Tracks the session ID currently visible on the compact navigation stack.
     @State private var currentStackSessionId: String?
     /// [T-ios-stacknav-transition-attributegraph-race] Compact-layout analogue
@@ -1594,7 +1594,7 @@ struct ContentView: View {
     ///
     /// Carries the deferral instant so a stale request can be dropped rather
     /// than flushed — see `pendingBackgroundNavigationTTL`.
-    @State private var pendingBackgroundNavigation: (path: NavigationPath, deferredAt: Date)?
+    @State private var pendingBackgroundNavigation: (path: [String], deferredAt: Date)?
 
     /// [T-ios-bg-nav-push-watchdog] How long a deferred push stays valid.
     ///
@@ -1833,7 +1833,7 @@ struct ContentView: View {
                 NavigationView {
                     RootfsManagementView()
                         .toolbar {
-                            ToolbarItem(placement: .topBarTrailing) {
+                            ToolbarItem(placement: .navigationBarTrailing) {
                                 Button("Done") { activeToolSheet = nil }
                             }
                         }
@@ -1848,7 +1848,7 @@ struct ContentView: View {
                 NavigationView {
                     SyncMigrationDetailView()
                         .toolbar {
-                            ToolbarItem(placement: .topBarTrailing) {
+                            ToolbarItem(placement: .navigationBarTrailing) {
                                 Button("Done") { activeToolSheet = nil }
                             }
                         }
@@ -2479,7 +2479,7 @@ struct ContentView: View {
             } else {
                 // [IOS-MCP] iOS 15 fallback: HSplitView approximates the
                 // iPad sidebar + detail layout.
-                HSplitView {
+                HStack(spacing: 0) {
                     sessionList(useNavigationLinks: false)
                         .appFontScale()
                         .frame(minWidth: 320, idealWidth: 380, maxWidth: 500)
@@ -3259,7 +3259,7 @@ struct ContentView: View {
             // with a hand-rolled gesture sequence — the
             // gesture layer is where system gestures are
             // beaten (see the WebView sheet-dismiss fix).
-            .draggable(session.id)
+            .minisDraggable(session.id)
             .overlay {
                 if regeneratingTitleSessionId == session.id {
                     ZStack {
@@ -3289,7 +3289,7 @@ struct ContentView: View {
                     Color(.systemBackground)
                 }
             })
-            .contextMenu {
+            .minisContextMenu {
                 // [T-ios-crash-contextmenu-uaf] Value-only menu view,
                 // no closure captures — see SessionContextMenu.
                 SessionContextMenu(
@@ -3469,7 +3469,7 @@ struct ContentView: View {
                                 // with a hand-rolled gesture sequence — the
                                 // gesture layer is where system gestures are
                                 // beaten (see the WebView sheet-dismiss fix).
-                                .draggable(session.id)
+                                .minisDraggable(session.id)
                                 .overlay {
                                     if regeneratingTitleSessionId == session.id {
                                         ZStack {
@@ -3490,7 +3490,7 @@ struct ContentView: View {
                                 // triggers on every row regardless of selection state.
                                 // iPhone uses `stackList` (no selection:) and is
                                 // unaffected.
-                                .contextMenu {
+                                .minisContextMenu {
                                     // [T-ios-ipad-new-session-contextmenu-broken / GH#30]
                                     // The selected new-chat row keeps the DRAFT id as its
                                     // tag even after the user sends a message and the
@@ -3530,7 +3530,7 @@ struct ContentView: View {
                                             // container's bottom radii so it stays
                                             // wrapped by the corners.
                                             if isSessionHighlighted(session.id) {
-                                                UnevenRoundedRectangle(
+                                                MinisUnevenRoundedRectangle(
                                                     topLeadingRadius: 0,
                                                     bottomLeadingRadius: isLast ? 16 : 0,
                                                     bottomTrailingRadius: isLast ? 16 : 0,
@@ -3916,7 +3916,7 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
             }
         }
-        ToolbarItem(placement: .topBarLeading) {
+        ToolbarItem(placement: .navigationBarLeading) {
             if isSelecting {
                 Button("Cancel") {
                     isSelecting = false
@@ -3930,7 +3930,7 @@ struct ContentView: View {
                 }
             }
         }
-        ToolbarItem(placement: .topBarTrailing) {
+        ToolbarItem(placement: .navigationBarTrailing) {
             if isSelecting {
                 Button(selectedIds.count == sessions.count ? "Deselect All" : "Select All") {
                     if selectedIds.count == sessions.count {
@@ -3948,7 +3948,7 @@ struct ContentView: View {
                 }
             }
         }
-        ToolbarItem(placement: .topBarTrailing) {
+        ToolbarItem(placement: .navigationBarTrailing) {
             if !isSelecting {
                 Menu {
                     Button {
@@ -4084,7 +4084,7 @@ struct ContentView: View {
         if isWideLayout {
             openSession(newId)
         } else {
-            commitNavigationPath(NavigationPath([newId]))
+            commitNavigationPath([String]([newId]))
             currentStackSessionId = newId
         }
     }
@@ -4118,7 +4118,7 @@ struct ContentView: View {
             if isWideLayout {
                 selectedSessionId = nil
             } else {
-                navigationPath = NavigationPath()
+                navigationPath = [String]()
                 currentStackSessionId = nil
             }
         }
@@ -4137,7 +4137,7 @@ struct ContentView: View {
         if isWideLayout {
             openSession(newId)
         } else {
-            commitNavigationPath(NavigationPath([newId]))
+            commitNavigationPath([String]([newId]))
             currentStackSessionId = newId
         }
         QuickActionWorkflow.shared.attachTargetSession(newId)
@@ -4170,7 +4170,7 @@ struct ContentView: View {
     /// `previousStackSessionId` stays in lockstep because it is maintained by
     /// the `onChange(of: navigationPath)` observer, which simply runs later —
     /// when the deferred path is actually committed.
-    private func commitNavigationPath(_ newPath: NavigationPath) {
+    private func commitNavigationPath(_ newPath: [String]) {
         // [T-share-first-tap-no-response] `.inactive` is NOT the state this
         // gate was built for. The watchdog kills it prevents come from a push
         // running AIChatView's whole first layout while the app is genuinely
@@ -4239,7 +4239,7 @@ struct ContentView: View {
             return
         }
         searchFocused = false
-        commitNavigationPath(NavigationPath([id]))
+        commitNavigationPath([String]([id]))
         currentStackSessionId = id
     }
 
@@ -4443,7 +4443,7 @@ struct ContentView: View {
                         }
                         .listRowInsets(EdgeInsets())
                         .listRowSeparator(.hidden)
-                        .contextMenu {
+                        .minisContextMenu {
                             Button {
                                 // [T-ios-state-publish-offmain-crash] @MainActor
                                 // so the @State write stays on the main thread.
@@ -5102,7 +5102,7 @@ struct ContentView: View {
                         .font(.system(size: 22, weight: .semibold))
                         .foregroundStyle(Self.newChatIconColor)
                 }
-                    .contextMenu {
+                    .minisContextMenu {
                         let groups = Array(ProviderConfigStore.shared.config.modelGroups.prefix(10))
                         if !groups.isEmpty {
                             Section(AppLocalized("New Chat with Group")) {
@@ -5288,7 +5288,7 @@ struct ContentView: View {
             // Dropping on a date-bucket header moves the sessions OUT of any
             // folder — the drag gesture works both directions, otherwise
             // moving out would still require a trip through the menu.
-            .dropDestination(for: String.self) { sessionIds, _ in
+            .minisDropDestination(for: String.self) { sessionIds, _ in
                 Task { @MainActor in
                     await ChatStore.shared.setFolder(nil, forSessions: sessionIds)
                     refreshSessionList()
@@ -5495,7 +5495,7 @@ struct ContentView: View {
         // ScrollViewReader anchor for the mini-bar's "back to header" jump.
         .id("folderHeader-\(group.folderId ?? "")")
         .listRowInsets(EdgeInsets())
-        .dropDestination(for: String.self) { sessionIds, _ in
+        .minisDropDestination(for: String.self) { sessionIds, _ in
             guard let fid = group.folderId else { return false }
             Task { @MainActor in
                 await ChatStore.shared.setFolder(fid, forSessions: sessionIds)
@@ -5509,7 +5509,7 @@ struct ContentView: View {
                 dropTargetFolderId = nil
             }
         }
-        .contextMenu {
+        .minisContextMenu {
             if let fid = group.folderId, let folder = folders.first(where: { $0.id == fid }) {
                 Button {
                     Task { @MainActor in
@@ -6508,7 +6508,7 @@ private struct ExportPreviewSheet: View {
             .navigationTitle(AppLocalized("Export Preview"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button(AppLocalized("Done")) { dismiss() }
                 }
             }
@@ -7568,7 +7568,7 @@ struct SessionEditSheet: View {
                         guard !title.isEmpty else { return }
                         onSave(title, editCategory.isEmpty ? nil : editCategory)
                     }
-                    .bold()
+                    .minisFontWeight(.bold)
                     .disabled(editTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
@@ -8039,7 +8039,7 @@ private struct AppearanceSettingsView: View {
                             if appLanguage == lang.id {
                                 Image(systemName: "checkmark")
                                     .foregroundStyle(.blue)
-                                    .fontWeight(.semibold)
+                                    .minisFontWeight(.semibold)
                             }
                         }
                     }
@@ -8471,7 +8471,7 @@ private struct SettingsSheet: View {
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }
                 }
             }
@@ -8493,11 +8493,11 @@ private struct SettingsSheet: View {
                 applyPendingDeepLink()
                 // Legacy flags — kept so older call sites keep working.
                 if deepLink.showEnvironmentVariables {
-                    settingsDestination = SettingsDestination.environments)
+                    settingsDestination = SettingsDestination.environments
                     deepLink.showEnvironmentVariables = false
                 }
                 if deepLink.showPermissions {
-                    settingsDestination = SettingsDestination.permissions)
+                    settingsDestination = SettingsDestination.permissions
                     deepLink.showPermissions = false
                 }
                 // Restore the user's location after a language-change rebuild.
@@ -8511,7 +8511,7 @@ private struct SettingsSheet: View {
                     UserDefaults.standard.removeObject(forKey: "pendingSettingsReopen")
                     switch dest {
                     case "appearance":
-                        settingsDestination = SettingsDestination.appearance)
+                        settingsDestination = SettingsDestination.appearance
                     default:
                         break
                     }
@@ -8602,47 +8602,47 @@ private struct SettingsSheet: View {
         case .home:
             break // already at Settings root
         case .providers:
-            settingsDestination = SettingsDestination.providers)
+            settingsDestination = SettingsDestination.providers
         case .providerDetail(let id):
-            settingsDestination = SettingsDestination.providers)
-            settingsDestination = SettingsDestination.providerDetail(instanceId: id))
+            settingsDestination = SettingsDestination.providers
+            settingsDestination = SettingsDestination.providerDetail(instanceId: id)
         case .modelGroups:
-            settingsDestination = SettingsDestination.modelGroups)
+            settingsDestination = SettingsDestination.modelGroups
         case .modelGroupDetail(let id):
-            settingsDestination = SettingsDestination.modelGroups)
-            settingsDestination = SettingsDestination.modelGroupDetail(groupId: id))
+            settingsDestination = SettingsDestination.modelGroups
+            settingsDestination = SettingsDestination.modelGroupDetail(groupId: id)
         case .usage:
-            settingsDestination = SettingsDestination.usage)
+            settingsDestination = SettingsDestination.usage
         case .skills:
-            settingsDestination = SettingsDestination.skills)
+            settingsDestination = SettingsDestination.skills
         case .soul:
-            settingsDestination = SettingsDestination.soul)
+            settingsDestination = SettingsDestination.soul
         case .tools:
-            settingsDestination = SettingsDestination.tools)
+            settingsDestination = SettingsDestination.tools
         case .memory:
-            settingsDestination = SettingsDestination.memory)
+            settingsDestination = SettingsDestination.memory
         case .storage:
-            settingsDestination = SettingsDestination.storage)
+            settingsDestination = SettingsDestination.storage
         case .mountedFolders:
-            settingsDestination = SettingsDestination.mountedFolders)
+            settingsDestination = SettingsDestination.mountedFolders
         case .sharedFolders:
-            settingsDestination = SettingsDestination.sharedFolders)
+            settingsDestination = SettingsDestination.sharedFolders
         case .logs:
-            settingsDestination = SettingsDestination.logs)
+            settingsDestination = SettingsDestination.logs
         case .appearance:
-            settingsDestination = SettingsDestination.appearance)
+            settingsDestination = SettingsDestination.appearance
         case .background:
-            settingsDestination = SettingsDestination.background)
+            settingsDestination = SettingsDestination.background
         case .about:
-            settingsDestination = SettingsDestination.about)
+            settingsDestination = SettingsDestination.about
         case .permissions:
-            settingsDestination = SettingsDestination.permissions)
+            settingsDestination = SettingsDestination.permissions
         case .environments:
-            settingsDestination = SettingsDestination.environments)
+            settingsDestination = SettingsDestination.environments
         case .mcpIntegrations:
-            settingsDestination = SettingsDestination.mcpIntegrations)
+            settingsDestination = SettingsDestination.mcpIntegrations
         case .mcpServerDetail(let id):
-            settingsDestination = SettingsDestination.mcpServerDetail(serverId: id))
+            settingsDestination = SettingsDestination.mcpServerDetail(serverId: id)
         }
         deepLink.pendingSettingsTarget = nil
     }

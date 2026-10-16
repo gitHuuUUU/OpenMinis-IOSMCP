@@ -42,7 +42,7 @@ enum MessageListItem: Hashable {
 // MARK: - Self-Sizing Cell
 
 /// A plain UICollectionViewCell that correctly reports its preferred size
-/// for UIHostingConfiguration content with custom layouts.
+/// for MinisHostingConfiguration content with custom layouts.
 class SelfSizingCell: UICollectionViewCell {
     /// Clip content to cell bounds so SwiftUI content doesn't visually overflow
     /// into adjacent cells during the brief window between content update and
@@ -71,7 +71,7 @@ class SelfSizingCell: UICollectionViewCell {
     /// still re-measures; an unchanged width reuses the cached height without
     /// calling `super.preferredLayoutAttributesFitting` or
     /// `systemLayoutSizeFitting`, either of which re-enters
-    /// UIHostingConfiguration's view graph and races SwiftUI's async
+    /// MinisHostingConfiguration's view graph and races SwiftUI's async
     /// display-link thread (FB13213926).
     private var lastComputedWidth: CGFloat?
 
@@ -155,7 +155,7 @@ class SelfSizingCell: UICollectionViewCell {
         // self-size at a width it already measured, return the cached
         // height directly and skip both `super.preferredLayoutAttributesFitting`
         // *and* `systemLayoutSizeFitting`. Calling either re-enters
-        // UIHostingConfiguration's view graph, which races with SwiftUI's
+        // MinisHostingConfiguration's view graph, which races with SwiftUI's
         // async display-link thread mutating ViewGraphGeometryObservers
         // and can crash with EXC_BAD_ACCESS (FB13213926, see the recurring
         // `nswtsUU8p6mRY9Pj7c7tU` crashpoint). The cache is invalidated
@@ -669,7 +669,7 @@ class SelfSizingCell: UICollectionViewCell {
         // but UIKit may later call isHiddenForReuse=false which tries to restore
         // the destroyed graph, causing a use-after-free crash
         // (EXC_BAD_ACCESS in AG::Subgraph::invalidate_now).
-        // Let UIKit manage the UIHostingConfiguration lifecycle naturally.
+        // Let UIKit manage the MinisHostingConfiguration lifecycle naturally.
     }
 }
 

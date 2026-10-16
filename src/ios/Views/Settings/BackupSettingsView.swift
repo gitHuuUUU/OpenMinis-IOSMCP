@@ -314,7 +314,7 @@ struct BackupSettingsView: View {
                     // Without maxWidth the row sizes to its content and sits
                     // left; this is what centres it in the Form row.
                     .frame(maxWidth: .infinity)
-                    .fontWeight(.medium)
+                    .minisFontWeight(.medium)
                 }
                 // The start-time requirements gate STARTING only. Applying
                 // them while running would disable the button mid-run and
@@ -388,13 +388,13 @@ struct BackupSettingsView: View {
 
             if let result {
                 Section {
-                    LabeledContent("Size", value: byteText(result.totalBytes))
+                    MinisLabeledContent("Size", value: byteText(result.totalBytes))
                     if result.skippedFiles > 0 {
                         // §3.4: a size-capped export has gaps, and the user is
                         // told here rather than discovering it at restore time.
                         // "too large" would be wrong when files were left out
                         // on purpose — nothing exceeded anything.
-                        LabeledContent(maxFileSizeMB == Self.noFilesTag
+                        MinisLabeledContent(maxFileSizeMB == Self.noFilesTag
                                        ? "Files not included"
                                        : "Excluded (too large)",
                                        value: "\(result.skippedFiles) file(s)")

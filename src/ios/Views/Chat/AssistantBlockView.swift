@@ -124,7 +124,7 @@ struct AssistantBlockView: View {
             .background(Color.orange.opacity(0.08))
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.orange.opacity(0.14), lineWidth: 0.5))
-            .contextMenu {
+            .minisContextMenu {
                 Button {
                     UIPasteboard.general.string = block.content
                 } label: {
@@ -457,7 +457,7 @@ struct ToolCapsuleView: View {
             .onTapGesture {
                 detailBlock = block
             }
-            .contextMenu {
+            .minisContextMenu {
                 // [T-ios-msg-contextmenu-recursion-crash] Gate the eager menu
                 // tree behind an Equatable key so this tool cell's body churn
                 // during `gh`/shell streaming doesn't rebuild + re-diff the menu
@@ -1153,7 +1153,7 @@ struct ThinkingLevelSheetView: View {
                 if isSelected {
                     Image(systemName: "checkmark")
                         .foregroundStyle(.blue)
-                        .fontWeight(.semibold)
+                        .minisFontWeight(.semibold)
                 }
             }
         }

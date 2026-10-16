@@ -93,7 +93,7 @@ final class JailbreakFullAccessManager {
 
         // S_IFDIR | 0755
         var statBytes: [UInt8] = Array(repeating: 0, count: 16)
-        let mode: UInt32 = (0o040755).littleEndian
+        let mode: UInt32 = UInt32(0o040755).littleEndian
         withUnsafeBytes(of: mode) { src in
             for i in 0..<4 { statBytes[i] = src[i] }
         }

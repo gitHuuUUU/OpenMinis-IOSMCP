@@ -576,7 +576,7 @@ struct MinisApp: App {
                 debugServer.restartIfDead(port: 8321)
                 #endif
 
-                try? await UNUserNotificationCenter.current().setBadgeCount(0)
+                try? await MinisBadgeCenter.shared.setBadgeCount(0)
                 BackgroundInterruptionTracker.shared.checkOnForeground()
                 // [T-shortcuts-diag-and-pending] Scan for AppIntent runs that
                 // were marked pending but never cleared (i.e. the process was
@@ -733,6 +733,7 @@ struct MinisApp: App {
 
     // MARK: - FileProvider
 
+    @available(iOS 16.0, *)
     private static let fileProviderDomain = NSFileProviderDomain(
         identifier: NSFileProviderDomainIdentifier("com.iosmcp.app.files"),
         displayName: "Minis"
@@ -797,6 +798,7 @@ struct MinisApp: App {
     }
 
     private static func registerFileProviderDomain() {
+        guard #available(iOS 16.0, *) else { return }
         logAppUpdateMarkerForFPTrace()
 
         // [T-ios-fp-mac-bootcrash] Circuit breaker, NOT a blanket disable.

@@ -175,7 +175,7 @@ struct HelperTranscriptPage: View {
                     }
                     .equatable()
                 }
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .navigationBarLeading) {
                     Button {
                         dismiss()
                     } label: {
@@ -184,7 +184,7 @@ struct HelperTranscriptPage: View {
                     }
                     .accessibilityLabel(AppLocalized("Close"))
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     if isRunning {
                         Button {
                             childVM?.cancel()

@@ -224,7 +224,7 @@ private struct BridgedAssistantHeaderV3: View {
     /// environment.
     ///
     /// `\.openMinisURL` is set on AIChatView, but each cell here is hosted in
-    /// its own `UIHostingConfiguration`, which starts a fresh SwiftUI hierarchy
+    /// its own `MinisHostingConfiguration`, which starts a fresh SwiftUI hierarchy
     /// rather than inheriting that one. Reading the environment inside a cell
     /// therefore silently yields the key's default — an action that returns
     /// `.systemAction` and does nothing. (Verified on device: the tap fired, no
@@ -350,7 +350,7 @@ private struct BridgedAssistantBlockV3: View {
         // (same pattern as BridgedAssistantFooterV3).
         .overlay {
             Color.clear.frame(width: 0, height: 0)
-                .contextMenu {
+                .minisContextMenu {
                     Button {
                         let text = message.blocks
                             .filter { if case .text = $0.kind { return true }; return false }
@@ -525,7 +525,7 @@ private struct BridgedAssistantFooterV3: View {
         // report inflated heights to systemLayoutSizeFitting, causing height oscillation.
         .overlay {
             Color.clear.frame(width: 0, height: 0)
-                .contextMenu {
+                .minisContextMenu {
                     Button {
                         let text = message.blocks
                             .filter { if case .text = $0.kind { return true }; return false }
@@ -596,7 +596,7 @@ private struct BridgedAssistantFooterV3: View {
                 Text(error).font(.caption).foregroundStyle(.red).lineLimit(2)
             }
             .contentShape(Rectangle())
-            .contextMenu {
+            .minisContextMenu {
                 Button {
                     UIPasteboard.general.string = error
                 } label: {
@@ -1091,7 +1091,7 @@ extension CollectionViewMessageListV3 {
             // schedules a SwiftUI hosting-config update on the next
             // runloop tick; calling invalidateLayout synchronously
             // makes UIKit re-query PLAF while the cell's
-            // UIHostingConfiguration still wraps the STALE
+            // MinisHostingConfiguration still wraps the STALE
             // attributedString (with the 200pt video placeholder),
             // so systemLayoutSizeFitting returns the old 375pt
             // height, caches it as lastComputedHeight, and locks
@@ -1220,7 +1220,7 @@ extension CollectionViewMessageListV3 {
                 }
             }
 
-            // Install sheet overlay (outside UIHostingConfiguration cell tree)
+            // Install sheet overlay (outside MinisHostingConfiguration cell tree)
             if sheetOverlayHost == nil {
                 let overlay = SheetOverlayView(toolPresenter: sheetPresenter, compactPresenter: compactSummaryPresenter)
                 let host = UIHostingController(rootView: overlay)
@@ -1378,7 +1378,7 @@ extension CollectionViewMessageListV3 {
                 let message = messages[msgIdx]
                 let bridge = getOrCreateBridge(for: message, in: messages)
                 cell.backgroundColor = .clear
-                let config = UIHostingConfiguration {
+                let config = MinisHostingConfiguration {
                     BridgedWholeMessageV3(
                         message: message,
                         bridge: bridge,
@@ -1388,7 +1388,7 @@ extension CollectionViewMessageListV3 {
                     // to prevent use-after-free in ViewGraphGeometryObservers
                     // when UICollectionView recycles the cell.
                     .transaction { $0.disablesAnimations = true }
-                    // UIHostingConfiguration creates an independent SwiftUI
+                    // MinisHostingConfiguration creates an independent SwiftUI
                     // environment — it does NOT inherit EnvironmentObjects
                     // from the outer AIChatView. Descendant views inside the
                     // cell (notably ToolCapsuleView, which reads
@@ -1410,7 +1410,7 @@ extension CollectionViewMessageListV3 {
                 guard let msgIdx = messageIndex[msgId], msgIdx < messages.count else { return }
                 let message = messages[msgIdx]
                 cell.backgroundColor = .clear
-                let config = UIHostingConfiguration {
+                let config = MinisHostingConfiguration {
                     BridgedAssistantHeaderV3(message: message, maxWidth: width,
                                             onOpenSoulSettings: onOpenSoulSettings)
                         .transaction { $0.disablesAnimations = true }
@@ -1430,7 +1430,7 @@ extension CollectionViewMessageListV3 {
                 }
                 let bridge = getOrCreateBridge(for: message, in: messages)
                 cell.backgroundColor = .clear
-                let config = UIHostingConfiguration {
+                let config = MinisHostingConfiguration {
                     BridgedAssistantBlockV3(
                         block: block,
                         message: message,
@@ -1447,7 +1447,7 @@ extension CollectionViewMessageListV3 {
                 let message = messages[msgIdx]
                 let bridge = getOrCreateBridge(for: message, in: messages)
                 cell.backgroundColor = .clear
-                let config = UIHostingConfiguration {
+                let config = MinisHostingConfiguration {
                     BridgedAssistantFooterV3(
                         message: message,
                         bridge: bridge,
@@ -2270,7 +2270,7 @@ extension CollectionViewMessageListV3 {
                 }
                 .store(in: &subscriptions)
 
-            // 9. Text block filled — reconfigure the cell so UIHostingConfiguration
+            // 9. Text block filled — reconfigure the cell so MinisHostingConfiguration
             //    re-measures height after transitioning from empty to non-empty.
             vm.blockContentFilledSignal
                 .receive(on: DispatchQueue.main)
@@ -2809,7 +2809,7 @@ extension CollectionViewMessageListV3 {
                         // body now renders just the 36pt header — producing
                         // a tall empty gap below the collapsed pill (user
                         // screenshot 2026-05-19). Clear both caches here
-                        // and reconfigure so UIHostingConfiguration
+                        // and reconfigure so MinisHostingConfiguration
                         // re-measures from scratch. Trace each step so a
                         // future report can be diagnosed from logs alone.
                         var matched = false
@@ -3408,7 +3408,7 @@ extension CollectionViewMessageListV3 {
                 // guard short-circuits any NON-streaming cell that has a cached
                 // height while `deferSelfSizing || streamingActive` — it returns
                 // the cached height and skips `super` entirely, so the cell's
-                // `UIHostingConfiguration` is never re-rendered. Compaction sets
+                // `MinisHostingConfiguration` is never re-rendered. Compaction sets
                 // `isProcessing = true`, so `streamingActive` is already true;
                 // once the user drags, `deferSelfSizing` is set as well. The row
                 // therefore froze at whatever it last displayed and the spinner
@@ -3677,7 +3677,7 @@ extension CollectionViewMessageListV3 {
                     applySubViewportCompensation(caller: "snapshot-shrink", forceRelax: true)
                 } else if scrollMode == .autoScrolling && maxOff > 0 {
                     cv.contentOffset.y = maxOff
-                    // Deferred pin-to-bottom: UIHostingConfiguration self-sizing may
+                    // Deferred pin-to-bottom: MinisHostingConfiguration self-sizing may
                     // complete asynchronously after layoutIfNeeded(), updating contentSize
                     // via KVO. But if another applySnapshot starts before that KVO fires,
                     // isFlushing suppresses it. The coalesced scroll (80ms) catches the
@@ -4088,7 +4088,7 @@ extension CollectionViewMessageListV3 {
                     // so when this estimate is the height used during a fast scroll
                     // / offscreen pass (before precalc lands, or via the
                     // configureCell/prefetch estimate fallback), the
-                    // UIHostingConfiguration lays the Text into a 2-line box and
+                    // MinisHostingConfiguration lays the Text into a 2-line box and
                     // SwiftUI truncates it to "2 lines + …"; at settle the real
                     // measure returns 3 lines and the cell visibly expands, jolting
                     // the whole page. Routing the estimate through the accurate
@@ -5703,7 +5703,7 @@ extension CollectionViewMessageListV3 {
         /// tree and applies `body` to every hosted `SelectableMarkdownTextView`.
         /// Mirrors `invalidateTableAttachmentsInSubviews` in
         /// MessageListInfrastructure — the markdown view is nested several
-        /// levels inside the UIHostingConfiguration's view tree, so there is no
+        /// levels inside the MinisHostingConfiguration's view tree, so there is no
         /// direct handle on it from the cell.
         private static func forEachMarkdownTextView(in view: UIView,
                                                     _ body: (SelectableMarkdownTextView) -> Void) {
@@ -5817,7 +5817,7 @@ extension CollectionViewMessageListV3 {
 // MARK: - Tool Detail Sheet Presenter
 
 /// Holds the state for the tool detail sheet, presented from a transparent overlay
-/// on MessageListViewController — outside the UIHostingConfiguration cell tree.
+/// on MessageListViewController — outside the MinisHostingConfiguration cell tree.
 /// This avoids the cell's `.transaction { disablesAnimations = true }` which would
 /// suppress the sheet's slide-up animation, and prevents the double-present crash
 /// caused by multiple cell bindings re-evaluating on shared state changes.
@@ -5850,7 +5850,7 @@ private final class CompactSummaryPresenter: ObservableObject {
 
 /// Transparent SwiftUI view that owns the .sheet() modifier.
 /// Installed as a child UIHostingController on MessageListViewController,
-/// outside any UIHostingConfiguration cell tree.
+/// outside any MinisHostingConfiguration cell tree.
 private struct SheetOverlayView: View {
     @ObservedObject var toolPresenter: ToolSheetPresenter
     @ObservedObject var compactPresenter: CompactSummaryPresenter

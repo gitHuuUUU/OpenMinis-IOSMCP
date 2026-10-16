@@ -282,7 +282,7 @@ struct AgentCallbackCellView: View {
             if let sessionId { info["sessionId"] = sessionId }
             NotificationCenter.default.post(name: .openAgentCallback, object: nil, userInfo: info)
         }
-        .contextMenu {
+        .minisContextMenu {
             // [T-scheduled-cancel-from-card] Cancelling a timer required asking
             // the model to run `minis-scheduled delete --id …`; the card the
             // task fired into had no way to stop it. Shown only while the job is

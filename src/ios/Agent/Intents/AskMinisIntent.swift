@@ -11,6 +11,7 @@ private let logger = AppLogger(category: "AskMinisIntent")
 /// It reuses the exact normal send pipeline (`AIChatViewModel.send()`) and the
 /// existing `.openSessionFromIntent` navigation path — no separate agent logic.
 /// New session when `session` is nil; follow-up when a `SessionEntity` is given.
+@available(iOS 16.0, *)
 struct AskMinisIntent: AppIntent {
     static var title: LocalizedStringResource = "Ask Minis"
     static var description = IntentDescription("Opens Minis, sends your prompt, and shows the conversation. Starts a new session, or continues an existing one when you pick a session.")
@@ -75,7 +76,7 @@ struct AskMinisIntent: AppIntent {
         vm.send(overrideText: prompt)
 
         let sid = vm.sessionId ?? session?.id ?? ""
-        logger.info("AskMinis send sid=\(sid.prefix(8)) new=\(session == nil)")
+        logger.info("AskMinis send sid=\(String(sid.prefix(8))) new=\(session == nil)")
 
         // Route the (now-open) app to this session. Same event ContentView and
         // the cold-launch buffer already consume for notification taps / deep

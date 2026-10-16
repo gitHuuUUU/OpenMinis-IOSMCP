@@ -67,7 +67,7 @@ enum ShortcutRunTracker {
 
         let skippedReasonField = eagerKeepAliveSkippedReason.map { "reason=\($0)" } ?? "reason=nil"
         logger.info(
-            "[ShortcutDiag] perform-entry intent=\(intent) session=\(sessionId.prefix(8)) " +
+            "[ShortcutDiag] perform-entry intent=\(intent) session=\(String(sessionId.prefix(8))) " +
             "enhancedBackgroundEnabled=\(enhancedOn) backgroundSpeakEnabled=\(bgSpeakOn) " +
             "enhancedBackgroundEffective=\(effective) " +
             "notificationAuth=\(notif) " +
@@ -125,7 +125,7 @@ enum ShortcutRunTracker {
         eagerKeepAliveSkippedReason: String?
     ) -> String {
         guard waitForResult else {
-            logger.info("[ShortcutDiag] pending SKIPPED intent=\(intent) session=\(sessionId.prefix(8)) reason=asyncMode(waitForResult=false)")
+            logger.info("[ShortcutDiag] pending SKIPPED intent=\(intent) session=\(String(sessionId.prefix(8))) reason=asyncMode(waitForResult=false)")
             return ""
         }
         let bka = BackgroundKeepAliveManager.shared
@@ -142,7 +142,7 @@ enum ShortcutRunTracker {
         var records = loadRecords()
         records[record.id] = record
         saveRecords(records)
-        logger.info("[ShortcutDiag] pending MARKED id=\(record.id.prefix(8)) intent=\(intent) session=\(sessionId.prefix(8)) armed=\(eagerKeepAliveArmed)")
+        logger.info("[ShortcutDiag] pending MARKED id=\(String(record.id.prefix(8))) intent=\(intent) session=\(String(sessionId.prefix(8))) armed=\(eagerKeepAliveArmed)")
         return record.id
     }
 
@@ -158,7 +158,7 @@ enum ShortcutRunTracker {
         guard let removed = records.removeValue(forKey: recordId) else { return }
         saveRecords(records)
         let elapsed = Date().timeIntervalSince(removed.startedAt)
-        logger.info("[ShortcutDiag] pending CLEARED id=\(recordId.prefix(8)) intent=\(removed.intent) elapsed=\(String(format: "%.1f", elapsed))s reason=\(reason)")
+        logger.info("[ShortcutDiag] pending CLEARED id=\(String(recordId.prefix(8))) intent=\(removed.intent) elapsed=\(String(format: "%.1f", elapsed))s reason=\(reason)")
     }
 
     // MARK: - Foreground scan (concern #3 payoff)
@@ -205,7 +205,7 @@ enum ShortcutRunTracker {
         for r in stale {
             records.removeValue(forKey: r.id)
             notified.remove(r.id)
-            logger.info("[ShortcutDiag] pending DROPPED-STALE id=\(r.id.prefix(8)) intent=\(r.intent) age=\(String(format: "%.0f", now.timeIntervalSince(r.startedAt)))s")
+            logger.info("[ShortcutDiag] pending DROPPED-STALE id=\(String(r.id.prefix(8))) intent=\(r.intent) age=\(String(format: "%.0f", now.timeIntervalSince(r.startedAt)))s")
         }
 
         // Decide guidance for fresh orphans
@@ -218,8 +218,8 @@ enum ShortcutRunTracker {
             // this is a lost signal rather than a stalled task — clear silently.
             if await sessionDidComplete(record: record) {
                 logger.info(
-                    "[ShortcutDiag] pending completion-verified silent clear id=\(record.id.prefix(8)) " +
-                    "intent=\(record.intent) session=\(record.sessionId.prefix(8)) — session has a completed " +
+                    "[ShortcutDiag] pending completion-verified silent clear id=\(String(record.id.prefix(8))) " +
+                    "intent=\(record.intent) session=\(String(record.sessionId.prefix(8))) — session has a completed " +
                     "assistant reply after startedAt; markCompleted signal was lost, task itself was fine"
                 )
                 records.removeValue(forKey: record.id)
@@ -230,8 +230,8 @@ enum ShortcutRunTracker {
             let category = classify(record)
             let alreadyNotified = notified.contains(record.id)
             logger.info(
-                "[ShortcutDiag] orphaned pending id=\(record.id.prefix(8)) intent=\(record.intent) " +
-                "session=\(record.sessionId.prefix(8)) age=\(String(format: "%.0f", now.timeIntervalSince(record.startedAt)))s " +
+                "[ShortcutDiag] orphaned pending id=\(String(record.id.prefix(8))) intent=\(record.intent) " +
+                "session=\(String(record.sessionId.prefix(8))) age=\(String(format: "%.0f", now.timeIntervalSince(record.startedAt)))s " +
                 "category=\(category) alreadyNotified=\(alreadyNotified) " +
                 "enhancedBackgroundEnabled=\(record.enhancedBackgroundEnabled) " +
                 "backgroundSpeakEnabled=\(record.backgroundSpeakEnabled) " +
@@ -268,20 +268,20 @@ enum ShortcutRunTracker {
         // the foreground race: a resuming agent loop is mid-run, will flip
         // isProcessing shortly, and markCompleted will clear the record itself.
         if SessionActivityTracker.shared.activeSessions.contains(record.sessionId) {
-            logger.info("[ShortcutDiag] completion-check id=\(record.id.prefix(8)) → still active, not verified")
+            logger.info("[ShortcutDiag] completion-check id=\(String(record.id.prefix(8))) → still active, not verified")
             return false
         }
 
         // A placeholder id ("intent-eager:<UUID>") never became a real session
         // row, so there is nothing to look up. Fall through to the old logic.
         guard !record.sessionId.isEmpty, !record.sessionId.hasPrefix("intent-eager:") else {
-            logger.info("[ShortcutDiag] completion-check id=\(record.id.prefix(8)) → placeholder/empty sessionId, not verified")
+            logger.info("[ShortcutDiag] completion-check id=\(String(record.id.prefix(8))) → placeholder/empty sessionId, not verified")
             return false
         }
 
         let messages = await ChatStore.shared.loadMessages(sessionId: record.sessionId)
         guard !messages.isEmpty else {
-            logger.info("[ShortcutDiag] completion-check id=\(record.id.prefix(8)) → no persisted messages, not verified")
+            logger.info("[ShortcutDiag] completion-check id=\(String(record.id.prefix(8))) → no persisted messages, not verified")
             return false
         }
 
@@ -299,7 +299,7 @@ enum ShortcutRunTracker {
             $0.role == .assistant && $0.createdAt >= cutoff
         }
         guard !repliesAfterStart.isEmpty else {
-            logger.info("[ShortcutDiag] completion-check id=\(record.id.prefix(8)) → no assistant reply after startedAt, not verified")
+            logger.info("[ShortcutDiag] completion-check id=\(String(record.id.prefix(8))) → no assistant reply after startedAt, not verified")
             return false
         }
 
@@ -318,7 +318,7 @@ enum ShortcutRunTracker {
             return hasText
         }
         if !usableReply {
-            logger.info("[ShortcutDiag] completion-check id=\(record.id.prefix(8)) → replies present but all errored/empty/bridge, not verified")
+            logger.info("[ShortcutDiag] completion-check id=\(String(record.id.prefix(8))) → replies present but all errored/empty/bridge, not verified")
             return false
         }
         return true
@@ -349,7 +349,7 @@ enum ShortcutRunTracker {
         let notificationsAllowed = UserDefaults.standard.object(forKey: "backgroundNotificationsEnabled") == nil
             || UserDefaults.standard.bool(forKey: "backgroundNotificationsEnabled")
         guard notificationsAllowed else {
-            logger.info("[ShortcutDiag] guidance SUPPRESSED id=\(record.id.prefix(8)) reason=backgroundNotificationsEnabled=false")
+            logger.info("[ShortcutDiag] guidance SUPPRESSED id=\(String(record.id.prefix(8))) reason=backgroundNotificationsEnabled=false")
             return
         }
 
@@ -391,7 +391,7 @@ enum ShortcutRunTracker {
             trigger: nil
         )
         center.add(request)
-        logger.info("[ShortcutDiag] guidance POSTED id=\(record.id.prefix(8)) category=\(category)")
+        logger.info("[ShortcutDiag] guidance POSTED id=\(String(record.id.prefix(8))) category=\(category)")
     }
 
     // MARK: - Notification-auth cache

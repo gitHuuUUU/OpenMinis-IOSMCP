@@ -186,7 +186,7 @@ struct ICloudBackupView: View {
             }
             .tint(.blue)
         }
-        .contextMenu {
+        .minisContextMenu {
             Button {
                 showRestoreConfirm = entry
             } label: {
