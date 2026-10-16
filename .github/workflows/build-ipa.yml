@@ -38,7 +38,7 @@ jobs:
       - name: Install host dependencies
         run: |
           brew install ninja libarchive qemu || true
-          pip3 install meson
+          pip3 install --break-system-packages meson || pip3 install --user meson
 
       - name: Download Xcode Metal Toolchain
         run: |
@@ -76,7 +76,7 @@ jobs:
 
       - name: Package unsigned IPA
         run: |
-          APP_PATH="build/DerivedData/Build/Products/Release-iphoneos/Minisi.app"
+          APP_PATH="build/DerivedData/Build/Products/Release-iphoneos/Minis.app"
           if [ ! -d "$APP_PATH" ]; then
             echo "::error::Minis.app not found at $APP_PATH"
             ls -R build/DerivedData/Build/Products 2>/dev/null | head -40
