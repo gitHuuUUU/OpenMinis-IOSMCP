@@ -110,10 +110,7 @@ jobs:
           # Remove any previous IOS-MCP.ipa asset so re-uploads succeed
           OLD_ID=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
             "https://api.github.com/repos/$REPO/releases/$RELEASE_ID/assets" \
-            | python3 -c "import json,sys
-d=json.load(sys.stdin)
-ids=[a['id'] for a in d if a['name']=='IOS-MCP.ipa']
-print(ids[0] if ids else '')")
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); ids=[a["id"] for a in d if a["name"]=="IOS-MCP.ipa"]; print(ids[0] if ids else "")')
           if [ -n "$OLD_ID" ]; then
             curl -s -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
               "https://api.github.com/repos/$REPO/releases/assets/$OLD_ID" -o /dev/null
@@ -123,10 +120,4 @@ print(ids[0] if ids else '')")
             -H "Content-Type: application/octet-stream" \
             "https://uploads.github.com/repos/$REPO/releases/$RELEASE_ID/assets?name=IOS-MCP.ipa" \
             --data-binary @IOS-MCP.ipa -o /tmp/upload.json
-          python3 -c "
-import json
-d=json.load(open('/tmp/upload.json'))
-print('uploaded:', d.get('name'), d.get('size'), 'bytes')
-print('download_url:', d.get('browser_download_url'))
-print('message:', d.get('message') or 'OK')
-"
+          python3 -c 'import json; d=json.load(open("/tmp/upload.json")); print("uploaded:", d.get("name"), d.get("size"), "bytes"); print("download_url:", d.get("browser_download_url")); print("message:", d.get("message") or "OK")'
