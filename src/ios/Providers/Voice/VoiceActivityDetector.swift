@@ -1,11 +1,11 @@
 import Foundation
 import AVFoundation
-import RealTimeCutVADLibrary
 
 // MARK: - Voice Activity Detection
 //
 // Captures microphone audio through AVAudioEngine and feeds it to
-// RealTimeCutVADLibrary (Silero VAD v5 + WebRTC APM). The library emits:
+// An iOS 15-compatible adaptive energy detector. This build does not
+// load the upstream Silero binary, whose real minimum OS is iOS 15.6. Emits:
 //   - voiceStarted               -> someone began speaking
 //   - voiceEnded(withWavData:)   -> utterance finished; 16 kHz WAV ready
 //   - voiceDidContinue(...)      -> live denoised PCM float (drives waveform)
@@ -77,7 +77,7 @@ final class VoiceActivityDetector: NSObject {
     /// staying put reused the poisoned one forever.
     private var audioEngine = AVAudioEngine()
     private let vadQueue = DispatchQueue(label: "com.iosmcp.app.vad", qos: .userInteractive)
-    private var vad: VADWrapper?
+    private var vad: MinisEnergyVAD?
 
     // MARK: - Adaptive gain (noise-aware AGC)
     /// Smoothed gain carried frame-to-frame so it doesn't jump on transients.
@@ -695,11 +695,10 @@ final class VoiceActivityDetector: NSObject {
             throw VoiceProviderError.parseError("Microphone input unavailable")
         }
 
-        guard let wrapper = VADWrapper() else {
+        guard let wrapper = MinisEnergyVAD() else {
             throw VoiceProviderError.parseError("Failed to initialize VAD")
         }
-        wrapper.setSileroModel(.v5)
-        wrapper.setSamplerate(Self.sampleRateEnum(for: sampleRate))
+        wrapper.setSamplerate(sampleRate)
         wrapper.setThresholdWithVadStartDetectionProbability(
             configuration.startProbability,
             vadEndDetectionProbability: configuration.endProbability,
@@ -734,16 +733,6 @@ final class VoiceActivityDetector: NSObject {
             }
         }
         audioEngine.prepare()
-    }
-
-    private static func sampleRateEnum(for sampleRate: Double) -> SL {
-        switch Int(sampleRate) {
-        case 48000: return .SAMPLERATE_48
-        case 24000: return .SAMPLERATE_24
-        case 16000: return .SAMPLERATE_16
-        case 8000:  return .SAMPLERATE_8
-        default:    return .SAMPLERATE_48  // engine input is typically 48 kHz
-        }
     }
 
     private var tapFrameCounter = 0
@@ -958,6 +947,55 @@ extension VoiceActivityDetector {
         return await withCheckedContinuation { continuation in
             AVAudioSession.sharedInstance().requestRecordPermission { granted in
                 continuation.resume(returning: granted)
+            }
+        }
+    }
+}
+
+// Basic energy-based VAD: avoids loading the upstream iOS 15.6-only binary.
+// The surrounding detector still owns pre-roll, WAV conversion, segment caps,
+// interruption recovery and ASR delivery. This is not a neural denoiser.
+protocol VADDelegate: AnyObject {
+    func voiceStarted()
+    func voiceEnded(withWavData wavData: Data!)
+    func voiceDidContinue(withPCMFloat pcmFloatData: Data!)
+}
+final class MinisEnergyVAD {
+    weak var delegate: VADDelegate?
+    private var rate: Double = 48000
+    private var noise: Double = 0.003
+    private var speech = false
+    private var voicedSeconds: Double = 0
+    private var silentSeconds: Double = 0
+    private var startSeconds: Double = 0.32
+    private var endSeconds: Double = 4.992
+    init?() {}
+    func setSamplerate(_ rate: Double) { self.rate = max(1, rate) }
+    func setThresholdWithVadStartDetectionProbability(_ start: Float,
+        vadEndDetectionProbability end: Float, voiceStartVadTrueRatio startRatio: Float,
+        voiceEndVadFalseRatio endRatio: Float, voiceStartFrameCount: Int32,
+        voiceEndFrameCount: Int32) {
+        startSeconds = max(0.064, Double(voiceStartFrameCount) * 0.032)
+        endSeconds = max(0.32, Double(voiceEndFrameCount) * 0.032)
+    }
+    func processAudioData(withBuffer buffer: UnsafePointer<Float>, count: UInt) {
+        guard count > 0 else { return }
+        var sum: Double = 0
+        for i in 0..<Int(count) { let v = Double(buffer[i]); sum += v * v }
+        let rms = sqrt(sum / Double(count))
+        let dt = Double(count) / rate
+        let active = rms > max(0.012, noise * 2.8)
+        if !active && !speech { noise = noise * 0.98 + rms * 0.02 }
+        if !speech {
+            voicedSeconds = active ? voicedSeconds + dt : max(0, voicedSeconds - dt)
+            if voicedSeconds >= startSeconds {
+                speech = true; silentSeconds = 0; delegate?.voiceStarted()
+            }
+        } else {
+            silentSeconds = active ? 0 : silentSeconds + dt
+            if silentSeconds >= endSeconds {
+                speech = false; voicedSeconds = 0; silentSeconds = 0
+                delegate?.voiceEnded(withWavData: Data())
             }
         }
     }

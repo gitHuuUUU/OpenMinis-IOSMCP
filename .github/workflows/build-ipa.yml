@@ -117,6 +117,9 @@ jobs:
           echo "IPA size: $(du -h IOS-MCP.ipa | cut -f1)"
           unzip -l IOS-MCP.ipa | tail -5
 
+      - name: Validate actual iOS 15.4 binary minimums
+        run: python3 tools/validate_ipa.py IOS-MCP.ipa
+
       - name: Upload IPA to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

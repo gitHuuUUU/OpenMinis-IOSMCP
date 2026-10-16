@@ -330,8 +330,8 @@ struct MinisMultilineTextField: View {
             TextField(title, text: $text, axis: .vertical)
         } else {
             ZStack(alignment: .topLeading) {
-                if text.isEmpty { Text(title).foregroundColor(.secondary).padding(.top, 8).padding(.leading, 5) }
-                TextEditor(text: $text).opacity(text.isEmpty ? 0.75 : 1).frame(minHeight: 70)
+                TextEditor(text: $text).frame(minHeight: 70)
+                if text.isEmpty { Text(title).foregroundColor(.secondary).padding(.top, 8).padding(.leading, 5).allowsHitTesting(false) }
             }
         }
     }
