@@ -1,6 +1,8 @@
 import SwiftUI
 import Foundation
 import UIKit
+import Security
+import UniformTypeIdentifiers
 
 struct DeviceAppRecord: Identifiable, Codable {
     var bundleID: String
@@ -9,6 +11,27 @@ struct DeviceAppRecord: Identifiable, Codable {
     var dataPath: String
     var id: String { bundleID }
     var roots: [String] { [bundlePath, dataPath].filter { !$0.isEmpty } }
+}
+
+enum DesktopSSHProfile {
+    static let query:[String:Any]=[kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:"MinisDesktopSSH",kSecAttrAccount as String:"profile"]
+    static func save(_ data:Data) throws {
+        let value=try JSONSerialization.jsonObject(with:data) as? [String:Any]
+        guard let host=value?["host"] as? String, host.range(of:"^[A-Za-z0-9][A-Za-z0-9.:-]*$",options:.regularExpression) != nil,
+              let user=value?["user"] as? String, user.range(of:"^[A-Za-z0-9_.-]+$",options:.regularExpression) != nil,
+              let key=value?["privateKey"] as? String,key.contains("BEGIN OPENSSH PRIVATE KEY"),
+              let hostKey=value?["hostKey"] as? String,hostKey.hasPrefix("ssh-ed25519 ") else { throw WorkbenchError.unavailable("电脑配置格式不正确") }
+        var q=query; q[kSecValueData as String]=data; q[kSecAttrAccessible as String]=kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        SecItemDelete(query as CFDictionary)
+        guard SecItemAdd(q as CFDictionary,nil)==errSecSuccess else { throw WorkbenchError.unavailable("无法写入连接凭据钥匙串") }
+    }
+    static func load() throws -> [String:Any] {
+        var q=query;q[kSecReturnData as String]=true;q[kSecMatchLimit as String]=kSecMatchLimitOne
+        var result:CFTypeRef?
+        guard SecItemCopyMatching(q as CFDictionary,&result)==errSecSuccess,
+              let data=result as? Data, let profile=try JSONSerialization.jsonObject(with:data) as? [String:Any] else { throw WorkbenchError.unavailable("先导入当前 Windows 电脑的 SSH 连接配置") }
+        return profile
+    }
 }
 
 enum WorkbenchError: LocalizedError {
@@ -202,8 +225,9 @@ enum WorkbenchError: LocalizedError {
             ("Python", "python3 --version && python3 -c 'import ssl,sqlite3,json'"),
             ("ReverseTools", "command -v llvm-objdump && command -v strings && command -v readelf"),
             ("Theos", "test -f /opt/theos/makefiles/common.mk && command -v make && command -v clang"),
-            ("手机编译", "p=/tmp/minis-cc-$$; printf 'int main(){return 0;}' > \"$p.c\"; clang \"$p.c\" -o \"$p\" && \"$p\"; r=$?; rm -f \"$p.c\" \"$p\"; exit $r"),
-            ("iOS SDK", "test -d /opt/theos/sdks && find /opt/theos/sdks -name Foundation.h | grep -q .")]
+            ("Linux C 编译", "p=/tmp/minis-cc-$$; printf 'int main(){return 0;}' > \"$p.c\"; clang \"$p.c\" -o \"$p\" && \"$p\"; r=$?; rm -f \"$p.c\" \"$p\"; exit $r"),
+            ("iOS dylib 编译", "p=/tmp/minis-ios-$$; printf 'int minis_probe(void){return 1;}' > \"$p.c\"; clang --target=arm64-apple-ios15.4 -isysroot /opt/theos/sdks/iPhoneOS16.5.sdk -fuse-ld=lld -dynamiclib \"$p.c\" -o \"$p.dylib\" && file \"$p.dylib\"; r=$?; rm -f \"$p.c\" \"$p.dylib\"; exit $r"),
+            ("iOS SDK", "for v in 15.6 16.5 17.5 18.6; do s=/opt/theos/sdks/iPhoneOS$v.sdk; test -f \"$s/System/Library/Frameworks/Foundation.framework/Headers/Foundation.h\" && test -f \"$s/usr/lib/libSystem.tbd\" || exit 1; echo \"SDK $v headers + link stubs OK\"; done")]
         for (name,command) in checks {
             do { let result=try await run(command,timeout:60); results.append(WorkbenchCheck(name:name,ok:result.exitCode==0,detail:result.output)); record("\(name) rc=\(result.exitCode)\n\(result.output)") }
             catch { results.append(WorkbenchCheck(name:name,ok:false,detail:error.localizedDescription)); record("\(name)：\(error.localizedDescription)") }
@@ -264,6 +288,69 @@ enum WorkbenchError: LocalizedError {
         let result=try await run("set -e; " + command,timeout:1800); record("安装 \(name) rc=\(result.exitCode)\n\(result.output)")
         guard result.exitCode==0 else { throw WorkbenchError.unavailable("\(name) 安装或启动验证失败：\(result.output.suffix(1000))") }
     }
+    func buildWorkbench(_ args:[String:Any]) async throws -> String {
+        let action=args["action"] as? String ?? "doctor"
+        guard ["doctor","install-sdks","build"].contains(action),
+              let bundle=Bundle.main.url(forResource:"BuildWorkbench",withExtension:"bundle") else {
+            throw WorkbenchError.unavailable("构建工作台资源或动作不可用")
+        }
+        let setup=try await run("mkdir -p /opt/minis-workbench",timeout:120)
+        guard setup.exitCode==0 else { throw WorkbenchError.unavailable(setup.output) }
+        guard ISHKernel.shared.bindMountPath("/opt/minis-workbench",toHostPath:bundle.path,readOnly:true)==0 else {
+            throw WorkbenchError.unavailable("无法只读挂载内置 SDK 与构建脚本")
+        }
+        func quote(_ value:String)->String { "'"+value.replacingOccurrences(of:"'",with:"'\"'\"'")+"'" }
+        var command="python3 /opt/minis-workbench/minis_build.py "+action
+        if action=="build" {
+            for key in ["target","project","output"] {
+                guard let value=args[key] as? String, !value.isEmpty else { throw WorkbenchError.unavailable("缺少构建参数：\(key)") }
+                command += " --\(key) "+quote(value)
+            }
+            for key in ["sdk","minimum","remote"] {
+                if let value=args[key] as? String, !value.isEmpty { command += " --\(key) "+quote(value) }
+            }
+        }
+        let result=try await run(command,timeout:1800)
+        record("BuildWorkbench \(action) rc=\(result.exitCode)\n\(result.output)")
+        guard result.exitCode==0 else { throw WorkbenchError.unavailable(result.output) }
+        return result.output
+    }
+    func desktopTool(_ args:[String:Any]) async throws -> String {
+        let profile=try DesktopSSHProfile.load()
+        guard let host=profile["host"] as? String, let user=profile["user"] as? String,
+              let key=profile["privateKey"] as? String, let hostKey=profile["hostKey"] as? String else { throw WorkbenchError.unavailable("电脑连接配置缺字段") }
+        let port=profile["port"] as? Int ?? 22
+        guard (1...65535).contains(port) else { throw WorkbenchError.unavailable("SSH端口无效") }
+        let folder=URL(fileURLWithPath:NSHomeDirectory()).appendingPathComponent("Library/MinisDesktopSSH",isDirectory:true)
+        try fm.createDirectory(at:folder,withIntermediateDirectories:true)
+        let keyFile=folder.appendingPathComponent("identity")
+        try Data(key.utf8).write(to:keyFile,options:[.atomic,.completeFileProtectionUnlessOpen])
+        try fm.setAttributes([.posixPermissions:0o600],ofItemAtPath:keyFile.path)
+        let known=(port==22 ? host : "[\(host)]:\(port)")+" "+hostKey+"\n"
+        try Data(known.utf8).write(to:folder.appendingPathComponent("known_hosts"),options:.atomic)
+        let setup=try await run("mkdir -p /opt/minis-desktop",timeout:120)
+        guard setup.exitCode==0, ISHKernel.shared.bindMountPath("/opt/minis-desktop",toHostPath:folder.path,readOnly:true)==0 else { throw WorkbenchError.unavailable("无法挂载电脑连接密钥") }
+        func q(_ value:String)->String { "'"+value.replacingOccurrences(of:"'",with:"'\"'\"'")+"'" }
+        let options=" -i /opt/minis-desktop/identity -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/opt/minis-desktop/known_hosts -o ConnectTimeout=15 "
+        let action=args["action"] as? String ?? "probe"
+        let command:String
+        if action=="upload" || action=="download" {
+            guard let path=args["path"] as? String,let remote=args["remotePath"] as? String,!path.isEmpty,!remote.isEmpty else { throw WorkbenchError.unavailable("文件传输需要 path（Linux路径）和 remotePath（Windows路径）") }
+            let remoteArg=user+"@"+host+":"+remote
+            command="scp -P \(port)"+options+(action=="upload" ? q(path)+" "+q(remoteArg) : q(remoteArg)+" "+q(path))
+        } else {
+            let script:String
+            if action=="probe" {
+                script="$names=@('python','git','node','rea','frida','idat64','hopper','dotnet','adb','gradle','wsl','ssh'); $r=@{}; foreach($n in $names){$c=Get-Command $n -ErrorAction SilentlyContinue; $r[$n]=if($c){$c.Source}else{$null}}; @{computer=$env:COMPUTERNAME;user=$env:USERNAME;tools=$r} | ConvertTo-Json -Depth 4"
+            } else if action=="run",let text=args["command"] as? String,!text.isEmpty { script=text }
+            else { throw WorkbenchError.unavailable("动作需要 probe、run、upload 或 download") }
+            let encoded=(script.data(using:.utf16LittleEndian) ?? Data()).base64EncodedString()
+            command="ssh -p \(port)"+options+q(user+"@"+host)+" powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand "+encoded
+        }
+        let result=try await run(command,timeout:1800)
+        guard result.exitCode==0 else { throw WorkbenchError.unavailable("电脑操作失败 rc=\(result.exitCode)\n\(result.output)") }
+        return result.output
+    }
     func importAgents() {
         let entries=[("device-debug","应用调试","使用 device_app 检查已添加应用的目录和运行状态；UI操作需要实际可用的 WDA 会话。"),
             ("reverse-analysis","逆向分析","先只读排查外来样本的破坏、窃密和持久化，再定位架构、导入、字符串和调用链。区分静态发现与真机验证。"),
@@ -284,7 +371,7 @@ enum WorkbenchError: LocalizedError {
             for case let file as URL in enumerator {
                 if files.count>=300 { break }
                 if file.lastPathComponent=="alpine-rootfs" { enumerator.skipDescendants(); continue }
-                if ["ipa","dylib","zip","deb","png","pdf","json","txt"].contains(file.pathExtension.lowercased()), seen.insert(file.path).inserted,
+                if ["ipa","dylib","zip","deb","apk","exe","png","pdf","json","txt"].contains(file.pathExtension.lowercased()), seen.insert(file.path).inserted,
                    (try? file.resourceValues(forKeys:[.isRegularFileKey]).isRegularFile)==true { files.append(file) }
             }
         }
@@ -305,7 +392,7 @@ struct AttachmentWorkbenchSheet: View {
                 LazyVGrid(columns:[GridItem(.flexible()),GridItem(.flexible())],spacing:12) {
                     ForEach(items.indices,id:\.self) { index in
                         let item = items[index]
-                        Button { presentation.wrappedValue.dismiss(); DispatchQueue.main.asyncAfter(deadline:.now()+0.4) { choose(item.3) } } label: {
+                        Button { choose(item.3) } label: {
                             VStack(spacing:10) { Image(systemName:item.1).font(.title).foregroundColor(.blue); Text(item.0).font(.headline); Text(item.2).font(.caption).foregroundColor(.secondary) }.frame(maxWidth:.infinity,minHeight:110).background(Color(UIColor.secondarySystemBackground)).cornerRadius(16)
                         }.buttonStyle(.plain)
                     }
@@ -355,6 +442,7 @@ struct DevelopmentWorkbenchView: View {
     var body: some View {
         List {
             Section(header:Text("开发环境与诊断")) {
+                NavigationLink("SDK 与多平台构建工作台") { MultiPlatformWorkbenchView() }
                 NavigationLink("内置终端") { ISHTerminalView(showCloseButton: true) }
                 NavigationLink("Tools · 三个基础工具包") { List { Text("CoreTools：文件、网络与项目工具"); Text("ReverseTools：LLVM / binutils / GDB"); Text("Python：解释器及 pip") }.navigationTitle("Tools") }
                 ForEach(["Codex","Theos","CoreTools","ReverseTools","Python"],id:\.self) { name in
@@ -441,8 +529,64 @@ struct WorkbenchDiagnosticsView: View {
     private func diagnosticGroup(_ name:String)->String {
         if ["命令执行","项目文件","本机文件权限"].contains(name) { return "基础运行" }
         if ["Git 与常用工具","代码辅助与 TLS"].contains(name) { return "项目能力" }
-        if ["手机编译","iOS SDK"].contains(name) { return "可选能力" }
+        if ["Linux C 编译","iOS dylib 编译","iOS SDK"].contains(name) { return "可选能力" }
         return "组件与工具"
+    }
+}
+struct MultiPlatformWorkbenchView:View {
+    @ObservedObject private var model=DeviceWorkbench.shared
+    @State private var report=""
+    @State private var target="dylib"
+    @State private var project="/var/minis/workspace"
+    @State private var output="/var/minis/shared/output.dylib"
+    @State private var sdk="16.5"
+    @State private var remote=""
+    @State private var importComputer=false
+    func perform(_ args:[String:Any]) {
+        Task {
+            guard !model.busy else { return }; model.busy=true; defer { model.busy=false }
+            do { report=try await model.buildWorkbench(args) } catch { report=error.localizedDescription }
+        }
+    }
+    var body:some View {
+        Form {
+            Section(header:Text("内置 SDK 15–18")) {
+                Text("已随包携带：15.6、16.5、17.5、18.6。首次安装四套 SDK 需要至少 2 GB 可用空间；核对 SHA256 后解压到 Theos。SDK 不等于完整 Xcode。").font(.caption)
+                Button("安装内置四套 SDK") { perform(["action":"install-sdks"]) }.disabled(model.busy)
+                Button("检测所有构建与分析组件") { perform(["action":"doctor"]) }.disabled(model.busy)
+                Button("安装构建、文档与分析基础依赖") {
+                    Task {
+                        guard !model.busy else { return }; model.busy=true; defer { model.busy=false }
+                        do { let r=try await model.run("apk add --no-cache dpkg clang lld llvm openjdk17-jre nodejs npm py3-pillow py3-openpyxl py3-reportlab py3-matplotlib",timeout:1800);report="rc=\(r.exitCode)\n\(r.output)" } catch { report=error.localizedDescription }
+                    }
+                }.disabled(model.busy)
+            }
+            Section(header:Text("实际构建")) {
+                Picker("产物",selection:$target) { ForEach(["dylib","deb","ipa","apk","exe"],id:\.self) { Text($0).tag($0) } }
+                TextField("源码／项目／APP 目录",text:$project).textInputAutocapitalization(.never).autocorrectionDisabled()
+                TextField("产物输出路径",text:$output).textInputAutocapitalization(.never).autocorrectionDisabled()
+                Picker("SDK",selection:$sdk) { ForEach(["15.6","16.5","17.5","18.6"],id:\.self) { Text($0).tag($0) } }
+                TextField("可选 SSH 主机别名",text:$remote).textInputAutocapitalization(.never).autocorrectionDisabled()
+                Button("构建并校验产物") { perform(["action":"build","target":target,"project":project,"output":output,"sdk":sdk,"remote":remote]) }.disabled(model.busy)
+                Text("dylib 为 C/ObjC 交叉编译；DEB 需要 DEBIAN/control；IPA 打包已有 .app，Swift/Xcode 项目需 macOS 构建；APK 需 Gradle/Android SDK；EXE 需 MinGW。SSH 使用已有主机配置与密钥，远端还须具备对应工具链。缺失即报告失败。").font(.caption)
+            }
+            Section(header:Text("当前 Windows 电脑")) {
+                Button("导入电脑 SSH 连接配置") { importComputer=true }
+                Button("检测电脑连接与工具路径") {
+                    Task { guard !model.busy else { return };model.busy=true;defer { model.busy=false };do { report=try await model.desktopTool(["action":"probe"]) } catch { report=error.localizedDescription } }
+                }.disabled(model.busy)
+                Text("使用已运行的 Windows OpenSSH，校验服务器固定主机公钥。配置里的专用私钥存入本机钥匙串；需同一局域网或已有 VPN。电脑端 REA/IDA/Frida/编译器按真实安装状态检测。").font(.caption)
+            }
+            Section(header:Text("分析、文档与 AI")) {
+                Text("AI 可通过 workbench_build 与原有 shell/file/device_app 工具分析、修改、构建并记录退出码和 SHA256。REA、IDA、Hopper 需要真实分析引擎／商业安装；Frida CLI 不等于已连接设备。Python 文档与图表依赖按实际导入检查，AI 图像生成另需兼容的图像服务配置。").font(.caption)
+            }
+            if model.busy { ProgressView("处理中…") }
+            if !report.isEmpty { Section(header:Text("真实输出")) { Text(report).font(.system(.caption,design:.monospaced)).textSelection(.enabled) } }
+        }.navigationTitle("SDK 与多平台构建")
+        .fileImporter(isPresented:$importComputer,allowedContentTypes:[.json]) { result in
+            do { let url=try result.get();let access=url.startAccessingSecurityScopedResource();defer { if access { url.stopAccessingSecurityScopedResource() } };try DesktopSSHProfile.save(Data(contentsOf:url));report="电脑配置已保存到钥匙串；请检测连接" } catch { report=error.localizedDescription }
+        }
+        .onChange(of:target) { value in output=URL(fileURLWithPath:output).deletingPathExtension().path+"."+value }
     }
 }
 struct NativeDeviceFileBrowser: View {

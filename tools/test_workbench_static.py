@@ -46,6 +46,30 @@ class WorkbenchContracts(unittest.TestCase):
         self.assertIn('cell.seedMeasuredHeight(rounded,width:width)',code)
         self.assertIn('layout.setCachedHeight(rounded,at:indexPath.item)',code)
         self.assertIn('collection.collectionViewLayout.invalidateLayout()',code)
+    def test_ios15_single_transcript_and_sheet_handoff(self):
+        code=read('src/ios/Views/Chat/AIChatView.swift')
+        self.assertIn('legacyMessagesArea',code)
+        self.assertIn('ChatMessageRow(',code)
+        self.assertIn('onDismiss:',code)
+        self.assertIn('pendingAttachmentChoice',code)
+        self.assertNotIn('asyncAfter(deadline:.now()+0.4)',read('src/ios/Workbench.swift'))
+    def test_sdk_bundle_and_native_probe(self):
+        pbx=read('src/ios/Minis.xcodeproj/project.pbxproj')
+        self.assertIn('BuildWorkbench.bundle in Resources',pbx)
+        self.assertIn('prepare_build_workbench.py',read('.github/workflows/build-ipa.yml'))
+        self.assertIn('iOS dylib 编译',read('src/ios/Workbench.swift'))
+        catalog=json.loads(read('src/ios/BuildWorkbench.bundle/sdk-catalog.json'))
+        self.assertEqual([i['version'] for i in catalog['sdks']],['15.6','16.5','17.5','18.6'])
+    def test_desktop_connection_uses_keychain_and_host_pin(self):
+        code=read('src/ios/Workbench.swift')
+        for token in ['SecItemAdd','StrictHostKeyChecking=yes','UserKnownHostsFile','completeFileProtectionUnlessOpen']:
+            self.assertIn(token,code)
+        self.assertNotIn('BEGIN OPENSSH PRIVATE KEY-----',code)
+        self.assertIn('name:"desktop_tool"',read('src/ios/Agent/Chat/AIChatViewModel+ToolDefinitions.swift'))
+        self.assertIn('case "desktop_tool":',read('src/ios/Agent/Chat/AIChatViewModel+ConcurrentTools.swift'))
+    def test_workbench_build_tool_is_wired(self):
+        self.assertIn('name:"workbench_build"',read('src/ios/Agent/Chat/AIChatViewModel+ToolDefinitions.swift'))
+        self.assertIn('case "workbench_build":',read('src/ios/Agent/Chat/AIChatViewModel+ConcurrentTools.swift'))
     def test_sources_registered(self):
         pbx=read('src/ios/Minis.xcodeproj/project.pbxproj')
         for name in ['Workbench.swift','WorkbenchBridge.m']:

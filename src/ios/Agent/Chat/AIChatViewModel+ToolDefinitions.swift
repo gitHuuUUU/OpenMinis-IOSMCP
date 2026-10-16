@@ -247,6 +247,22 @@ extension AIChatViewModel {
         }
 
         tools.append(AgentToolDefinition(
+            name:"desktop_tool",description:"Operate the user's configured Windows PC over pinned-host-key SSH. probe lists real tools; run executes PowerShell (not Linux shell); upload/download transfers files between Linux guest paths and Windows remote paths. Use this for PC REA/IDA/Frida/.NET, native build tools and analysis; inspect outputs and verify produced files. Requires imported PC configuration and network reachability.",
+            parameters:["action":AgentToolParam(type:.string,description:"probe, run, upload, download"),"command":AgentToolParam(type:.string,description:"PowerShell command on the Windows PC"),"path":AgentToolParam(type:.string,description:"Local Linux guest file path"),"remotePath":AgentToolParam(type:.string,description:"Windows file path, use forward slashes for transfers")],required:["action"]
+        ))
+        tools.append(AgentToolDefinition(
+            name:"workbench_build",
+            description:"Inspect real development dependencies, install bundled iOS15-18 SDKs, or build dylib/DEB/IPA/APK/EXE using available local or configured SSH toolchains. Do not claim execution/device verification from build success. IPA input is a built .app; Android/Windows require their toolchain. Paths are Linux guest paths.",
+            parameters:[
+                "action":AgentToolParam(type:.string,description:"doctor, install-sdks, or build"),
+                "target":AgentToolParam(type:.string,description:"dylib, deb, ipa, apk, exe"),
+                "project":AgentToolParam(type:.string,description:"Source file, project directory, package root or built .app"),
+                "output":AgentToolParam(type:.string,description:"Absolute artifact output path"),
+                "sdk":AgentToolParam(type:.string,description:"15.6,16.5,17.5,18.6"),
+                "remote":AgentToolParam(type:.string,description:"Optional existing SSH host alias with configured toolchain")
+            ],required:["action"]
+        ))
+        tools.append(AgentToolDefinition(
             name: "device_app",
             description: "Inspect or open applications explicitly added to this conversation. Read/list/write native iOS files under selected app roots (not Linux guest paths). get_ui/tap/type/screenshot require a configured running WebDriverAgent session. Always inspect actual capabilities before claiming control.",
             parameters: [

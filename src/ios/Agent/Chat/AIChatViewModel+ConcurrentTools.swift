@@ -370,6 +370,12 @@ extension AIChatViewModel {
 
         do {
         switch tu.name {
+        case "desktop_tool":
+            toolOutput=try await DeviceWorkbench.shared.desktopTool(toolArgs)
+            toolSuccess=true
+        case "workbench_build":
+            toolOutput=try await DeviceWorkbench.shared.buildWorkbench(toolArgs)
+            toolSuccess=true
         case "device_app":
             let deviceSession = sessionId ?? draftId ?? "vm-\(vmInstanceId)"
             if DeviceWorkbench.shared.selected(deviceSession).isEmpty, let draftId,

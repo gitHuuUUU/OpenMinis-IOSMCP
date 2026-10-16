@@ -146,3 +146,10 @@ deps/lame-3.100/**/.deps/
 # not a vendored binary — same treatment as the iOS Rclone.xcframework it is
 # built alongside (deps/build_rclone_ios.sh).
 src/android/app/libs/rclone.aar
+
+# SDK payloads are downloaded and hash-checked by CI, not committed.
+src/ios/BuildWorkbench.bundle/*.zip
+src/ios/BuildWorkbench.bundle/*.tar.xz
+
+__pycache__/
+*.pyc

@@ -1,0 +1,36 @@
+{
+  "sdks": [
+    {
+      "version": "15.6",
+      "file": "iPhoneOS15.6.sdk.tar.xz",
+      "sha256": "c4a02f5cac1101d1e5e506a1d117de38fd23714a6f535d50c64265bc7351f623",
+      "url": "https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS15.6.sdk.tar.xz",
+      "bytes": 15978088,
+      "sdkRoot": "iPhoneOS15.6.sdk"
+    },
+    {
+      "version": "16.5",
+      "file": "iPhoneOS16.5.sdk.tar.xz",
+      "sha256": "5e0fd3f01266cce4ce012d4a99b38eb56578fca40d09edc81cd83dee958202fb",
+      "url": "https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS16.5.sdk.tar.xz",
+      "bytes": 17446920,
+      "sdkRoot": "iPhoneOS16.5.sdk"
+    },
+    {
+      "version": "17.5",
+      "file": "iPhoneOS17.5.sdk.zip",
+      "sha256": "8b5f5497751c6a9135d464555c479456542a27dc3f43fd62bf526157376a8bfd",
+      "url": "https://github.com/xybp888/iOS-SDKs/releases/download/iOS17.5-SDKs/iPhoneOS17.5.sdk.zip",
+      "bytes": 40983502,
+      "sdkRoot": "iPhoneOS17.5.sdk"
+    },
+    {
+      "version": "18.6",
+      "file": "iPhoneOS18.6.sdk.zip",
+      "sha256": "e654ecf1c841a908a09b39f663249bdcc05468b4d10f998e0d29800a5337a9b7",
+      "url": "https://github.com/xybp888/iOS-SDKs/releases/download/iOS18.6-SDKs/iPhoneOS18.6.sdk.zip",
+      "bytes": 48302488,
+      "sdkRoot": "iPhoneOS18.6.sdk"
+    }
+  ]
+}

@@ -42,22 +42,20 @@ private struct PhotoPickerPresenter: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
-        guard context.coordinator.hosted != isPresented else { return }
-        context.coordinator.hosted = isPresented
-        guard isPresented else { return }
-
-        let picker = PHPickerViewController(configuration: configuration)
-        picker.delegate = context.coordinator
-        // Present from the nearest window scene's root controller so it
-        // works in sheets, tabs and full-screen contexts alike.
-        if let scene = uiViewController.view.window?.windowScene ?? UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let root = scene.windows.first?.rootViewController {
-            var top = root
-            while let presented = top.presentedViewController {
-                top = presented
-            }
-            context.coordinator.hostingVC = uiViewController
-            top.present(picker, animated: true)
+        context.coordinator.parent=self
+        guard isPresented, !context.coordinator.hosted else { return }
+        // A request must not be consumed until a visible presenter exists.
+        DispatchQueue.main.async { [weak uiViewController] in
+            guard let host=uiViewController, self.isPresented, !context.coordinator.hosted,
+                  let window=host.view.window else { return }
+            var top=window.rootViewController
+            while let next=top?.presentedViewController { top=next }
+            guard let presenter=top, !presenter.isBeingDismissed else { return }
+            let picker=PHPickerViewController(configuration:self.configuration)
+            picker.delegate=context.coordinator
+            context.coordinator.hosted=true
+            context.coordinator.hostingVC=host
+            presenter.present(picker,animated:true)
         }
     }
 
@@ -86,17 +84,19 @@ private struct PhotoPickerPresenter: UIViewControllerRepresentable {
                 return
             }
 
-            var assets: [PickedAsset] = []
+            var assets: [(Int,PickedAsset)] = []
             let lock = NSLock()
             let group = DispatchGroup()
 
-            for (provider, result) in zip(providers, results) {
+            for (index,pair) in zip(providers, results).enumerated() {
+                let (provider,result)=pair
                 let id = UUID()
                 let isVideo = provider.hasItemConformingToTypeIdentifier(UTType.movie.identifier)
                 // Preserve the original photo's creation date (via its PHAsset
                 // local identifier), mirroring the PhotosPicker path.
                 var assetDate: Date?
-                if let assetID = result.assetIdentifier,
+                if [.authorized,.limited].contains(PHPhotoLibrary.authorizationStatus(for:.readWrite)),
+                   let assetID = result.assetIdentifier,
                    let asset = PHAsset.fetchAssets(withLocalIdentifiers: [assetID], options: nil).firstObject {
                     assetDate = asset.creationDate
                 }
@@ -112,7 +112,7 @@ private struct PhotoPickerPresenter: UIViewControllerRepresentable {
                         let ext = provider.registeredTypeIdentifiers
                             .compactMap { UTType($0)?.preferredFilenameExtension }
                             .first
-                        lock.lock(); assets.append(PickedAsset(id: id, isVideo: true, data: nil, videoURL: tmp, ext: ext, date: assetDate)); lock.unlock()
+                        lock.lock(); assets.append((index,PickedAsset(id: id, isVideo: true, data: nil, videoURL: tmp, ext: ext, date: assetDate))); lock.unlock()
                     }
                 } else {
                     provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
@@ -121,14 +121,14 @@ private struct PhotoPickerPresenter: UIViewControllerRepresentable {
                         let ext = provider.registeredTypeIdentifiers
                             .compactMap { UTType($0)?.preferredFilenameExtension }
                             .first
-                        lock.lock(); assets.append(PickedAsset(id: id, isVideo: false, data: data, videoURL: nil, ext: ext, date: assetDate)); lock.unlock()
+                        lock.lock(); assets.append((index,PickedAsset(id: id, isVideo: false, data: data, videoURL: nil, ext: ext, date: assetDate))); lock.unlock()
                     }
                 }
             }
 
             group.notify(queue: .main) {
                 // Stable order: insertion order of the providers.
-                let ordered = assets.sorted { $0.id.uuidString < $1.id.uuidString }
+                let ordered = assets.sorted { $0.0 < $1.0 }.map { $0.1 }
                 self.parent.onPicked(ordered)
             }
         }

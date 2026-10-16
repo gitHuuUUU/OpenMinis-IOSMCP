@@ -341,6 +341,7 @@ struct AIChatView: View {
     @State private var showTerminal = false
     @State private var terminalInitCommand: String?
     @State private var showAttachmentMenu = false
+    @State private var pendingAttachmentChoice: String?
     @State private var showDeviceApps = false
     @State private var showWorkbenchArtifacts = false
     @State private var isDropTargeted = false
@@ -2728,6 +2729,7 @@ struct AIChatView: View {
 
     private var messagesArea: some View {
         ZStack {
+            if #available(iOS 16.0, *) {
             CollectionViewMessageListV3(
                 vm: vm,
                 inputFocused: inputFocused,
@@ -2770,6 +2772,9 @@ struct AIChatView: View {
                 floatingBarHeight: floatingBarHeight,
                 inputBarHeight: inputBarHeight
             )
+            } else {
+                legacyMessagesArea
+            }
             // Empty/loading overlay for tap-to-dismiss-keyboard.
             // Placed BEFORE the directory timeline in the ZStack so the
             // timeline can sit on top and receive its own taps (folder-card
@@ -2857,6 +2862,48 @@ struct AIChatView: View {
             .padding(.bottom, inputBarHeight + (hasFloatingPreview ? 80 : 12) + 92)
             .animation(.easeInOut(duration: 0.2), value: hasFloatingPreview)
             .capsuleProtectedFrame("downloadButton")
+        }
+    }
+
+    private var legacyMessagesArea: some View {
+        GeometryReader { geometry in
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment:.leading,spacing:20) {
+                        ForEach(vm.messages) { message in
+                            ChatMessageRow(
+                                message:message,
+                                isActiveMessage:vm.isProcessing && message.id == vm.messages.last(where: { $0.role == .assistant })?.id,
+                                commandStartTime:vm.commandStartTime,
+                                onStop:{ vm.stopCurrentCommand() },
+                                onRetry:{ vm.retryFromMessage(message.id) },
+                                onEdit:{ vm.editMessage(message.id); inputFocused=true },
+                                onDeleteFrom:{ vm.deleteFromMessage(message.id) },
+                                onWithdraw:{ vm.withdrawQueuedMessage(message.id) },
+                                autoRetryAttempt:vm.autoRetryAttempt,
+                                autoRetryCountdown:vm.autoRetryCountdown,
+                                canResume:vm.canResume,
+                                onResume:{ vm.resume() },
+                                onCompact:{ compactConfirmMessageId=message.id },
+                                onRevertCompact:{ Task { await vm.revertCompact() } },
+                                toolSnapshots:vm.toolSnapshots
+                            )
+                            .frame(width:max(1,geometry.size.width-32),alignment:.leading)
+                            .fixedSize(horizontal:false,vertical:true)
+                            .id(message.id)
+                        }
+                        Color.clear.frame(height:1).id("legacy-bottom")
+                    }
+                    .padding(.horizontal,16)
+                    .padding(.top,12)
+                    .padding(.bottom,inputBarHeight + (hasFloatingPreview ? 96 : 20))
+                }
+                .minisScrollDismissesKeyboard(.interactively)
+                .onReceive(vm.forceScrollToBottom) { _ in proxy.scrollTo("legacy-bottom",anchor:.bottom) }
+                .onReceive(vm.scrollToBottomSignal) { _ in proxy.scrollTo("legacy-bottom",anchor:.bottom) }
+                .onReceive(vm.forceScrollToTop) { _ in if let first=vm.messages.first { proxy.scrollTo(first.id,anchor:.top) } }
+                .onChange(of:vm.messages.count) { _ in if vm.isNearBottom { proxy.scrollTo("legacy-bottom",anchor:.bottom) } }
+            }
         }
     }
 
@@ -3280,15 +3327,21 @@ struct AIChatView: View {
             .overlay(Circle().stroke(ChatColors.inputIconBorder, lineWidth: 0.5))
 
         Button { showAttachmentMenu = true } label: { icon }
-            .sheet(isPresented: $showAttachmentMenu) {
+            .sheet(isPresented:$showAttachmentMenu,onDismiss: {
+                guard let choice=pendingAttachmentChoice else { return }
+                pendingAttachmentChoice=nil
+                // Present only after SwiftUI confirms the first sheet dismissed.
+                switch choice {
+                case "apps": showDeviceApps=true
+                case "photos": showPhotoPicker=true
+                case "camera": showCamera=true
+                case "artifacts": showWorkbenchArtifacts=true
+                default: showDocumentPicker=true
+                }
+            }) {
                 AttachmentWorkbenchSheet { choice in
-                    switch choice {
-                    case "apps": showDeviceApps = true
-                    case "photos": showPhotoPicker = true
-                    case "camera": showCamera = true
-                    case "artifacts": showWorkbenchArtifacts = true
-                    default: showDocumentPicker = true
-                    }
+                    pendingAttachmentChoice=choice
+                    showAttachmentMenu=false
                 }
             }
             .sheet(isPresented: $showDeviceApps) {

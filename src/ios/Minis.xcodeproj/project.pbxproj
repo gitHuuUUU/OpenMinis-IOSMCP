@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		BC2026101600000000000001 /* BuildWorkbench.bundle in Resources */ = {isa = PBXBuildFile; fileRef = BC2026101600000000000002 /* BuildWorkbench.bundle */; };
 		AEFE6D0D52B54498B10A8F71 /* WorkbenchBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = C750EAE1C4194A9BBB57C7D9 /* WorkbenchBridge.m */; };
 		FFF8F8476EAD43AEACE06025 /* Workbench.swift in Sources */ = {isa = PBXBuildFile; fileRef = B821A73AC4F54A39B02503A1 /* Workbench.swift */; };
 		21FED4B7BB6F6D9476C9992E /* VoiceProvider+System.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88993FC8E3F0199C6638F664 /* VoiceProvider+System.swift */; };
@@ -640,6 +641,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		BC2026101600000000000002 /* BuildWorkbench.bundle */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.plug-in"; path = BuildWorkbench.bundle; sourceTree = "<group>"; };
 		5A71E40627414A22AC4433B5 /* WorkbenchBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WorkbenchBridge.h; sourceTree = "<group>"; };
 		C750EAE1C4194A9BBB57C7D9 /* WorkbenchBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WorkbenchBridge.m; sourceTree = "<group>"; };
 		B821A73AC4F54A39B02503A1 /* Workbench.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Workbench.swift; sourceTree = "<group>"; };
@@ -1774,6 +1776,7 @@
 				AA26CCBF2F31080100AECF2D /* RootfsManager.swift */,
 				AA26CCB62F31067900AECF2D /* alpine-rootfs.zip */,
 				AA0838D32F3B941A00049557 /* RootfsPatch.bundle */,
+				BC2026101600000000000002 /* BuildWorkbench.bundle */,
 			);
 			path = iSH;
 			sourceTree = "<group>";
@@ -2665,6 +2668,7 @@
 				E5BSH0004 /* bashism_rules.json in Resources */,
 				E5BSH0005 /* bashism_test_vectors.json in Resources */,
 				AA0838D22F3B941A00049557 /* RootfsPatch.bundle in Resources */,
+				BC2026101600000000000001 /* BuildWorkbench.bundle in Resources */,
 				E5A000001 /* default_mount in Resources */,
 				E5U000002 /* KaTeX in Resources */,
 				E5V000002 /* AlternateIcons in Resources */,

@@ -49,6 +49,9 @@ jobs:
       - name: Execute production skill disclosure regression
         run: python3 tools/test_skill_disclosure.py --require-swift
 
+      - name: Build adapter unit tests
+        run: python3 tools/test_build_workbench.py
+
       - name: Swift syntax preflight
         run: find src/ios \( -path '*/MinisTests' -o -path '*/MinisUITests' \) -prune -o -name '*.swift' -print0 | xargs -0 xcrun swiftc -frontend -parse
 
@@ -96,6 +99,9 @@ jobs:
 
       - name: Build rclone (iOS)
         run: ./deps/build_rclone_ios.sh
+
+      - name: Bundle verified iOS 15-18 SDK archives
+        run: python3 tools/prepare_build_workbench.py
 
       - name: Build Minis app (unsigned)
         run: |
