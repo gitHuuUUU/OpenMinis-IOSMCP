@@ -795,17 +795,15 @@ struct InlineVoiceInputView: View {
                 .toolbar {
                     ToolbarItemGroup(placement: .keyboard) {
                         Spacer()
-                        Button {
+                        Button("Done", action: {
                             // [T-voice-panel-gap-after-edit] Focus teardown is
                             // owned by the isEditingTranscript observer (which
                             // also force-resigns the responder). Clearing
                             // `editFocused` here as well would make the observer
                             // see focus already false and skip that release.
                             viewModel.endEditing(resume: false)
-                        } label: {
-                            Text("Done", comment: "Finish transcript editing")
-                                .font(.body.weight(.semibold))
-                        }
+                        })
+                        .font(.body.weight(.semibold))
                     }
                 }
                 // Fill the band and let the text view scroll inside it. Without
