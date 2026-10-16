@@ -55,11 +55,20 @@ jobs:
       - name: Build iSH kernel + fakefsify
         run: ./deps/build_ish.sh
 
-      - name: Prepare Alpine rootfs (with IOS-MCP toolchain)
+      - name: Prepare Alpine rootfs (prebuilt with IOS-MCP tooling)
         env:
           ALPINE_VER: ${{ env.ALPINE_VERSION }}
           IOSMCP_SDK_VER: ${{ env.IOSMCP_SDK_VER }}
-        run: ./deps/prepare_alpine_rootfs.sh $ALPINE_VER
+        run: |
+          # Prefer the prebuilt rootfs (built on Linux with the full IOS-MCP
+          # toolchain: Python/clang/Theos/rev-tools). Fall back to a local
+          # tooling-free build only if the release asset is unavailable.
+          if curl -sfL "https://github.com/${{ github.repository_owner }}/OpenMinis-IOSMCP/releases/latest/download/alpine-rootfs.zip" -o deps/resources/alpine-rootfs.zip; then
+            echo "Using prebuilt alpine-rootfs.zip ($(du -h deps/resources/alpine-rootfs.zip | cut -f1))"
+          else
+            echo "Prebuilt rootfs release not found — building without IOS-MCP tooling"
+            IOSMCP_TOOLING=0 ./deps/prepare_alpine_rootfs.sh $ALPINE_VER
+          fi
 
       - name: Build rclone (iOS)
         run: ./deps/build_rclone_ios.sh
