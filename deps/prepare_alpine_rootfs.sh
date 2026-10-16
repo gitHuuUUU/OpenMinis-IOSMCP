@@ -171,7 +171,20 @@ install_tooling() {
     fi
     log_info "Installing IOS-MCP device toolchain (Python/Theos/rev-tools)..."
     local CUSTOM_TAR="$CACHE_DIR/alpine-iosmcp-${ALPINE_VERSION}.${ALPINE_MINOR}-${ALPINE_ARCH}.tar.gz"
-    "$SCRIPT_DIR/install_iosmcp_tooling.sh" "$ROOTFS_PATH" "$CUSTOM_TAR"
+    # Prefer the prebuilt toolchain rootfs from GitHub Releases (built on Linux,
+    # where aarch64 cross-install works natively). On macOS the apk binaries
+    # cannot execute, so the release asset is the only reliable path.
+    local RELEASE_URL="https://github.com/${GH_OWNER:-gitHuuUUU}/OpenMinis-IOSMCP/releases/latest/download/alpine-iosmcp-${ALPINE_VERSION}.${ALPINE_MINOR}-${ALPINE_ARCH}.tar.gz"
+    if [ ! -f "$CUSTOM_TAR" ] || [ ! -s "$CUSTOM_TAR" ]; then
+        log_info "Fetching prebuilt IOS-MCP toolchain rootfs from Releases..."
+        if curl -sfL "$RELEASE_URL" -o "$CUSTOM_TAR"; then
+            log_success "Downloaded prebuilt toolchain rootfs ($(du -h "$CUSTOM_TAR" | cut -f1))"
+        else
+            log_warning "Release asset unavailable — attempting local tooling install"
+            "$SCRIPT_DIR/install_iosmcp_tooling.sh" "$ROOTFS_PATH" "$CUSTOM_TAR" || \
+                log_warning "Local tooling install failed — continuing with base rootfs (no IOS-MCP tools)"
+        fi
+    fi
     ROOTFS_PATH="$CUSTOM_TAR"
     log_success "IOS-MCP tooling installed"
 }
