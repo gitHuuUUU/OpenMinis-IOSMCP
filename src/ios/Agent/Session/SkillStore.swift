@@ -1330,7 +1330,7 @@ Do not create extraneous files: README.md, INSTALLATION_GUIDE.md, CHANGELOG.md, 
     private static let maxSkillMetadataCount = 20
 
     /// Build a discovery-only prompt fragment with priority-based disclosure:
-    /// 1. Bundled skills (always included)
+    /// 1. Bundled skills (priority, bounded by the metadata budget)
     /// 2. Recently modified/created skills within last 7 days (up to 10)
     /// 3. Frequently used skills by normalized use count (fill remaining slots)
     func skillPromptFragment(for sessionId: String) -> String? {
@@ -1353,7 +1353,7 @@ Do not create extraneous files: README.md, INSTALLATION_GUIDE.md, CHANGELOG.md, 
             var seen = Set<String>()
 
             // Priority 1: Bundled skills
-            for s in enabled where s.importSource == .bundled {
+            for s in enabled.filter({ $0.importSource == .bundled }).prefix(Self.maxSkillMetadataCount) {
                 if seen.insert(s.id).inserted {
                     picked.append(s)
                     reasons[s.id] = "bundled"
@@ -1365,7 +1365,7 @@ Do not create extraneous files: README.md, INSTALLATION_GUIDE.md, CHANGELOG.md, 
             let recent = enabled
                 .filter { $0.updatedAt > oneWeekAgo && !seen.contains($0.id) }
                 .sorted { $0.updatedAt > $1.updatedAt }
-            let recentLimit = min(10, Self.maxSkillMetadataCount - picked.count)
+            let recentLimit = max(0, min(10, Self.maxSkillMetadataCount - picked.count))
             for s in recent.prefix(recentLimit) {
                 if seen.insert(s.id).inserted {
                     picked.append(s)
@@ -1375,7 +1375,7 @@ Do not create extraneous files: README.md, INSTALLATION_GUIDE.md, CHANGELOG.md, 
 
             // Priority 3: By usage frequency (fill remaining slots, most-used first)
             if picked.count < Self.maxSkillMetadataCount {
-                let remaining = Self.maxSkillMetadataCount - picked.count
+                let remaining = max(0, Self.maxSkillMetadataCount - picked.count)
                 let byUsage = enabled
                     .filter { !seen.contains($0.id) }
                     .sorted { $0.useCount > $1.useCount }
@@ -1430,7 +1430,7 @@ Do not create extraneous files: README.md, INSTALLATION_GUIDE.md, CHANGELOG.md, 
 
         if hasMore {
             let omitted = enabled.filter { s in !selected.contains(where: { $0.id == s.id }) }
-            let maxUndisclosed = 100 - selected.count
+            let maxUndisclosed = max(0, 100 - selected.count)
             let undisclosedNames = omitted.prefix(maxUndisclosed).map(\.name).joined(separator: ", ")
             fragment += "\n\n\(omitted.count) more skills not shown above: \(undisclosedNames). List /var/minis/skills/ or grep to search all."
         }

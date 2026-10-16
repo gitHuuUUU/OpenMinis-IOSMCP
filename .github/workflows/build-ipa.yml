@@ -45,6 +45,9 @@ jobs:
       - name: Workbench source contract checks
         run: python3 tools/test_workbench_static.py
 
+      - name: Execute production skill disclosure regression
+        run: python3 tools/test_skill_disclosure.py --require-swift
+
       - name: Swift syntax preflight
         run: find src/ios \( -path '*/MinisTests' -o -path '*/MinisUITests' \) -prune -o -name '*.swift' -print0 | xargs -0 xcrun swiftc -frontend -parse
 
