@@ -177,8 +177,24 @@ install_tooling() {
     local RELEASE_URL="https://github.com/${GH_OWNER:-gitHuuUUU}/OpenMinis-IOSMCP/releases/latest/download/alpine-iosmcp-${ALPINE_VERSION}.${ALPINE_MINOR}-${ALPINE_ARCH}.tar.gz"
     if [ ! -f "$CUSTOM_TAR" ] || [ ! -s "$CUSTOM_TAR" ]; then
         log_info "Fetching prebuilt IOS-MCP toolchain rootfs from Releases..."
-        # Private repo: needs an auth token (Actions provides GITHUB_TOKEN)
-        if curl -sfL -H "Authorization: Bearer ${GH_TOKEN:-}" "$RELEASE_URL" -o "$CUSTOM_TAR"; then
+        # Private repo: use the API (asset download redirects to a signed URL).
+        # A plain GET to /releases/latest/download loses the Authorization header
+        # on redirect, so resolve the asset id first.
+        local ASSET_NAME="$(basename "$CUSTOM_TAR")"
+        local ASSET_ID
+        ASSET_ID="$(curl -sfL -H "Authorization: Bearer ${GH_TOKEN:-}" \
+            "https://api.github.com/repos/${GH_OWNER:-gitHuuUUU}/OpenMinis-IOSMCP/releases/latest" 2>/dev/null \
+            | python3 -c "import json,sys
+try:
+    d=json.load(sys.stdin)
+    for a in d.get('assets', []):
+        if a['name']=='${ASSET_NAME}':
+            print(a['id']); break
+except Exception: pass" 2>/dev/null)"
+        if [ -n "$ASSET_ID" ] && curl -sfL -H "Authorization: Bearer ${GH_TOKEN:-}" \
+            -H "Accept: application/octet-stream" \
+            "https://api.github.com/repos/${GH_OWNER:-gitHuuUUU}/OpenMinis-IOSMCP/releases/assets/${ASSET_ID}" \
+            -o "$CUSTOM_TAR"; then
             log_success "Downloaded prebuilt toolchain rootfs ($(du -h "$CUSTOM_TAR" | cut -f1))"
         else
             log_warning "Release asset unavailable — attempting local tooling install"
