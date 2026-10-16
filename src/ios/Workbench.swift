@@ -126,7 +126,21 @@ enum WorkbenchError: LocalizedError {
         return String(data:data,encoding:.utf8) ?? "WDA 返回非文本响应"
     }
     func run(_ command: String, timeout: TimeInterval = 900) async throws -> ISHCommandResult {
-        guard ISHKernel.shared.isBooted else { throw WorkbenchError.unavailable("iSH 尚未启动；请先打开一次内置终端，等待初始化完成") }
+        guard !RootfsManager.shared.didResetWhileBooted else { throw WorkbenchError.unavailable("Linux 环境已重置，需要重启应用，不能重用旧内核挂载") }
+        if !ISHKernel.shared.isBooted {
+            let manager = RootfsManager.shared
+            // A diagnostic repair must not silently erase an existing Linux environment.
+            if fm.fileExists(atPath: manager.dataPath.path) && !manager.isInstalled {
+                throw WorkbenchError.unavailable("已有 Linux 环境的架构标记不完整；保留原数据，请在环境设置中人工检查")
+            }
+            try manager.installIfNeeded()
+            let code = ISHKernel.shared.boot(withRootPath: manager.rootfsPath.path)
+            guard code == 0 else { throw WorkbenchError.unavailable("iSH 启动失败：\(code)") }
+            installSessionFileChangeTracker(kernel: ISHKernel.shared)
+            MinisFsRouter.shared.installHook()
+            manager.applyDefaultMountOverlay()
+            JailbreakFullAccessManager.shared.enableIfJailbroken()
+        }
         return try await ISHExecutionCoordinator.shared.execute(sessionId:"workbench", command:command, timeout:timeout, lineCallback:{ _ in }, pidCallback:{ _ in })
     }
     func record(_ message: String) {
@@ -279,6 +293,7 @@ struct DevelopmentWorkbenchView: View {
     var body: some View {
         List {
             Section(header:Text("开发环境与诊断")) {
+                NavigationLink("内置终端") { ISHTerminalView(showCloseButton: true) }
                 NavigationLink("Tools · 三个基础工具包") { List { Text("CoreTools：文件、网络与项目工具"); Text("ReverseTools：LLVM / binutils / GDB"); Text("Python：解释器及 pip") }.navigationTitle("Tools") }
                 ForEach(["Codex","Theos","CoreTools","ReverseTools","Python"],id:\.self) { name in
                     HStack { Text(name); Spacer(); Button("下载 / 修复") { Task { guard !model.busy else { return }; model.busy=true; defer { model.busy=false }; do { try await model.install(name); status="\(name) 已安装并通过启动检查" } catch { status=error.localizedDescription } } }.disabled(model.busy) }
