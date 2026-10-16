@@ -63,10 +63,26 @@ install_apk() {
     APK="$WORK/sbin/apk.static"
 }
 
-# Cross-install: apk.static (x86_64) can target aarch64 directly via --root --arch.
+# Cross-install: static apk targets aarch64 via --root --arch.
+# - On arm64 hosts (Apple Silicon macOS / ARM Linux) run the aarch64 apk natively.
+# - On x86_64 hosts run the x86_64 apk natively.
 # No qemu needed on any host OS. --no-scripts skips target-arch scriptlets.
 run_apk() {
-    "$APK" --root "$ROOT" --arch aarch64 --no-scripts "$@"
+    if [ "$(uname -m)" = "arm64" ] || [ "$(uname -m)" = "aarch64" ]; then
+        local AAPK="$WORK/sbin/apk.static.aarch64"
+        if [ ! -x "$AAPK" ]; then
+            echo "[IOS-MCP] Fetching aarch64 static apk..."
+            curl -sfL "$(resolve_apk_url aarch64)" -o "$WORK/apk-static-aarch64.apk" || {
+                echo "[IOS-MCP] ERROR: failed to download aarch64 apk-tools-static" >&2
+                exit 1
+            }
+            ( cd "$WORK" && tar -xzf apk-static-aarch64.apk )
+            mv "$WORK/sbin/apk.static" "$AAPK"
+        fi
+        "$AAPK" --root "$ROOT" --arch aarch64 --no-scripts "$@"
+    else
+        "$APK" --root "$ROOT" --arch aarch64 --no-scripts "$@"
+    fi
 }
 
 install_apk
