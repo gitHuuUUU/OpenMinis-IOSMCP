@@ -37,8 +37,10 @@ jobs:
 
       - name: Install host dependencies
         run: |
-          brew install ninja libarchive qemu || true
+          brew install ninja libarchive qemu lld llvm || true
           pip3 install --break-system-packages meson || pip3 install --user meson
+          echo "/opt/homebrew/opt/llvm/bin" >> "$GITHUB_PATH"
+          which clang lld ld64.lld || true
 
       - name: Download Xcode Metal Toolchain
         run: |
