@@ -60,10 +60,11 @@ jobs:
           ALPINE_VER: ${{ env.ALPINE_VERSION }}
           IOSMCP_SDK_VER: ${{ env.IOSMCP_SDK_VER }}
           GH_OWNER: ${{ github.repository_owner }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Tooling comes from the prebuilt release asset; the script downloads
-          # it inside install_tooling(). Fall back to a local build only if the
-          # asset is unavailable.
+          # it (authenticated) inside install_tooling(). Fall back to a local
+          # build only if the asset is unavailable.
           ./deps/prepare_alpine_rootfs.sh $ALPINE_VER
 
       - name: Build rclone (iOS)

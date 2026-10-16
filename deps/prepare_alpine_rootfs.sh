@@ -177,13 +177,18 @@ install_tooling() {
     local RELEASE_URL="https://github.com/${GH_OWNER:-gitHuuUUU}/OpenMinis-IOSMCP/releases/latest/download/alpine-iosmcp-${ALPINE_VERSION}.${ALPINE_MINOR}-${ALPINE_ARCH}.tar.gz"
     if [ ! -f "$CUSTOM_TAR" ] || [ ! -s "$CUSTOM_TAR" ]; then
         log_info "Fetching prebuilt IOS-MCP toolchain rootfs from Releases..."
-        if curl -sfL "$RELEASE_URL" -o "$CUSTOM_TAR"; then
+        # Private repo: needs an auth token (Actions provides GITHUB_TOKEN)
+        if curl -sfL -H "Authorization: Bearer ${GH_TOKEN:-}" "$RELEASE_URL" -o "$CUSTOM_TAR"; then
             log_success "Downloaded prebuilt toolchain rootfs ($(du -h "$CUSTOM_TAR" | cut -f1))"
         else
             log_warning "Release asset unavailable — attempting local tooling install"
             "$SCRIPT_DIR/install_iosmcp_tooling.sh" "$ROOTFS_PATH" "$CUSTOM_TAR" || \
                 log_warning "Local tooling install failed — continuing with base rootfs (no IOS-MCP tools)"
         fi
+    fi
+    if [ ! -s "$CUSTOM_TAR" ]; then
+        log_warning "Toolchain rootfs missing — falling back to base minirootfs (no IOS-MCP tools)"
+        CUSTOM_TAR="$ROOTFS_PATH"
     fi
     ROOTFS_PATH="$CUSTOM_TAR"
     log_success "IOS-MCP tooling installed"
