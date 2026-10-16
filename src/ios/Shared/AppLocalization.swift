@@ -223,6 +223,8 @@ private final class MinisHostingContentView<Content: View>: UIView, UIContentVie
     private let host: UIHostingController<AnyView>
     private var measuredWidth: CGFloat = 0
     private var sizing = false
+    private var widthUpdatePending = false
+    private var cachedHeight: CGFloat = 44
     var configuration: UIContentConfiguration {
         didSet {
             updateRoot(width: bounds.width > 1 ? bounds.width : UIScreen.main.bounds.width)
@@ -251,26 +253,37 @@ private final class MinisHostingContentView<Content: View>: UIView, UIContentVie
         host.rootView = AnyView(config.content.frame(width: width, alignment: .leading).fixedSize(horizontal: false, vertical: true))
     }
     override func layoutSubviews() {
-        if bounds.width > 1 && abs(measuredWidth - bounds.width) > 0.5 {
-            updateRoot(width: bounds.width)
-            invalidateIntrinsicContentSize()
-        }
         super.layoutSubviews()
+        // Never replace the SwiftUI graph inside a UIKit sizing transaction.
+        // iOS 15 can synchronously re-enter fitting while inserting the first message.
+        guard bounds.width > 1, abs(measuredWidth - bounds.width) > 0.5,
+              !widthUpdatePending else { return }
+        widthUpdatePending = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.widthUpdatePending = false
+            guard self.bounds.width > 1,
+                  abs(self.measuredWidth - self.bounds.width) > 0.5 else { return }
+            self.updateRoot(width: self.bounds.width)
+            self.invalidateIntrinsicContentSize()
+            self.setNeedsLayout()
+        }
     }
-    override var intrinsicContentSize: CGSize {
-        guard !sizing else { return CGSize(width: UIView.noIntrinsicMetric, height: max(1, bounds.height)) }
+    private func fittedHeight(width: CGFloat) -> CGFloat {
+        guard !sizing else { return cachedHeight }
         sizing = true
         defer { sizing = false }
-        let width = bounds.width > 1 ? bounds.width : UIScreen.main.bounds.width
-        if abs(measuredWidth - width) > 0.5 { updateRoot(width: width) }
-        let fitted = host.sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude))
-        return CGSize(width: UIView.noIntrinsicMetric, height: ceil(max(1, fitted.height)))
+        let fitted = host.sizeThatFits(in: CGSize(width: width, height: 100000))
+        if fitted.height.isFinite { cachedHeight = ceil(max(1, fitted.height)) }
+        return cachedHeight
+    }
+    override var intrinsicContentSize: CGSize {
+        let width = bounds.width > 1 ? bounds.width : measuredWidth
+        return CGSize(width: UIView.noIntrinsicMetric, height: fittedHeight(width: max(1, width)))
     }
     override func systemLayoutSizeFitting(_ targetSize: CGSize, withHorizontalFittingPriority horizontal: UILayoutPriority, verticalFittingPriority vertical: UILayoutPriority) -> CGSize {
-        let width = targetSize.width > 1 ? targetSize.width : (bounds.width > 1 ? bounds.width : UIScreen.main.bounds.width)
-        if abs(measuredWidth - width) > 0.5 { updateRoot(width: width) }
-        let fitted = host.sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude))
-        return CGSize(width: width, height: ceil(max(1, fitted.height)))
+        let width = targetSize.width > 1 && targetSize.width.isFinite ? targetSize.width : max(1, measuredWidth)
+        return CGSize(width: width, height: fittedHeight(width: width))
     }
 }
 

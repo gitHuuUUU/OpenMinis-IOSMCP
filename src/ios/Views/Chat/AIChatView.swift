@@ -4869,6 +4869,7 @@ struct AIChatView: View {
 
     /// Dismiss keyboard (commit dictation/marked text) before sending.
     private func performSend() {
+        CrashReporter.recordSendStage("send-button")
         // Intercept slash commands — execute instead of sending to LLM
         if vm.tryExecuteInputAsSlashCommand() { return }
 

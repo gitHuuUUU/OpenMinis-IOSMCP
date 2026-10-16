@@ -22,6 +22,28 @@ enum WorkbenchError: LocalizedError {
     @Published var log = ""
     @Published var busy = false
     @Published var results: [WorkbenchCheck] = []
+    @Published var installingName = ""
+    @Published var installStage = ""
+    @Published var componentStatus: [String: String] = [:]
+    @Published var installError = ""
+    @Published var installSucceeded = false
+    @Published var diagnosticStarted: Date?
+    @Published var diagnosticDuration: TimeInterval = 0
+    func installFromUI(_ name: String) async {
+        guard !busy else { return }
+        busy = true; installError = ""; installSucceeded = false
+        installingName = name; installStage = "准备"
+        defer { busy = false }
+        do {
+            try await install(name)
+            installStage = "完成"; installSucceeded = true
+            componentStatus[name] = "已安装 · 启动检查通过"
+        } catch {
+            installError = error.localizedDescription
+            componentStatus[name] = "安装失败 · 可重试"
+            record("安装失败：\(error.localizedDescription)")
+        }
+    }
     let fm = FileManager.default
     var root: URL { SharedContainerStore.storageContainerURL.appendingPathComponent("Workbench", isDirectory: true) }
     var fullRead: Bool { UserDefaults.standard.bool(forKey: "workbench.fullRead") }
@@ -133,7 +155,7 @@ enum WorkbenchError: LocalizedError {
             if fm.fileExists(atPath: manager.dataPath.path) && !manager.isInstalled {
                 throw WorkbenchError.unavailable("已有 Linux 环境的架构标记不完整；保留原数据，请在环境设置中人工检查")
             }
-            try manager.installIfNeeded()
+            try await Task.detached(priority: .userInitiated) { try RootfsManager.shared.installIfNeeded() }.value
             let code = ISHKernel.shared.boot(withRootPath: manager.rootfsPath.path)
             guard code == 0 else { throw WorkbenchError.unavailable("iSH 启动失败：\(code)") }
             installSessionFileChangeTracker(kernel: ISHKernel.shared)
@@ -141,7 +163,15 @@ enum WorkbenchError: LocalizedError {
             manager.applyDefaultMountOverlay()
             JailbreakFullAccessManager.shared.enableIfJailbroken()
         }
-        return try await ISHExecutionCoordinator.shared.execute(sessionId:"workbench", command:command, timeout:timeout, lineCallback:{ _ in }, pidCallback:{ _ in })
+        return try await ISHExecutionCoordinator.shared.execute(sessionId:"workbench", command:command, timeout:timeout, lineCallback:{ [weak self] line in
+            Task { @MainActor in
+                guard let self = self else { return }
+                if line.contains("MINIS_STAGE:") {
+                    self.installStage = String(line.components(separatedBy: "MINIS_STAGE:").last ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                self.record(line)
+            }
+        }, pidCallback:{ _ in })
     }
     func record(_ message: String) {
         log += "\n[\(Date())] \(message)"
@@ -152,6 +182,8 @@ enum WorkbenchError: LocalizedError {
     func diagnose(repair: Bool = false) async {
         guard !busy else { return }; busy=true; defer { busy=false }
         results=[]
+        diagnosticStarted=Date()
+        defer { diagnosticDuration=Date().timeIntervalSince(diagnosticStarted ?? Date()) }
         if repair {
             do { for (component, probe) in [("CoreTools","command -v curl && command -v git && command -v file"), ("Python","command -v python3"), ("ReverseTools","command -v llvm-objdump && command -v readelf"), ("Codex","codex --version"), ("Theos","test -f /opt/theos/makefiles/common.mk")] {
                     let result = try await run(probe, timeout: 30)
@@ -179,12 +211,13 @@ enum WorkbenchError: LocalizedError {
         results.append(WorkbenchCheck(name:"本机文件权限",ok:fm.isReadableFile(atPath:"/var/mobile/Containers/Data/Application"),detail:"按实际目录读取权限检测；iSH 内 root 不等于 iOS root"))
     }
     func install(_ name: String) async throws {
+        installStage = "准备"
         let command: String
         switch name {
-        case "CoreTools": command="apk add --no-cache bash curl wget git ca-certificates openssl tar unzip zip file coreutils findutils grep sed make perl"
-        case "Python": command="apk add --no-cache python3 py3-pip"
-        case "ReverseTools": command="apk add --no-cache binutils llvm llvm-dev clang lld gdb"
-        case "Theos": command="apk add --no-cache git make perl clang lld && (test -f /opt/theos/makefiles/common.mk || git clone --recursive --depth 1 https://github.com/theos/theos.git /opt/theos)"
+        case "CoreTools": command="apk add --no-cache bash curl wget git ca-certificates openssl tar unzip zip file coreutils findutils grep sed make perl; command -v git; curl --version; file --version"
+        case "Python": command="apk add --no-cache python3 py3-pip; python3 --version; python3 -c 'import ssl,sqlite3,json'"
+        case "ReverseTools": command="apk add --no-cache binutils llvm llvm-dev clang lld gdb; llvm-objdump --version; readelf --version"
+        case "Theos": command="apk add --no-cache git make perl clang lld && (test -f /opt/theos/makefiles/common.mk || git clone --recursive --depth 1 https://github.com/theos/theos.git /opt/theos); test -f /opt/theos/makefiles/common.mk; make --version"
         case "Codex":
             // Download an actual musl build, not an iOS-incompatible macOS binary.
             let url=URL(string:"https://api.github.com/repos/openai/codex/releases/latest")!
@@ -196,10 +229,39 @@ enum WorkbenchError: LocalizedError {
                   let link=asset["browser_download_url"] as? String, link.hasPrefix("https://github.com/openai/codex/releases/") else { throw WorkbenchError.unavailable("未找到官方 ARM64 musl 资产；未安装") }
             let hash = String(digest.dropFirst(7))
             guard hash.allSatisfy({ $0.isHexDigit }) else { throw WorkbenchError.unavailable("官方资产摘要无效") }
-            command="set -e; apk add --no-cache curl ca-certificates tar; d=$(mktemp -d /tmp/minis-codex.XXXXXX); curl --fail --location --retry 2 '\(link)' -o \"$d/codex.tar.gz\"; printf '%s  %s\\n' '\(hash)' \"$d/codex.tar.gz\" | sha256sum -c -; tar -xzf \"$d/codex.tar.gz\" -C \"$d\"; b=$(find \"$d\" -type f -name 'codex*' ! -name '*.tar.gz' | head -1); test -n \"$b\"; install -m 755 \"$b\" /usr/local/bin/codex; codex --version"
+            command="""
+            set -e
+            echo MINIS_STAGE:准备
+            apk add --no-cache curl ca-certificates tar coreutils
+            d=$(mktemp -d /tmp/minis-codex.XXXXXX)
+            trap 'rm -rf "$d"' EXIT
+            echo MINIS_STAGE:下载
+            curl --fail --location --retry 2 --connect-timeout 20 --max-time 900 '\(link)' -o "$d/codex.tar.gz"
+            echo MINIS_STAGE:校验
+            printf '%s  %s\\n' '\(hash)' "$d/codex.tar.gz" | sha256sum -c -
+            echo MINIS_STAGE:解压
+            tar -tzf "$d/codex.tar.gz" > "$d/members"
+            if grep -Eq '(^/|(^|/)\\.\\.(/|$))' "$d/members"; then echo 'Unsafe archive path'; exit 1; fi
+            mkdir "$d/payload"
+            tar -xzf "$d/codex.tar.gz" -C "$d/payload" --no-same-owner --no-same-permissions
+            b=$(find "$d/payload" -type f -name 'codex*' | head -1)
+            test -n "$b"
+            chmod 755 "$b"
+            echo MINIS_STAGE:启动验证
+            timeout 30 "$b" --version
+            echo MINIS_STAGE:安装
+            install -m 755 "$b" /usr/local/bin/codex.minis-new
+            if test -f /usr/local/bin/codex; then cp -p /usr/local/bin/codex /usr/local/bin/codex.minis-backup; fi
+            mv /usr/local/bin/codex.minis-new /usr/local/bin/codex
+            if ! timeout 30 /usr/local/bin/codex --version; then
+                if test -f /usr/local/bin/codex.minis-backup; then mv /usr/local/bin/codex.minis-backup /usr/local/bin/codex; else rm -f /usr/local/bin/codex; fi
+                exit 1
+            fi
+            """
         default: throw WorkbenchError.unavailable("未知组件")
         }
-        let result=try await run(command,timeout:1800); record("安装 \(name) rc=\(result.exitCode)\n\(result.output)")
+        installStage = "下载安装与验证"
+        let result=try await run("set -e; " + command,timeout:1800); record("安装 \(name) rc=\(result.exitCode)\n\(result.output)")
         guard result.exitCode==0 else { throw WorkbenchError.unavailable("\(name) 安装或启动验证失败：\(result.output.suffix(1000))") }
     }
     func importAgents() {
@@ -296,20 +358,15 @@ struct DevelopmentWorkbenchView: View {
                 NavigationLink("内置终端") { ISHTerminalView(showCloseButton: true) }
                 NavigationLink("Tools · 三个基础工具包") { List { Text("CoreTools：文件、网络与项目工具"); Text("ReverseTools：LLVM / binutils / GDB"); Text("Python：解释器及 pip") }.navigationTitle("Tools") }
                 ForEach(["Codex","Theos","CoreTools","ReverseTools","Python"],id:\.self) { name in
-                    HStack { Text(name); Spacer(); Button("下载 / 修复") { Task { guard !model.busy else { return }; model.busy=true; defer { model.busy=false }; do { try await model.install(name); status="\(name) 已安装并通过启动检查" } catch { status=error.localizedDescription } } }.disabled(model.busy) }
+                    NavigationLink { RuntimeComponentView(name:name) } label: {
+                        HStack { Text(name); Spacer(); Text(model.componentStatus[name] ?? "查看与安装").font(.caption).foregroundColor(.secondary) }
+                    }
                 }
-                Text("Codex 来自官方 Linux ARM64 musl Release，运行于内置 iSH；不等同原生 iOS Codex。Theos 完整 iOS 编译还需要匹配的 SDK/交叉工具链，诊断会单独检查。 ").font(.caption).foregroundColor(.secondary)
-                Link("工具源：Codex",destination:URL(string:"https://github.com/openai/codex/releases")!)
-                Link("工具源：Python",destination:URL(string:"https://github.com/python/cpython")!)
-                Link("工具源：LLVM",destination:URL(string:"https://github.com/llvm/llvm-project")!)
-                Link("工具源：Theos",destination:URL(string:"https://github.com/theos/theos")!)
-                Link("逆向工具源：LLVM / Frida / radare2",destination:URL(string:"https://github.com/frida/frida/releases")!)
-                Link("WebDriverAgent 源码与部署说明",destination:URL(string:"https://github.com/appium/WebDriverAgent")!)
+                Text("点击组件后在应用内安装。当前 Linux 工具运行于 iSH，并非原生 iOS 可执行文件；完整 iOS 编译需另备匹配 SDK/交叉编译器。").font(.caption).foregroundColor(.secondary)
                 NavigationLink("Skills 与扩展") { SkillsManagementView() }
                 NavigationLink("Agent 配置") { HelperSettingsView() }
                 Button("合并本地调试 Agent") { model.importAgents(); status="已合并；原 Agent 保留" }
-                Button(model.busy ? "正在诊断…" : "运行诊断") { Task { await model.diagnose() } }.disabled(model.busy)
-                Button("自动修复缺失基础组件并重新检查") { Task { await model.diagnose(repair:true) } }.disabled(model.busy)
+                NavigationLink("运行诊断") { WorkbenchDiagnosticsView() }
                 NavigationLink("日志") { ScrollView { Text(model.log).font(.system(.caption,design:.monospaced)).textSelection(.enabled).padding() }.navigationTitle("工作台日志").toolbar { ToolbarItem(placement:.navigationBarTrailing) { Button("复制") { UIPasteboard.general.string=model.log } } } }
             }
             Section(header:Text("文件与应用调试权限")) {
@@ -330,6 +387,62 @@ struct DevelopmentWorkbenchView: View {
                 ForEach(model.results) { row in HStack(alignment:.top) { Image(systemName:row.ok ? "checkmark.circle.fill" : "exclamationmark.circle").foregroundColor(row.ok ? .green : .orange); VStack(alignment:.leading) { Text(row.name); Text(row.detail.isEmpty ? (row.ok ? "探针成功" : "探针失败") : String(row.detail.suffix(1500))).font(.caption).foregroundColor(.secondary) } } }
             }
         }.navigationTitle("开发环境与诊断")
+    }
+}
+struct RuntimeComponentView: View {
+    let name: String
+    @ObservedObject private var model = DeviceWorkbench.shared
+    private var active: Bool { model.installingName == name }
+    var body: some View {
+        ScrollView {
+            VStack(alignment:.leading, spacing:20) {
+                Text(name).font(.largeTitle.bold())
+                Text(model.componentStatus[name] ?? "尚未检查安装状态").foregroundColor(.secondary)
+                Text("在应用内准备、下载、校验、解压、安装并运行探针。Alpine 包由 apk 验签；Codex 资产校验 GitHub SHA256。失败保留日志，不显示虚假就绪状态。").font(.callout)
+                if active && model.busy { ProgressView(); Text(model.installStage).font(.headline) }
+                HStack {
+                    ForEach(["准备","下载","校验","解压","安装"],id:\.self) { stage in
+                        VStack { Image(systemName: active && model.installSucceeded ? "checkmark.circle.fill" : "circle"); Text(stage).font(.caption) }.frame(maxWidth:.infinity)
+                    }
+                }.foregroundColor(active && model.installSucceeded ? .green : .secondary)
+                if active && !model.installError.isEmpty { Text(model.installError).foregroundColor(.red).textSelection(.enabled) }
+                Button(model.busy ? "正在安装…" : "安装 / 修复") { Task { await model.installFromUI(name) } }
+                    .buttonStyle(.borderedProminent).disabled(model.busy)
+                Text("Theos 的项目文件安装成功不代表已具备 iOS SDK。诊断会单独检查手机编译和 iOS SDK。").font(.caption).foregroundColor(.secondary)
+                if active { Text(String(model.log.suffix(6000))).font(.system(.caption,design:.monospaced)).textSelection(.enabled) }
+            }.padding()
+        }.navigationTitle(name)
+    }
+}
+struct WorkbenchDiagnosticsView: View {
+    @ObservedObject private var model = DeviceWorkbench.shared
+    var body: some View {
+        List {
+            Section {
+                Label(model.busy ? "正在检查核心能力" : (model.results.isEmpty ? "等待检查" : "检查完成"),systemImage:model.busy ? "clock" : "stethoscope")
+                Text("\(model.results.filter(\.ok).count)/\(model.results.count) 项通过 · \(Int(model.diagnosticDuration)) 秒").font(.caption)
+                Button("运行诊断") { Task { await model.diagnose() } }.disabled(model.busy)
+                Button("自动修复并重新检查") { Task { await model.diagnose(repair:true) } }.disabled(model.busy)
+            }
+            ForEach(["基础运行","项目能力","可选能力","组件与工具"],id:\.self) { group in
+                Section(header:Text(group)) {
+                    ForEach(model.results.filter { row in diagnosticGroup(row.name) == group }) { row in
+                        HStack(alignment:.top) {
+                            Image(systemName:row.ok ? "checkmark.circle" : "exclamationmark.circle").foregroundColor(row.ok ? .green : .orange)
+                            VStack(alignment:.leading) { Text(row.name); Text(String(row.detail.suffix(1500))).font(.caption).foregroundColor(.secondary).textSelection(.enabled) }
+                        }
+                    }
+                }
+            }
+        }.navigationTitle("运行诊断")
+        .toolbar { ToolbarItem(placement:.navigationBarTrailing) { Button("复制") { UIPasteboard.general.string=model.results.map { "\($0.ok ? "PASS" : "FAIL") \($0.name)\n\($0.detail)" }.joined(separator:"\n") } } }
+        .task { if model.results.isEmpty { await model.diagnose() } }
+    }
+    private func diagnosticGroup(_ name:String)->String {
+        if ["命令执行","项目文件","本机文件权限"].contains(name) { return "基础运行" }
+        if ["Git 与常用工具","代码辅助与 TLS"].contains(name) { return "项目能力" }
+        if ["手机编译","iOS SDK"].contains(name) { return "可选能力" }
+        return "组件与工具"
     }
 }
 struct NativeDeviceFileBrowser: View {

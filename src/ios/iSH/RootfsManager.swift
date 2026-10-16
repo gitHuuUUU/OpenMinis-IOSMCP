@@ -30,6 +30,7 @@ class RootfsManager {
     /// process lifetime; it is reset naturally on the next cold launch.
     private(set) var didResetWhileBooted = false
 
+    private let installLock = NSRecursiveLock()
     private init() {}
 
     var rootfsPath: URL {
@@ -167,6 +168,8 @@ class RootfsManager {
     }
 
     func installIfNeeded() throws {
+        installLock.lock()
+        defer { installLock.unlock() }
         if FileManager.default.fileExists(atPath: rootfsPath.path) && !isInstalled {
             logger.warning("[Rootfs] arch tag missing or mismatched — will delete and reinstall \(currentArch). archTag=\(archTagDiagnostic()) path=\(rootfsPath.path)")
             try discardOldRootfs()

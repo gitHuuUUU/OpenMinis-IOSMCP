@@ -2825,6 +2825,7 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     ///   the text here keeps a background turn from reading, overwriting, or
     ///   emptying whatever the user is typing at that moment.
     func send(overrideText: String? = nil) {
+        CrashReporter.recordSendStage("send-enter")
         // Read-only mode — cannot send messages
         guard remoteDeviceId == nil else { return }
         // Every `inputText = ""` below is guarded by this: the composer is
@@ -3059,7 +3060,9 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
         // `enqueuePrompt` (AIChatViewModel+Misc ~72) has always done exactly this before
         // its own append; this is the send path catching up, not a new mechanism.
         userMsg.inputAttachments = pendingAttachments
+        CrashReporter.recordSendStage("message-insert")
         messages.append(userMsg)
+        CrashReporter.recordSendStage("message-inserted")
 
         // Snapshot and clear attachments synchronously so the UI clears immediately
         clearAttachments()
@@ -3071,13 +3074,17 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
 
         // Ensure kernel is booted before running
         ensureKernelBooted()
+        CrashReporter.recordSendStage("kernel-requested")
         beginBackgroundProcessing()
+        CrashReporter.recordSendStage("background-processing-started")
 
         currentTask = Task { [weak self] in
             guard let self else { return }
 
             // Lazily create session before persisting anything
+            CrashReporter.recordSendStage("session-create-start")
             await self.ensureSession()
+            CrashReporter.recordSendStage("session-created")
 
             // Defensive: ensure tracker reflects the real session ID after draft→real migration.
             if let sid = self.sessionId, self.isProcessing {

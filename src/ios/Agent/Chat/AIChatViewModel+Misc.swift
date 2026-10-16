@@ -18,7 +18,13 @@ extension AIChatViewModel {
             do {
                 if !ISHKernel.shared.isBooted {
                     let installStart = CFAbsoluteTimeGetCurrent()
-                    try RootfsManager.shared.installIfNeeded()
+                    CrashReporter.recordSendStage("rootfs-install-start")
+                    // Task {} inherits MainActor: first-run ZIP extraction previously
+                    // blocked the UI and could trigger the foreground watchdog.
+                    try await Task.detached(priority: .userInitiated) {
+                        try RootfsManager.shared.installIfNeeded()
+                    }.value
+                    CrashReporter.recordSendStage("rootfs-install-finished")
                     let installElapsed = (CFAbsoluteTimeGetCurrent() - installStart) * 1000
                     logger.info("[KernelBoot] installIfNeeded: \(String(format: "%.1f", installElapsed))ms")
 

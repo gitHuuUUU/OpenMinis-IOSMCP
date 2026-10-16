@@ -2,6 +2,26 @@ import unittest, pathlib, plistlib, json
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 def read(path): return (ROOT/path).read_text(encoding='utf-8-sig')
 class WorkbenchContracts(unittest.TestCase):
+    def test_first_send_install_off_main_actor(self):
+        code=read('src/ios/Agent/Chat/AIChatViewModel+Misc.swift')
+        self.assertIn('try await Task.detached(priority: .userInitiated)',code)
+        self.assertIn('rootfs-install-finished',code)
+        self.assertIn('installLock.lock()',read('src/ios/iSH/RootfsManager.swift'))
+    def test_no_host_graph_mutation_during_measurement(self):
+        code=read('src/ios/Shared/AppLocalization.swift')
+        start=code.index('private func fittedHeight')
+        end=code.index('final class MinisBadgeCenter',start)
+        self.assertNotIn('updateRoot(',code[start:end])
+        self.assertIn('guard !sizing',code[start:end])
+    def test_automatic_install_and_rollback(self):
+        code=read('src/ios/Workbench.swift')
+        for item in ['installFromUI','RuntimeComponentView','WorkbenchDiagnosticsView','codex.minis-backup','MINIS_STAGE:校验','timeout 30']:
+            self.assertIn(item,code)
+        self.assertNotIn('Link("工具源',code)
+    def test_exit_report_does_not_invent_signal(self):
+        code=read('src/ios/Diagnostics/CrashReporter.swift')
+        self.assertIn('cause unknown — stale launch marker',code)
+        self.assertIn('Last Send Checkpoint',code)
     def test_sources_registered(self):
         pbx=read('src/ios/Minis.xcodeproj/project.pbxproj')
         for name in ['Workbench.swift','WorkbenchBridge.m']:

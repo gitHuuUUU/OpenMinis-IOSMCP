@@ -33,6 +33,12 @@ final class CrashReporter: NSObject, MXMetricManagerSubscriber {
         return support.appendingPathComponent("last_crash_stack.txt")
     }
 
+    /// Release-build checkpoint. Contains stages only, never prompt or credentials.
+    static func recordSendStage(_ stage: String) {
+        let file = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/minis-send-stage.txt")
+        try? Data("\(Date()) \(stage)".utf8).write(to: file, options: .atomic)
+    }
+
     // MARK: - Tool-execution breadcrumb (durable, DEBUG-only)
 
 #if DEBUG
@@ -637,7 +643,7 @@ final class CrashReporter: NSObject, MXMetricManagerSubscriber {
             } else if let mem = memoryMB, mem >= 350 {
                 crashType = "⚠️ FOREGROUND CRASH (high memory: \(mem)MB)"
             } else {
-                crashType = "⚠️ FOREGROUND CRASH (SIGKILL — app was in use)"
+                crashType = "⚠️ ABNORMAL FOREGROUND EXIT (cause unknown — stale launch marker)"
             }
         } else if lastPhase == "background" {
             if let rem = bgTaskRemaining, rem > 0 && rem < 5 {
@@ -1012,6 +1018,10 @@ final class CrashReporter: NSObject, MXMetricManagerSubscriber {
             report += "(no active WebViews)\n"
         }
 
+        let stageFile = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/minis-send-stage.txt")
+        if let stage = try? String(contentsOf: stageFile, encoding: .utf8) {
+            report += "\n--- Last Send Checkpoint (durable) ---\n\(stage)\n"
+        }
         report += "\n--- Last Shell Commands (before exit) ---\n"
 
         if savedShellCommands.isEmpty {
@@ -1065,7 +1075,7 @@ final class CrashReporter: NSObject, MXMetricManagerSubscriber {
         if let stack = callStack {
             report += stack + "\n"
         } else {
-            report += "(none — SIGKILL has no stack)\n"
+            report += "(none available — a stale launch marker does not establish SIGKILL)\n"
         }
         report += "\n=== End ===\n"
 
