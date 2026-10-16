@@ -156,7 +156,7 @@ enum WorkbenchError: LocalizedError {
                 throw WorkbenchError.unavailable("已有 Linux 环境的架构标记不完整；保留原数据，请在环境设置中人工检查")
             }
             try await Task.detached(priority: .userInitiated) { try RootfsManager.shared.installIfNeeded() }.value
-            let code = ISHKernel.shared.boot(withRootPath: manager.rootfsPath.path)
+            let code = ISHKernel.shared.isBooted ? 0 : ISHKernel.shared.boot(withRootPath: manager.rootfsPath.path)
             guard code == 0 else { throw WorkbenchError.unavailable("iSH 启动失败：\(code)") }
             installSessionFileChangeTracker(kernel: ISHKernel.shared)
             MinisFsRouter.shared.installHook()

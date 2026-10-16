@@ -30,7 +30,7 @@ extension AIChatViewModel {
 
                     let kernelStart = CFAbsoluteTimeGetCurrent()
                     let rootPath = RootfsManager.shared.rootfsPath.path
-                    let err = ISHKernel.shared.boot(withRootPath: rootPath)
+                    let err = ISHKernel.shared.isBooted ? 0 : ISHKernel.shared.boot(withRootPath: rootPath)
                     let kernelElapsed = (CFAbsoluteTimeGetCurrent() - kernelStart) * 1000
                     logger.info("[KernelBoot] kernel boot call: \(String(format: "%.1f", kernelElapsed))ms")
                     if err < 0 {
