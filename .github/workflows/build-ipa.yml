@@ -114,6 +114,14 @@ jobs:
             ls -R build/DerivedData/Build/Products 2>/dev/null | head -40
             exit 1
           fi
+          # Preserve requested entitlements in a real ad-hoc signature for TrollStore.
+          # Avoid iOS15/A12 banned debugger/dynamic-code entitlements.
+          for FW in "$APP_PATH"/Frameworks/*.framework; do
+            [ ! -d "$FW" ] || codesign --force --sign - --timestamp=none "$FW"
+          done
+          codesign --force --sign - --timestamp=none --generate-entitlement-der --entitlements src/ios/TrollStore.entitlements "$APP_PATH"
+          codesign --verify --deep --strict "$APP_PATH"
+          codesign -d --entitlements :- "$APP_PATH" > build/trollstore-entitlements.plist
           mkdir -p build/Payload
           cp -R "$APP_PATH" build/Payload/
           # FileProvider extension targets iOS 16 API — exclude it from the
