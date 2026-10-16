@@ -56,6 +56,7 @@ class WorkbenchContracts(unittest.TestCase):
     def test_sdk_bundle_and_native_probe(self):
         pbx=read('src/ios/Minis.xcodeproj/project.pbxproj')
         self.assertIn('BuildWorkbench.bundle in Resources',pbx)
+        self.assertIn('path = BuildWorkbench.bundle; sourceTree = SOURCE_ROOT;',pbx)
         self.assertIn('prepare_build_workbench.py',read('.github/workflows/build-ipa.yml'))
         self.assertIn('iOS dylib 编译',read('src/ios/Workbench.swift'))
         catalog=json.loads(read('src/ios/BuildWorkbench.bundle/sdk-catalog.json'))

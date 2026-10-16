@@ -641,7 +641,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		BC2026101600000000000002 /* BuildWorkbench.bundle */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.plug-in"; path = BuildWorkbench.bundle; sourceTree = "<group>"; };
+		BC2026101600000000000002 /* BuildWorkbench.bundle */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.plug-in"; path = BuildWorkbench.bundle; sourceTree = SOURCE_ROOT; };
 		5A71E40627414A22AC4433B5 /* WorkbenchBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WorkbenchBridge.h; sourceTree = "<group>"; };
 		C750EAE1C4194A9BBB57C7D9 /* WorkbenchBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WorkbenchBridge.m; sourceTree = "<group>"; };
 		B821A73AC4F54A39B02503A1 /* Workbench.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Workbench.swift; sourceTree = "<group>"; };
