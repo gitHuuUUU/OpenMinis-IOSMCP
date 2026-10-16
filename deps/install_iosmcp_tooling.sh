@@ -34,7 +34,19 @@ tar -xzf "$INPUT_TAR" -C "$ROOT"
 
 # --- Pick an apk that can target aarch64 -----------------------------------
 ALPINE_VER="${ALPINE_VER:-3.21}"
-APK_STATIC_URL="https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_VER}/main/x86_64/apk-tools-static-2.14.4-r1.apk"
+
+# Resolve the current apk-tools-static version from the Alpine repo index
+resolve_apk_url() {
+    local arch="$1"
+    local dir_url="https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_VER}/main/${arch}/"
+    local file
+    file="$(curl -sfL "$dir_url" | grep -oE 'apk-tools-static-[0-9.]+-r[0-9]+\.apk' | sort -V | tail -1)"
+    if [ -z "$file" ]; then
+        # Fallback to known version if index fetch failed
+        file="apk-tools-static-2.14.4-r1.apk"
+    fi
+    echo "${dir_url}${file}"
+}
 
 install_apk() {
     if command -v apk.static >/dev/null 2>&1; then
@@ -43,7 +55,10 @@ install_apk() {
     fi
     # Download static apk (x86_64) for cross-install
     echo "[IOS-MCP] Fetching static apk..."
-    curl -sL "$APK_STATIC_URL" -o "$WORK/apk-static.apk"
+    curl -sfL "$(resolve_apk_url x86_64)" -o "$WORK/apk-static.apk" || {
+        echo "[IOS-MCP] ERROR: failed to download apk-tools-static" >&2
+        exit 1
+    }
     ( cd "$WORK" && tar -xzf apk-static.apk )
     APK="$WORK/sbin/apk.static"
 }
@@ -60,7 +75,10 @@ run_apk() {
             # Fetch aarch64 static apk and run it via qemu user-mode
             local AAPK="$WORK/sbin/apk.static.aarch64"
             if [ ! -x "$AAPK" ]; then
-                curl -sL "https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_VER}/main/aarch64/apk-tools-static-2.14.4-r1.apk" -o "$WORK/apk-static-aarch64.apk"
+                curl -sfL "$(resolve_apk_url aarch64)" -o "$WORK/apk-static-aarch64.apk" || {
+                    echo "[IOS-MCP] ERROR: failed to download aarch64 apk-tools-static" >&2
+                    exit 1
+                }
                 ( cd "$WORK" && tar -xzf apk-static-aarch64.apk )
                 mv "$WORK/sbin/apk.static" "$AAPK"
             fi
