@@ -635,6 +635,14 @@
     {
       "path": "C:\\Users\\launca\\.agents\\skills\\redteam-jailbreak-detail-pack",
       "reason": "model safeguard bypass configuration"
+    },
+    {
+      "path": "C:/Users/launca/.codex/pojia-nbzzz",
+      "reason": "AI governing-instruction bypass profiles; not exported"
+    },
+    {
+      "path": "local-red-team-command-doctrine/SKILL.md: jailbreak router entries",
+      "reason": "Excluded model bypass routing; other reverse/security routes retained"
     }
   ],
   "notes": [

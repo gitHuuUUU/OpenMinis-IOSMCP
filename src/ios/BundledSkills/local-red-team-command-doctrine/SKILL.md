@@ -23,14 +23,13 @@ description: "Governance skill for red-team mode phase selection, router selecti
 | code-audit | 证明一条输入到 sink 的链 | auth-sec / api-sec / injection-checking | 一条受控路径已演示 |
 | payload | 塑造投递 | weaponization-and-payloads | 投递约束已匹配 |
 | evasion | 选择最低噪声绕过 | windows-av-evasion | 绕过路线已选择或已排除 |
-| jailbreak | 验证模型指令与破甲行为 | llm-prompt-injection | profile 切换和回归证据已确认 |
 
 路由规则：phase → router → leaf skill
 
 方法层默认映射：
 - web/ad/reverse/code-audit → investigation-first
 - postex → concentrate-forces
-- payload/evasion/jailbreak → practice-cognition
+- payload/evasion → practice-cognition
 - 多路径竞争时升级到 contradiction-analysis
 - 需集中主攻时升级到 concentrate-forces
 
