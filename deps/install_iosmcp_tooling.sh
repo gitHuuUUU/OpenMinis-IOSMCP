@@ -63,35 +63,10 @@ install_apk() {
     APK="$WORK/sbin/apk.static"
 }
 
-# macOS: run aarch64 apk through qemu; Linux: run x86_64 apk natively
+# Cross-install: apk.static (x86_64) can target aarch64 directly via --root --arch.
+# No qemu needed on any host OS. --no-scripts skips target-arch scriptlets.
 run_apk() {
-    local arch
-    case "$(uname -s)" in
-        Darwin)
-            if ! command -v qemu-aarch64 >/dev/null 2>&1; then
-                echo "[IOS-MCP] Installing qemu (needed to run aarch64 apk on macOS)..."
-                brew install qemu
-            fi
-            # Fetch aarch64 static apk and run it via qemu user-mode
-            local AAPK="$WORK/sbin/apk.static.aarch64"
-            if [ ! -x "$AAPK" ]; then
-                curl -sfL "$(resolve_apk_url aarch64)" -o "$WORK/apk-static-aarch64.apk" || {
-                    echo "[IOS-MCP] ERROR: failed to download aarch64 apk-tools-static" >&2
-                    exit 1
-                }
-                ( cd "$WORK" && tar -xzf apk-static-aarch64.apk )
-                mv "$WORK/sbin/apk.static" "$AAPK"
-            fi
-            qemu-aarch64 "$AAPK" --root "$ROOT" --arch aarch64 --no-scripts "$@"
-            ;;
-        Linux)
-            "$APK" --root "$ROOT" --arch aarch64 --no-scripts "$@"
-            ;;
-        *)
-            echo "[IOS-MCP] Unsupported host OS: $(uname -s)"
-            exit 1
-            ;;
-    esac
+    "$APK" --root "$ROOT" --arch aarch64 --no-scripts "$@"
 }
 
 install_apk
@@ -110,22 +85,9 @@ run_apk add \
     binutils lldb gdb strace sqlite jq zip unzip tar xz \
     openssl-dev zlib-dev libplist-dev
 
-echo "[IOS-MCP] Installing frida-tools via pip (inside rootfs)..."
-case "$(uname -s)" in
-    Linux)
-        # Native x86_64 python can install into rootfs --root; but packages are
-        # pure-python here, so --root works fine.
-        "$APK" --root "$ROOT" --arch aarch64 add --no-scripts python3 >/dev/null 2>&1 || true
-        curl -sL https://bootstrap.pypa.io/get-pip.py -o "$WORK/get-pip.py"
-        # Use qemu-free approach: run inside chroot via qemu not available on
-        # Linux here; frida-tools is pure python so cross-install with --root.
-        PYVER=$("$ROOT/usr/bin/python3" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' || echo "3.12")
-        ;;
-    Darwin)
-        qemu-aarch64 "$ROOT/usr/bin/python3" -m pip install --no-cache-dir frida-tools || \
-            echo "[IOS-MCP] pip install frida-tools skipped/failed (non-fatal)"
-        ;;
-esac
+echo "[IOS-MCP] Installing frida-tools (via py3-frida cross-install)..."
+run_apk add py3-frida 2>/dev/null || \
+    echo "[IOS-MCP] frida cross-install failed (non-fatal)"
 
 # --- Theos (minimal SDK headers) --------------------------------------------
 echo "[IOS-MCP] Installing Theos (minimal)..."
@@ -158,29 +120,17 @@ fetch_sdk_lite() {
 }
 fetch_sdk_lite || echo "[IOS-MCP] SDK fetch failed (non-fatal) — Theos will need headers added later"
 
-# --- ldid (signing tool) built from source ----------------------------------
-echo "[IOS-MCP] Building ldid..."
-case "$(uname -s)" in
-    Linux)
-        # Cross-build is complex; attempt native build of static-linked ldid via
-        # downloading a prebuilt aarch64 static binary instead.
-        curl -sL "https://github.com/xybp888/iOS-SDKs/releases/download/1.0/ldid" -o "$ROOT/usr/local/bin/ldid" 2>/dev/null || true
-        if file "$ROOT/usr/local/bin/ldid" 2>/dev/null | grep -q ELF; then
-            chmod +x "$ROOT/usr/local/bin/ldid"
-        else
-            rm -f "$ROOT/usr/local/bin/ldid"
-            echo "[IOS-MCP] ldid binary download failed (non-fatal)"
-        fi
-        ;;
-    Darwin)
-        qemu-aarch64 "$ROOT/usr/bin/make" -C /tmp 2>/dev/null || true
-        # Build ldid inside rootfs via qemu
-        if [ -d "$ROOT/tmp/ldid-src" ]; then rm -rf "$ROOT/tmp/ldid-src"; fi
-        git clone --depth 1 https://github.com/ProcursusTeam/ldid.git "$ROOT/tmp/ldid-src"
-        qemu-aarch64 "$ROOT/usr/bin/make" -C "$ROOT/tmp/ldid-src" 2>/dev/null || true
-        cp "$ROOT/tmp/ldid-src/ldid" "$ROOT/usr/local/bin/ldid" 2>/dev/null || true
-        ;;
-esac
+# --- ldid (signing tool) -----------------------------------------------
+echo "[IOS-MCP] Installing ldid (aarch64 static)..."
+# Download a prebuilt aarch64 static ldid (works on any host; no qemu needed)
+curl -sfL "https://github.com/xybp888/iOS-SDKs/releases/download/1.0/ldid" -o "$ROOT/usr/local/bin/ldid" 2>/dev/null || true
+if file "$ROOT/usr/local/bin/ldid" 2>/dev/null | grep -q ELF; then
+    chmod +x "$ROOT/usr/local/bin/ldid"
+    echo "[IOS-MCP] ldid installed"
+else
+    rm -f "$ROOT/usr/local/bin/ldid"
+    echo "[IOS-MCP] ldid binary download failed (non-fatal)"
+fi
 
 # --- Shell profile: expose Theos and tools ----------------------------------
 cat >> "$ROOT/etc/profile" << 'EOF'
