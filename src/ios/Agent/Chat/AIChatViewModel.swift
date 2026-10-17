@@ -2495,6 +2495,7 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
             + "Use `minis-scheduled` for follow-ups and recurring prompts that only need to fire while Minis stays open (it is best effort and dies with the app process). "
             + "For recurring tasks that must fire even after the app is killed, tell the user to set up an automation in Apple Shortcuts — that is the only guaranteed way to trigger periodic execution on iOS. "
             + "(Waiting or polling WITHIN the current turn is different — that is what shell_execute `delay` chains are for, per the shell_execute notes above.)"
+            + RuntimeEfficiency.prompt
     }
 
     /// [T-memory-toggle-gates-injection-and-tools-ios]
@@ -7426,7 +7427,7 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
                 var harvested = 0
                 for (idx, tu) in toolEntries.enumerated() {
                     // Rate-limit: hold here until we're below the in-flight cap.
-                    while added - harvested >= Self.maxConcurrentTools {
+                    while added - harvested >= min(Self.maxConcurrentTools, RuntimeEfficiency.toolConcurrency) {
                         if let pair = await group.next() {
                             outcomesByIndex[pair.0] = pair.1
                             harvested += 1

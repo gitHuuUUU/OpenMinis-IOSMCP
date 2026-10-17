@@ -100,6 +100,7 @@ final class TextFadeAnimator {
     /// the NSRange of the freshly-appended tail. Safe to call repeatedly while
     /// streaming — each call adds its words to the shared in-flight set.
     func scheduleAnimation(for range: NSRange, in targetStorage: NSTextStorage) {
+        guard RuntimeEfficiency.decorativeAnimations else { cancelAll(); return }
         guard range.length > 0 else { return }
         let storageLen = targetStorage.length
         // Defensive clamp: the caller computed `range` from the same storage,
@@ -189,7 +190,7 @@ final class TextFadeAnimator {
         let link = CADisplayLink(target: self, selector: #selector(tick))
         // Allow the system to pick within 30–120Hz, preferring 60. The fade is
         // smooth at 30 and we don't need to force 120Hz battery cost.
-        link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 120, preferred: 60)
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
         link.add(to: .main, forMode: .common)
         displayLink = link
     }

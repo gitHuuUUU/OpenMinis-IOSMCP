@@ -4,6 +4,37 @@ import UIKit
 import Security
 import UniformTypeIdentifiers
 
+enum RuntimeEfficiency {
+    static var fast:Bool { UserDefaults.standard.object(forKey:"runtime.fast") as? Bool ?? true }
+    static var thermal:Bool { UserDefaults.standard.object(forKey:"runtime.thermal") as? Bool ?? true }
+    static var underPressure:Bool {
+        thermal && (ProcessInfo.processInfo.thermalState == .serious || ProcessInfo.processInfo.thermalState == .critical || ProcessInfo.processInfo.isLowPowerModeEnabled)
+    }
+    static var toolConcurrency:Int { underPressure ? 1 : (thermal ? 4 : 10) }
+    static var decorativeAnimations:Bool { !thermal && !underPressure }
+    static var prompt:String {
+        fast ? "\n\nExecution preference: minimize latency. Batch related file reads and independent checks; reuse confirmed tool paths, warm MCP sessions and existing SDKs. Use the connected Windows computer for CPU-heavy builds/analysis when appropriate; transfer only needed files. Give concise progress and results. Do not repeatedly run full diagnostics. Preserve required validation and report actual failures; do not trade correctness for speed or assume a remote connection is available." : ""
+    }
+}
+
+struct RuntimeEfficiencyView:View {
+    @AppStorage("runtime.fast") private var fast=true
+    @AppStorage("runtime.thermal") private var thermal=true
+    var body:some View {
+        Form {
+            Section(header:Text("执行效率")) {
+                Toggle("快速工作流",isOn:$fast)
+                Text("合并读取与独立检查、复用已安装组件、避免反复全量诊断；仍保留必要测试。不会自动切换模型或降低你选定的思考等级。长时间等待也可能来自模型服务或网络。").font(.caption)
+            }
+            Section(header:Text("温控与省电")) {
+                Toggle("自适应温控（建议开启）",isOn:$thermal)
+                Text("减少逐字淡入和资源采样；正常温度最多 4 项工具并发，高温或低电量模式降为 1 项，新任务排队而不丢弃。流式显示适度合并，结束时完整刷新。编译/逆向优先使用已连接电脑。").font(.caption)
+                Text("持续 CPU 工作、充电、第三方高刷插件和环境温度仍会影响发热；本设置不关闭前台任务或后台音频，也不保证手机完全不热。").font(.caption).foregroundColor(.secondary)
+            }
+        }.navigationTitle("提速与温控")
+    }
+}
+
 struct DeviceAppRecord: Identifiable, Codable {
     var bundleID: String
     var name: String
@@ -52,6 +83,7 @@ enum WorkbenchError: LocalizedError {
     @Published var installSucceeded = false
     @Published var diagnosticStarted: Date?
     @Published var diagnosticDuration: TimeInterval = 0
+    @Published var desktopStatus = UserDefaults.standard.string(forKey:"desktop.lastStatus") ?? "尚未从手机检测连接"
     func installFromUI(_ name: String) async {
         guard !busy else { return }
         busy = true; installError = ""; installSucceeded = false
@@ -334,14 +366,17 @@ enum WorkbenchError: LocalizedError {
         let folder=URL(fileURLWithPath:NSHomeDirectory()).appendingPathComponent("Library/MinisDesktopSSH",isDirectory:true)
         try fm.createDirectory(at:folder,withIntermediateDirectories:true)
         let keyFile=folder.appendingPathComponent("identity")
-        try Data(key.utf8).write(to:keyFile,options:[.atomic,.completeFileProtectionUnlessOpen])
+        if (try? Data(contentsOf:keyFile)) != Data(key.utf8) {
+            try Data(key.utf8).write(to:keyFile,options:[.atomic,.completeFileProtectionUnlessOpen])
+        }
         try fm.setAttributes([.posixPermissions:0o600],ofItemAtPath:keyFile.path)
         let known=(port==22 ? host : "[\(host)]:\(port)")+" "+hostKey+"\n"
         try Data(known.utf8).write(to:folder.appendingPathComponent("known_hosts"),options:.atomic)
         let setup=try await run("mkdir -p /opt/minis-desktop",timeout:120)
         guard setup.exitCode==0, ISHKernel.shared.bindMountPath("/opt/minis-desktop",toHostPath:folder.path,readOnly:true)==0 else { throw WorkbenchError.unavailable("无法挂载电脑连接密钥") }
         func q(_ value:String)->String { "'"+value.replacingOccurrences(of:"'",with:"'\"'\"'")+"'" }
-        let options=" -i /opt/minis-desktop/identity -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/opt/minis-desktop/known_hosts -o ConnectTimeout=15 "
+        // iSH fakefs cannot reliably host AF_UNIX sockets: do not enable ControlMaster.
+        let options=" -i /opt/minis-desktop/identity -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/opt/minis-desktop/known_hosts -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 "
         let action=args["action"] as? String ?? "probe"
         let command:String
         if action=="upload" || action=="download" {
@@ -358,7 +393,11 @@ enum WorkbenchError: LocalizedError {
             let encoded=(utf8script.data(using:.utf16LittleEndian) ?? Data()).base64EncodedString()
             command="ssh -p \(port)"+options+q(user+"@"+host)+" powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand "+encoded
         }
+        let started=Date()
         let result=try await run(command,timeout:1800)
+        let elapsed=Date().timeIntervalSince(started)
+        desktopStatus="\(Date().formatted(date:.numeric,time:.standard)) · \(host):\(port) · \(String(format:"%.2f",elapsed)) 秒 · "+(result.exitCode==0 ? "SSH 操作成功" : "失败 rc=\(result.exitCode)")
+        UserDefaults.standard.set(desktopStatus,forKey:"desktop.lastStatus")
         guard result.exitCode==0 else { throw WorkbenchError.unavailable("电脑操作失败 rc=\(result.exitCode)\n\(result.output)") }
         return result.output
     }
@@ -561,6 +600,7 @@ struct MultiPlatformWorkbenchView:View {
     }
     var body:some View {
         Form {
+            Section { NavigationLink("提速与温控",destination:RuntimeEfficiencyView()) }
             Section(header:Text("内置 SDK 15–18")) {
                 Text("已随包携带：15.6、16.5、17.5、18.6。首次安装四套 SDK 需要至少 2 GB 可用空间；核对 SHA256 后解压到 Theos。SDK 不等于完整 Xcode。").font(.caption)
                 Button("安装内置四套 SDK") { perform(["action":"install-sdks"]) }.disabled(model.busy)
@@ -583,6 +623,7 @@ struct MultiPlatformWorkbenchView:View {
                 Text("dylib 为 C/ObjC 交叉编译；DEB 需要 DEBIAN/control；IPA 打包已有 .app，Swift/Xcode 项目需 macOS 构建；APK 需 Gradle/Android SDK；EXE 需 MinGW。SSH 使用已有主机配置与密钥，远端还须具备对应工具链。缺失即报告失败。").font(.caption)
             }
             Section(header:Text("当前 Windows 电脑")) {
+                Text(model.desktopStatus).font(.caption).textSelection(.enabled)
                 Button("导入电脑 SSH 连接配置") { importComputer=true }
                 Button("检测电脑连接与工具路径") {
                     Task { guard !model.busy else { return };model.busy=true;defer { model.busy=false };do { report=try await model.desktopTool(["action":"probe"]) } catch { report=error.localizedDescription } }

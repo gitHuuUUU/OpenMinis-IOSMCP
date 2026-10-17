@@ -27,6 +27,11 @@ struct MCPIntegrationsView: View {
 
     var body: some View {
         List {
+            Section {
+                Button("补齐内置实用 MCP（7 组 / 13 项工具）") { store.installBuiltins() }
+                Text("文件、搜索/Git、SQLite、HTTP、压缩包、JSON/CSV 与运行环境；无需账号或额外下载。首次使用才启动 Python。工作区为 /var/minis，已有自定义服务器不会覆盖。蓝色圆点只表示启用，不代表连接成功；长按可实时检测工具。").font(.caption).foregroundColor(.secondary)
+                NavigationLink("提速与温控",destination:RuntimeEfficiencyView())
+            }
             if store.servers.isEmpty {
                 emptyState
             } else {
@@ -134,7 +139,7 @@ struct MCPIntegrationsView: View {
     private func row(for server: MCPServerConfig) -> some View {
         HStack(spacing: 12) {
             Circle()
-                .fill(server.enabled ? Color.green : Color.gray)
+                .fill(server.enabled ? Color.blue : Color.gray)
                 .frame(width: 9, height: 9)
             VStack(alignment: .leading, spacing: 3) {
                 Text(server.id)

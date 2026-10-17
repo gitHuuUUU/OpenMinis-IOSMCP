@@ -116,4 +116,33 @@ class WorkbenchContracts(unittest.TestCase):
         manifest=json.loads(read('tools/local-skills-import-manifest.json'))
         self.assertEqual(len(manifest['included']),126)
         self.assertFalse((ROOT/'src/ios/BundledSkills/local-redteam-jailbreak-detail-pack').exists())
+class EfficiencyContracts(unittest.TestCase):
+    def test_thermal_preserves_tool_results(self):
+        code=read('src/ios/Agent/Chat/AIChatViewModel.swift')
+        self.assertIn('min(Self.maxConcurrentTools, RuntimeEfficiency.toolConcurrency)',code)
+        self.assertIn('for await pair in group',code)
+        self.assertIn('for idx in 0..<toolEntries.count',code)
+    def test_full_text_final_flush_retained(self):
+        code=read('src/ios/Agent/Chat/AIChatViewModel+SSEStream.swift')
+        self.assertIn('RuntimeEfficiency.underPressure',code)
+        self.assertIn('case .done',code)
+    def test_timer_is_idempotent_and_coalesced(self):
+        code=read('src/ios/Views/Chat/AIChatView.swift')
+        self.assertIn('guard timer == nil else { return }',code)
+        self.assertIn('timer?.tolerance = 2',code)
+    def test_builtin_seed_preserves_custom_servers(self):
+        code=read('src/ios/Agent/Session/MCPStore.swift')
+        self.assertIn('mcp.builtin.v1.installed',code)
+        self.assertIn('guard !servers.contains(where: { $0.id == id })',code)
+        self.assertIn('/usr/local/lib/minis-builtin-mcp/server.py',code)
+    def test_ssh_status_is_actual_exit_not_configuration(self):
+        code=read('src/ios/Workbench.swift')
+        self.assertIn('desktop.lastStatus',code)
+        self.assertIn('StrictHostKeyChecking=yes',code)
+        self.assertNotIn('-o ControlMaster=auto',code)
+        self.assertIn('result.exitCode==0 ? "SSH 操作成功"',code)
+    def test_animation_disabled_without_hiding_text(self):
+        code=read('src/ios/Views/Chat/TextFadeAnimator.swift')
+        self.assertIn('guard RuntimeEfficiency.decorativeAnimations else { cancelAll(); return }',code)
+        self.assertIn('value: w.originalColor',code)
 if __name__=='__main__':unittest.main()

@@ -266,6 +266,31 @@ final class MCPStore: ObservableObject {
 
     func load() {
         servers = readServersFromDisk()
+        if !UserDefaults.standard.bool(forKey: "mcp.builtin.v1.installed") {
+            installBuiltins()
+        }
+    }
+
+    /// Bundled, dependency-free stdio servers. No remote URL, API key or npx install.
+    func installBuiltins() {
+        let entries = [
+            ("files", "工作区文件：列表、读写与 SHA256"),
+            ("project", "项目搜索与 Git 状态/差异/历史"),
+            ("database", "SQLite 只读查询与表结构"),
+            ("web", "HTTP(S) 获取：超时与响应大小限制"),
+            ("archive", "ZIP/IPA/APK 档案目录检查"),
+            ("data", "JSON 校验格式化与 CSV 预览"),
+            ("system", "Python、平台、工作区与磁盘状态")
+        ]
+        for (profile, note) in entries {
+            let id = "minis-" + profile
+            guard !servers.contains(where: { $0.id == id }) else { continue }
+            add(MCPServerConfig(id:id,note:"内置 · " + note,enabled:true,
+                command:"python3",args:["/usr/local/lib/minis-builtin-mcp/server.py","--profile",profile,"--root","/var/minis"],startupTimeoutSeconds:15))
+        }
+        if fm.fileExists(atPath:serversFileURL.path) {
+            UserDefaults.standard.set(true,forKey:"mcp.builtin.v1.installed")
+        }
     }
 
     private func readServersFromDisk() -> [MCPServerConfig] {

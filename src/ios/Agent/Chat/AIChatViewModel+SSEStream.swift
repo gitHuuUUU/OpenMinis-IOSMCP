@@ -594,12 +594,13 @@ extension AIChatViewModel {
                     // First tier matches the streaming-grow layout animation
                     // duration (0.2s) so each flushed batch glides over exactly
                     // one animation window. [T-ios-stream-grow-anim]
-                    let throttle: TimeInterval = len < 500 ? 0.20
+                    let baseThrottle: TimeInterval = len < 500 ? 0.20
                                                 : len < 2000 ? 0.30
                                                 : len < 32_000 ? 0.50
                                                 : len < 64_000 ? 1.00
                                                 : len < 128_000 ? 1.50
                                                 : 2.00
+                    let throttle = RuntimeEfficiency.underPressure ? max(baseThrottle,0.75) : baseThrottle
 
                     // Newline fast-path:
                     //   - Below 5000 chars: flush on newline + ≥50 unflushed (≈ one box-drawing
@@ -608,7 +609,7 @@ extension AIChatViewModel {
                     //     emit a newline every ~2 chars; without this gate the time throttle
                     //     is pinned at the per-chunk delay (~30ms) and the main thread melts.
                     //     Pure time throttle (300-500ms) is the only safe pacing here.
-                    let newlineFlush = len < 5000 && text.contains("\n") && unflushed >= 50
+                    let newlineFlush = !RuntimeEfficiency.thermal && len < 5000 && text.contains("\n") && unflushed >= 50
 
                     if elapsed >= throttle || newlineFlush {
                         lastTextDeltaFlush = now

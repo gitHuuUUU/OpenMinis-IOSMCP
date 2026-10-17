@@ -95,14 +95,17 @@ class SystemResourceMonitor: ObservableObject {
     private var prevCPUTicks: (user: UInt32, system: UInt32, idle: UInt32, nice: UInt32)?
 
     func start() {
+        guard timer == nil else { return }
         sampleCPU() // prime the previous ticks
         updateMemory()
-        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             DispatchQueue.main.async {
+                guard UIApplication.shared.applicationState == .active else { return }
                 self?.sampleCPU()
                 self?.updateMemory()
             }
         }
+        timer?.tolerance = 2
     }
 
     func stop() {
