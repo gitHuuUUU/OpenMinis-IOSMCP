@@ -141,6 +141,14 @@ class EfficiencyContracts(unittest.TestCase):
         self.assertIn('StrictHostKeyChecking=yes',code)
         self.assertNotIn('-o ControlMaster=auto',code)
         self.assertIn('result.exitCode==0 ? "SSH 操作成功"',code)
+    def test_guest_private_key_permissions(self):
+        code=read('src/ios/Workbench.swift')
+        self.assertIn('sh /usr/local/lib/minis-desktop-ssh/prepare.sh',code)
+        self.assertIn('-i /tmp/minis-desktop-ssh/identity',code)
+        self.assertNotIn('-i /opt/minis-desktop/identity',code)
+        prepare=read('src/ios/default_mount/usr/local/lib/minis-desktop-ssh/prepare.sh')
+        for check in ['chmod 700','chmod 600','stat -c %a','stat -c %u','mktemp','mv -f']:
+            self.assertIn(check,prepare)
     def test_animation_disabled_without_hiding_text(self):
         code=read('src/ios/Views/Chat/TextFadeAnimator.swift')
         self.assertIn('guard RuntimeEfficiency.decorativeAnimations else { cancelAll(); return }',code)

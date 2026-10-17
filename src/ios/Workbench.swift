@@ -374,9 +374,11 @@ enum WorkbenchError: LocalizedError {
         try Data(known.utf8).write(to:folder.appendingPathComponent("known_hosts"),options:.atomic)
         let setup=try await run("mkdir -p /opt/minis-desktop",timeout:120)
         guard setup.exitCode==0, ISHKernel.shared.bindMountPath("/opt/minis-desktop",toHostPath:folder.path,readOnly:true)==0 else { throw WorkbenchError.unavailable("无法挂载电脑连接密钥") }
+        let prepared=try await run("sh /usr/local/lib/minis-desktop-ssh/prepare.sh /opt/minis-desktop /tmp/minis-desktop-ssh",timeout:30)
+        guard prepared.exitCode==0 else { throw WorkbenchError.unavailable("SSH 私钥权限准备失败：\(prepared.output)") }
         func q(_ value:String)->String { "'"+value.replacingOccurrences(of:"'",with:"'\"'\"'")+"'" }
         // iSH fakefs cannot reliably host AF_UNIX sockets: do not enable ControlMaster.
-        let options=" -i /opt/minis-desktop/identity -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/opt/minis-desktop/known_hosts -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 "
+        let options=" -i /tmp/minis-desktop-ssh/identity -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/minis-desktop-ssh/known_hosts -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 "
         let action=args["action"] as? String ?? "probe"
         let command:String
         if action=="upload" || action=="download" {
