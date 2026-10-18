@@ -6681,6 +6681,11 @@ private struct TokenUsageSheet: View {
         NavigationView {
             List {
                 let s = vm.sessionTokenStats
+                Section("上下文与专家") {
+                    NavigationLink("Token 明细与上下文估算") { ContextTokenStatisticsView(viewModel: vm) }
+                    NavigationLink("当前工作区专家") { ExpertLibraryView(sessionId: vm.sessionId) }
+                    NavigationLink("提示词片段") { PromptLibraryView() }
+                }
 
                 Section("Context") {
                     StatRow(label: "Context Used", value: formatted(s.context), icon: "text.alignleft")

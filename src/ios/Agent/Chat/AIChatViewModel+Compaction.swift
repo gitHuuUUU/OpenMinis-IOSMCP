@@ -200,6 +200,12 @@ extension AIChatViewModel {
         contextCalibrationRatios = state.ratios
         lastLearnedCalibration = state.lastLearned
         contextFixedTokens = state.fixedTokens
+        if calibrationSessionId != sessionId {
+            // Associate the persisted fixed share with the currently loaded
+            // library baseline. Later edits in this session can then apply a
+            // base-prompt delta before the next capacity decision.
+            contextFixedBasePrompt = composedBaseSystemPrompt
+        }
         lastDispatchEstimate = 0
         lastDispatchModelId = nil
         lastDispatchWindow = 0
@@ -458,12 +464,11 @@ extension AIChatViewModel {
         pendingSendIsFromComposer = false
     }
 
-    /// Number of recent user-text turns kept verbatim as inference anchors when
-    /// compactAll runs. The summary stands in for everything older; the LLM
-    /// still sees the last N user-text turns + their assistant replies + tool
-    /// I/O so it can answer follow-ups that need verbatim detail (specific
-    /// commands, exact strings) rather than the summary's distilled form.
-    static let compactKeepRecentUserTurns: Int = 3
+    /// One verbatim pre-anchor turn is a bounded precision fallback for the
+    /// generated summary; all post-anchor turns remain intact. Keeping three
+    /// pre-anchor turns duplicated the summary and often the largest tool
+    /// round, making a successful compaction barely shrink the next request.
+    static let compactKeepRecentUserTurns: Int = 1
 
     /// Phase 2.5 self-heal: when a marker's `lastCompactedMessageId` no longer
     /// resolves in rawMessages (id orphaned by a v1→v2 sync migration or by a
@@ -693,8 +698,8 @@ extension AIChatViewModel {
     static func compactSummaryWrappedText(_ summary: String) -> String {
         """
         <context-summary>
-        The following is a summary of the earlier conversation that was compacted to save context space.
-        Treat it as background context only. The user's most recent message (below or in the next turn) takes precedence — if it changes the task, the goal, or any numbers/scope, follow the new instruction and do not resume the old plan from this summary. Do not re-run discovery (reading memory, scanning skills, re-reading files) unless the new instruction requires it.
+        The following is a summary of earlier conversation compacted to save context space.
+        Preserve unfinished user goals and constraints from this summary unless the latest user message changes them. The latest user message takes precedence. Do not repeat completed discovery unless the current task needs it.
 
         \(summary)
         </context-summary>
@@ -1595,7 +1600,7 @@ extension AIChatViewModel {
         MUST PRESERVE (never omit or shorten):
         - All file paths, directory names, URLs, UUIDs, and identifiers — copy verbatim
         - Commands executed and their outcomes (success/failure/output)
-        - What was requested and what was done (record as past events, not as ongoing goals)
+        - What was requested, what was done, and which user requests remain unfinished
         - Key decisions made and their rationale
         - Errors encountered and how they were resolved
         - Important constraints, rules, or user preferences mentioned
@@ -1605,9 +1610,8 @@ extension AIChatViewModel {
         1. Start with a one-line description of what the conversation was about (use past tense — \
            "User asked X, agent did Y", NOT "Goal: X").
         2. Then a concise narrative of what happened, preserving technical details.
-        3. End with a "What had been done so far" section listing completed work — NOT a "todo" \
-           or "pending" list. Do not invent ongoing objectives or carry-over tasks from old turns; \
-           if the user wants to continue, they will say so in their next message.
+        3. End with distinct "Completed" and "Still pending" sections. Include pending work only \
+           when it was explicitly requested and not completed; do not invent new tasks.
 
         PRIORITIZE recent context over older history — recent decisions and recent file/path \
         references are most useful for continuity.
@@ -1665,7 +1669,7 @@ extension AIChatViewModel {
 
         Now generate a structured context summary following the system prompt instructions. \
         Do NOT continue the conversation above — summarize it. Write everything in past tense, \
-        framed as "what was discussed / what was done", NOT as an ongoing goal or todo list.
+        framed as "what was discussed / what was done / what remains pending".
         """
 
         let stream = try await provider.streamMessage(

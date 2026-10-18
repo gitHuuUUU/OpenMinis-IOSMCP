@@ -1,0 +1,211 @@
+#!/usr/bin/env python3
+"""Bounded, read-only search in one explicitly selected Linux directory.
+
+Input is a base64-encoded UTF-8 JSON object in argv[1]; output is one JSON
+object on stdout. No shell syntax or subprocesses are evaluated here.
+"""
+import base64
+import fnmatch
+import json
+import os
+import re
+import signal
+import stat
+import sys
+import time
+
+IGNORED_DIRS = {".git", ".hg", ".svn", "node_modules", "vendor", "dist", "build", ".build", "DerivedData", "Pods", "__pycache__", ".venv", "venv", ".next", ".gradle"}
+IGNORED_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".zip", ".tar", ".gz", ".sqlite", ".db", ".mp4", ".mov", ".mp3", ".wav", ".a", ".o", ".so", ".dylib", ".class", ".pyc", ".ipa", ".apk"}
+
+
+def integer(value, default, low, high):
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        value = default
+    return max(low, min(value, high))
+
+
+def search(options):
+    root = options.get("root", "/var/minis/workspace")
+    query = options.get("query", "")
+    mode = options.get("mode", "content")
+    if not isinstance(root, str) or not os.path.isabs(root):
+        return {"status": "error", "error": "root must be an absolute Linux directory"}
+    if os.path.islink(root):
+        return {"status": "error", "error": "root symlinks are not searched"}
+    if not isinstance(query, str) or not query or len(query) > 256:
+        return {"status": "error", "error": "query must contain 1–256 characters"}
+    if mode not in ("name", "content"):
+        return {"status": "error", "error": "mode must be name or content"}
+    try:
+        root_stat = os.stat(root)
+        if not stat.S_ISDIR(root_stat.st_mode):
+            return {"status": "error", "error": "root is not a directory"}
+        # Permission checks via actual scandir (root under iSH can be mounted).
+        with os.scandir(root) as entries:
+            next(entries, None)  # do not materialize an unbounded directory
+    except OSError as exc:
+        return {"status": "unavailable", "error": "%s: %s" % (root, exc.strerror or exc)}
+
+    regex = bool(options.get("regex", False))
+    case_sensitive = bool(options.get("case_sensitive", False))
+    include_ignored = bool(options.get("include_ignored", False))
+    glob = options.get("glob", "*")
+    if not isinstance(glob, str) or len(glob) > 256:
+        return {"status": "error", "error": "glob must be a string of at most 256 characters"}
+    encoding = options.get("encoding", "utf-8")
+    if encoding not in ("utf-8", "utf-8-sig", "utf-16-le", "utf-16-be", "latin-1"):
+        return {"status": "error", "error": "unsupported encoding"}
+    offset = integer(options.get("offset"), 0, 0, 100000)
+    limit = integer(options.get("limit"), 50, 1, 200)
+    max_files = integer(options.get("max_files"), 5000, 1, 20000)
+    max_bytes = integer(options.get("max_bytes"), 16_000_000, 1024, 64_000_000)
+    max_file_bytes = integer(options.get("max_file_bytes"), 1_000_000, 1024, 4_000_000)
+    timeout = integer(options.get("timeout"), 10, 1, 30)
+    matcher = None
+    if regex:
+        try:
+            matcher = re.compile(query, 0 if case_sensitive else re.IGNORECASE)
+        except re.error as exc:
+            return {"status": "error", "error": "invalid regex: %s" % exc}
+    needle = query if case_sensitive else query.casefold()
+    started = time.monotonic()
+    deadline = started + timeout
+    stats = {"visited_files": 0, "read_bytes": 0, "skipped_binary": 0, "skipped_large": 0, "skipped_encoding": 0, "skipped_unreadable": 0, "skipped_ignored": 0}
+    results = []
+    seen = 0
+    stop_reason = None
+    errors = []
+
+    def matches(s):
+        if matcher is not None:
+            return matcher.search(s) is not None
+        return needle in (s if case_sensitive else s.casefold())
+
+    def add(rel, line=None, snippet=None):
+        nonlocal seen
+        if seen >= offset and len(results) < limit:
+            item = {"path": os.path.join(root, rel), "relative_path": rel}
+            if line is not None:
+                item.update(line=line, snippet=snippet[:240])
+            results.append(item)
+        seen += 1
+
+    def scan_error(exc):
+        stats["skipped_unreadable"] += 1
+        if len(errors) < 5:
+            errors.append(str(exc))
+
+    stack = [(root, "")]
+    try:
+        while stack:
+            if time.monotonic() >= deadline:
+                stop_reason = "timeout"
+                break
+            directory, prefix = stack.pop()
+            try:
+                with os.scandir(directory) as listing:
+                    entries = sorted(list(listing), key=lambda e: e.name)
+            except OSError as exc:
+                scan_error(exc)
+                continue
+            for entry in entries:
+                if time.monotonic() >= deadline:
+                    stop_reason = "timeout"
+                    break
+                rel = prefix + entry.name
+                try:
+                    if entry.is_symlink():
+                        continue  # do not traverse/read links out of the selected root
+                    if entry.is_dir(follow_symlinks=False):
+                        if include_ignored or entry.name not in IGNORED_DIRS:
+                            stack.append((entry.path, rel + "/"))
+                        else:
+                            stats["skipped_ignored"] += 1
+                        continue
+                    if not entry.is_file(follow_symlinks=False):
+                        continue
+                    if not include_ignored and os.path.splitext(entry.name)[1].lower() in IGNORED_SUFFIXES:
+                        stats["skipped_ignored"] += 1
+                        continue
+                    if not fnmatch.fnmatch(rel, glob) and not fnmatch.fnmatch(entry.name, glob):
+                        continue
+                    if stats["visited_files"] >= max_files:
+                        stop_reason = "max_files"
+                        break
+                    stats["visited_files"] += 1
+                    if mode == "name":
+                        if matches(rel):
+                            add(rel)
+                    else:
+                        size = entry.stat(follow_symlinks=False).st_size
+                        if size > max_file_bytes:
+                            stats["skipped_large"] += 1
+                            continue
+                        if stats["read_bytes"] + size > max_bytes:
+                            stop_reason = "max_bytes"
+                            break
+                        with open(entry.path, "rb") as handle:
+                            data = handle.read(max_file_bytes + 1)
+                        stats["read_bytes"] += len(data)
+                        if len(data) > max_file_bytes:
+                            stats["skipped_large"] += 1
+                            continue
+                        if b"\0" in data[:4096] and not encoding.startswith("utf-16"):
+                            stats["skipped_binary"] += 1
+                            continue
+                        try:
+                            content = data.decode(encoding)
+                        except UnicodeDecodeError:
+                            stats["skipped_encoding"] += 1
+                            continue
+                        for lineno, line in enumerate(content.splitlines(), 1):
+                            if time.monotonic() >= deadline:
+                                stop_reason = "timeout"
+                                break
+                            # A pathological regex cannot consume unbounded time on one huge line.
+                            if matches(line[:4096]):
+                                add(rel, lineno, line.strip())
+                                if seen >= offset + limit + 1:
+                                    stop_reason = "page_full"
+                                    break
+                    if seen >= offset + limit + 1:
+                        stop_reason = "page_full"
+                        break
+                except OSError as exc:
+                    scan_error(exc)
+            if stop_reason:
+                break
+    except TimeoutError:
+        stop_reason = "timeout"
+
+    return {"status": "partial" if stop_reason and stop_reason != "page_full" or errors else "ok",
+            "root": root, "mode": mode, "query": query, "results": results,
+            "next_offset": offset + len(results) if seen > offset + len(results) else None,
+            "has_more": seen > offset + len(results), "stop_reason": stop_reason,
+            "stats": stats, "errors": errors}
+
+
+def main():
+    try:
+        if len(sys.argv) != 2:
+            raise ValueError("expected one base64 JSON argument")
+        options = json.loads(base64.b64decode(sys.argv[1], validate=True).decode("utf-8"))
+        if not isinstance(options, dict):
+            raise ValueError("search request must be a JSON object")
+        # SIGALRM interrupts catastrophic regex backtracking too. iSH uses
+        # POSIX signals; platforms without setitimer still use deadline checks.
+        if hasattr(signal, "setitimer"):
+            signal.signal(signal.SIGALRM, lambda *_: (_ for _ in ()).throw(TimeoutError()))
+            signal.setitimer(signal.ITIMER_REAL, integer(options.get("timeout"), 10, 1, 30) + 1)
+        result = search(options)
+    except (ValueError, UnicodeError, json.JSONDecodeError) as exc:
+        result = {"status": "error", "error": str(exc)}
+    except TimeoutError:
+        result = {"status": "partial", "error": "search timed out"}
+    print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
+
+
+if __name__ == "__main__":
+    main()

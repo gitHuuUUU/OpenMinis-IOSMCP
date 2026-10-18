@@ -8,6 +8,18 @@ private let logger = AppLogger(category: "AIChatVM")
 
 extension AIChatViewModel {
 
+    /// Protect the most recent user-authored input (including an image-only
+    /// prompt), but not synthetic user rows containing only tool results.
+    static func latestUserTurnIndexToPreserve(in history: [AgentMessage]) -> Int? {
+        history.lastIndex { msg in
+            msg.role == .user && msg.parts.contains { part in
+                if case .text(let value) = part { return !value.isEmpty }
+                if case .imageData = part { return true }
+                return false
+            }
+        }
+    }
+
     // MARK: - Context Window Offloading
 
     /// Marker that opens every offload stub written into `agentHistory`.
@@ -83,30 +95,33 @@ extension AIChatViewModel {
         String(toolId.suffix(12))
     }
 
-    private func offloadContextContent(_ content: String, toolId: String, toolName: String, ext: String = "txt") -> String {
+    private func offloadContextContent(_ content: String, toolId: String, toolName: String, ext: String = "txt") -> String? {
         let fm = FileManager.default
         let sid = sessionId ?? "unknown"
         let persistDir = Self.minisOffloadsPersistentDir(for: sid)
             .appendingPathComponent("tools", isDirectory: true)
-        try? fm.createDirectory(at: persistDir, withIntermediateDirectories: true)
+        do { try fm.createDirectory(at: persistDir, withIntermediateDirectories: true) }
+        catch { logger.error("Context offload directory creation failed: \(error)"); return nil }
 
         let sanitizedName = toolName.isEmpty ? "tool" : toolName.replacingOccurrences(of: "/", with: "_")
         let shortId = Self.shortToolId(toolId)
         let fileName = "\(sanitizedName)_\(shortId).\(ext)"
         let persistPath = persistDir.appendingPathComponent(fileName)
-        try? content.write(to: persistPath, atomically: true, encoding: .utf8)
+        do { try content.write(to: persistPath, atomically: true, encoding: .utf8) }
+        catch { logger.error("Context offload text write failed: \(error)"); return nil }
 
         return "\(Self.minisOffloadsLinuxDir)/tools/\(fileName)"
     }
 
     /// Save context image data to disk for later retrieval.
     /// Returns the Linux-visible path where the file was saved.
-    private func offloadContextImage(_ data: Data, toolId: String, mimeType: String) -> String {
+    private func offloadContextImage(_ data: Data, toolId: String, mimeType: String) -> String? {
         let fm = FileManager.default
         let sid = sessionId ?? "unknown"
         let persistDir = Self.minisOffloadsPersistentDir(for: sid)
             .appendingPathComponent("tools", isDirectory: true)
-        try? fm.createDirectory(at: persistDir, withIntermediateDirectories: true)
+        do { try fm.createDirectory(at: persistDir, withIntermediateDirectories: true) }
+        catch { logger.error("Context offload directory creation failed: \(error)"); return nil }
 
         let ext: String
         switch mimeType {
@@ -120,7 +135,8 @@ extension AIChatViewModel {
         let shortId = Self.shortToolId(toolId)
         let fileName = "image_\(shortId).\(ext)"
         let persistPath = persistDir.appendingPathComponent(fileName)
-        try? data.write(to: persistPath)
+        do { try data.write(to: persistPath, options: .atomic) }
+        catch { logger.error("Context offload image write failed: \(error)"); return nil }
 
         return "\(Self.minisOffloadsLinuxDir)/tools/\(fileName)"
     }
@@ -323,6 +339,7 @@ extension AIChatViewModel {
                         snapshotPath = nil
                     } else {
                         snapshotPath = offloadContextImage(data, toolId: id, mimeType: mime ?? "image/jpeg")
+                        guard snapshotPath != nil else { continue } // Never discard an unrecoverable image.
                         snapshotsWritten += 1
                     }
 
@@ -345,7 +362,7 @@ extension AIChatViewModel {
                     // Standalone image (user attachment) — no tool id, no
                     // recoverable original path. Always snapshot.
                     let synthId = "img-\(sessionId ?? "s")-\(mi)-\(pi)"
-                    let snap = offloadContextImage(data, toolId: synthId, mimeType: mime)
+                    guard let snap = offloadContextImage(data, toolId: synthId, mimeType: mime) else { continue }
                     snapshotsWritten += 1
                     let placeholder = Self.imagePlaceholderText(
                         data: data, originalPath: nil, snapshotPath: snap
@@ -508,10 +525,12 @@ extension AIChatViewModel {
         }
         logger.info("  Agent history: \(self.agentHistory.count) messages")
 
-        // Protect the last 4 messages from offloading
-        let protectedCount = min(4, agentHistory.count)
-        let candidateRange = 0..<(agentHistory.count - protectedCount)
-        logger.info("  Scanning messages 0..<\(candidateRange.upperBound) (last \(protectedCount) protected)")
+        // Preserve the latest user's text and attachments, not an arbitrary
+        // four-message suffix. A large completed tool result in that suffix
+        // used to be immune to budgeting and could overflow the next request.
+        let lastUserTurn = Self.latestUserTurnIndexToPreserve(in: agentHistory)
+        let candidateRange = 0..<agentHistory.count
+        logger.info("  Scanning messages 0..<\(candidateRange.upperBound) (latest user turn \(lastUserTurn.map(String.init) ?? "none") preserved)")
 
         // Collect offload candidates: (messageIndex, partIndex, tokenCount, byteCount)
         struct OffloadCandidate {
@@ -548,6 +567,7 @@ extension AIChatViewModel {
         }
 
         for msgIdx in candidateRange {
+            if msgIdx == lastUserTurn { continue }
             let msg = agentHistory[msgIdx]
             for (partIdx, part) in msg.parts.enumerated() {
                 switch part {
@@ -668,25 +688,28 @@ extension AIChatViewModel {
 
             switch part {
             case .toolResult(let id, let name, let content, let isError, let imgData, let imgMime, _, _, _):
-                // Offload text content
+                var paths: [String] = []
                 if content.count > 500 {
-                    linuxPath = offloadContextContent(content, toolId: id, toolName: name)
+                    guard let path = offloadContextContent(content, toolId: id, toolName: name) else { continue }
+                    paths.append(path)
                 }
-                // Offload image data
                 if let imgData = imgData, imgData.count > 1024 {
-                    let imgPath = offloadContextImage(imgData, toolId: id, mimeType: imgMime ?? "image/png")
-                    if linuxPath.isEmpty { linuxPath = imgPath }
+                    guard let path = offloadContextImage(imgData, toolId: id, mimeType: imgMime ?? "image/png") else { continue }
+                    paths.append(path)
                 }
-
-                let stub = "\(Self.offloadedStubPrefix) Content (~\(candidate.tokens) tokens, \(candidate.bytes) bytes) saved to: \(linuxPath)\nUse file_read tool to retrieve if needed."
+                guard !paths.isEmpty else { continue }
+                linuxPath = paths.joined(separator: ", ")
+                let stub = "\(Self.offloadedStubPrefix) Content (~\(candidate.tokens) tokens, \(candidate.bytes) bytes) saved to: \(linuxPath)\nUse file_read for text or read_image for images if needed."
                 agentHistory[candidate.msgIdx].parts[candidate.partIdx] = .toolResult(
                     id: id, name: name, content: stub, isError: isError
                 )
 
             case .toolUse(let id, let name, let input, _):
                 if let content = input["content"] as? String {
-                    linuxPath = offloadContextContent(content, toolId: id, toolName: name)
+                    guard let path = offloadContextContent(content, toolId: id, toolName: name) else { continue }
+                    linuxPath = path
                 }
+                guard !linuxPath.isEmpty else { continue }
                 var newInput = input
                 // [T-offload-stub-system-reminder issue #374] A pruned ARGUMENT
                 // gets the <system-reminder> notice, not the old content-shaped
@@ -701,8 +724,9 @@ extension AIChatViewModel {
                 )
 
             case .imageData(let data, let mime, _):
-                linuxPath = offloadContextImage(data, toolId: candidate.toolId, mimeType: mime)
-                let stub = "\(Self.offloadedStubPrefix) Image (~\(candidate.tokens) tokens, \(candidate.bytes) bytes) saved to: \(linuxPath)\nUse file_read tool to retrieve if needed."
+                guard let path = offloadContextImage(data, toolId: candidate.toolId, mimeType: mime) else { continue }
+                linuxPath = path
+                let stub = "\(Self.offloadedStubPrefix) Image (~\(candidate.tokens) tokens, \(candidate.bytes) bytes) saved to: \(linuxPath)\nUse read_image to retrieve if needed."
                 agentHistory[candidate.msgIdx].parts[candidate.partIdx] = .text(stub)
 
             case .text:

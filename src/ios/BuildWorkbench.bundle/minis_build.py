@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Real build/inspection adapter. Exit status and output hashes are never simulated."""
 import re
-import argparse, hashlib, json, os, pathlib, plistlib, shutil, subprocess, sys, tarfile, tempfile, zipfile, stat
+import argparse, hashlib, json, os, pathlib, plistlib, shutil, subprocess, sys, tarfile, tempfile, zipfile, stat, urllib.request
 HERE=pathlib.Path(__file__).resolve().parent
 SDK_HOME=pathlib.Path(os.environ.get('THEOS','/opt/theos'))/'sdks'
 def run(args,cwd=None):
@@ -14,49 +14,99 @@ def sha(p):
     with open(p,'rb') as f:
         for b in iter(lambda:f.read(1024*1024),b''):h.update(b)
     return h.hexdigest()
+def sdk_catalog():
+    items=json.loads((HERE/'sdk-catalog.json').read_text(encoding='utf-8'))['sdks']
+    if len({i['version'] for i in items})!=len(items):raise ValueError('Duplicate SDK version in catalog')
+    for i in items:
+        if not re.fullmatch(r'\d+\.\d+',i['version']) or i['sdkRoot']!='iPhoneOS'+i['version']+'.sdk':raise ValueError('Invalid SDK catalog path')
+        if i['file'] not in (i['sdkRoot']+'.zip',i['sdkRoot']+'.tar.xz'):raise ValueError('Invalid SDK archive name')
+        if not i['url'].startswith('https://') or not re.fullmatch(r'[0-9a-f]{64}',i['sha256']) or not isinstance(i['bytes'],int) or i['bytes']<=0:raise ValueError('Invalid SDK catalog integrity metadata')
+    return items
+def sdk_valid(path):
+    return (path/'System/Library/Frameworks/Foundation.framework/Headers/Foundation.h').is_file() and (path/'usr/lib/libSystem.tbd').is_file()
+def sdk_status():
+    return {'sdks':[{'version':i['version'],'bytes':i['bytes'],'installed':sdk_valid(SDK_HOME/i['sdkRoot']),'path':str(SDK_HOME/i['sdkRoot'])} for i in sdk_catalog()],'default':'16.5'}
+def archive_path(root,name):
+    # Resolve against staging, rejecting absolute and Windows-style paths on every host.
+    if not name or name.startswith('/') or '\\' in name or any(x in ('..','') for x in name.rstrip('/').split('/')) or ':' in name:raise ValueError('archive path escapes staging: '+name)
+    path=root/name
+    if not inside(root,path):raise ValueError('archive path escapes staging: '+name)
+    return path
 def extract_sdk(archive,destination):
-    root=pathlib.Path(destination)
+    root=pathlib.Path(destination);root.mkdir(parents=True,exist_ok=True)
     if archive.name.endswith('.zip'):
         with zipfile.ZipFile(archive) as z:
-            for i in z.infolist():
-                if i.filename.startswith('__MACOSX/'):continue
-                p=root/i.filename
-                if not inside(root,p):raise ValueError('archive path escapes staging')
-                p.parent.mkdir(parents=True,exist_ok=True)
-                mode=i.external_attr>>16
-                if i.is_dir():p.mkdir(exist_ok=True)
-                elif stat.S_ISLNK(mode):
-                    target=z.read(i).decode()
-                    if not inside(root,p.parent/target):raise ValueError('symlink escapes staging')
-                    p.symlink_to(target)
+            members=[i for i in z.infolist() if not i.filename.startswith('__MACOSX/')]
+            links={i.filename.rstrip('/') for i in members if stat.S_ISLNK(i.external_attr>>16)}
+            for i in members:
+                archive_path(root,i.filename)
+                if any(i.filename.startswith(link+'/') for link in links):raise ValueError('archive entry below symlink')
+            for i in members:
+                p=archive_path(root,i.filename)
+                if stat.S_ISLNK(i.external_attr>>16):continue
+                if i.is_dir():p.mkdir(parents=True,exist_ok=True)
                 else:
+                    p.parent.mkdir(parents=True,exist_ok=True)
                     with z.open(i) as src,open(p,'wb') as dst:shutil.copyfileobj(src,dst)
+            for i in members:
+                if not stat.S_ISLNK(i.external_attr>>16):continue
+                p=archive_path(root,i.filename);target=z.read(i).decode('utf-8')
+                if target.startswith('/') or '\\' in target or not inside(root,p.parent/target):raise ValueError('symlink escapes staging')
+                p.parent.mkdir(parents=True,exist_ok=True);p.symlink_to(target)
     else:
         with tarfile.open(archive) as t:
-            t.extractall(root,filter='data')
-def install_sdks():
-    catalog=json.loads((HERE/'sdk-catalog.json').read_text())
+            members=t.getmembers();links={i.name.rstrip('/') for i in members if i.issym()}
+            for i in members:
+                archive_path(root,i.name)
+                if any(i.name.startswith(link+'/') for link in links):raise ValueError('archive entry below symlink')
+                if not (i.isfile() or i.isdir() or i.issym()):raise ValueError('Unsupported SDK archive member: '+i.name)
+            for i in members:
+                p=archive_path(root,i.name)
+                if i.issym():continue
+                if i.isdir():p.mkdir(parents=True,exist_ok=True)
+                else:
+                    p.parent.mkdir(parents=True,exist_ok=True)
+                    with t.extractfile(i) as src,open(p,'wb') as dst:shutil.copyfileobj(src,dst)
+            for i in members:
+                if not i.issym():continue
+                p=archive_path(root,i.name);target=i.linkname
+                if target.startswith('/') or '\\' in target or not inside(root,p.parent/target):raise ValueError('symlink escapes staging')
+                p.parent.mkdir(parents=True,exist_ok=True);p.symlink_to(target)
+def download_sdk(item,destination,opener=None):
+    digest=hashlib.sha256();count=0
+    request=urllib.request.Request(item['url'],headers={'User-Agent':'Minis-SDK-Installer/1'})
+    opener=opener or urllib.request.urlopen
+    with opener(request,timeout=120) as response,open(destination,'wb') as output:
+        while True:
+            chunk=response.read(1024*1024)
+            if not chunk:break
+            count+=len(chunk)
+            if count>item['bytes']:raise ValueError('SDK download exceeds catalog byte count')
+            output.write(chunk);digest.update(chunk)
+    if count!=item['bytes']:raise ValueError('SDK byte count mismatch: got '+str(count))
+    if digest.hexdigest()!=item['sha256']:raise ValueError('SDK SHA256 mismatch')
+    return count
+def install_sdk(version):
+    item=next((i for i in sdk_catalog() if i['version']==version),None)
+    if item is None:raise ValueError('Unknown SDK version: '+version)
     SDK_HOME.mkdir(parents=True,exist_ok=True)
-    if shutil.disk_usage(SDK_HOME).free<2_000_000_000:raise RuntimeError('Installing four SDKs requires at least 2 GB free space')
-    for item in catalog['sdks']:
-        archive=HERE/item['file']
-        print('VERIFY SDK '+item['version'],flush=True)
-        if sha(archive)!=item['sha256']:raise ValueError('SDK SHA256 mismatch')
-        with tempfile.TemporaryDirectory(prefix='.sdk-stage-',dir=SDK_HOME) as d:
-            extract_sdk(archive,pathlib.Path(d))
-            sdk=pathlib.Path(d)/item['sdkRoot']
-            assert (sdk/'System/Library/Frameworks/Foundation.framework/Headers/Foundation.h').is_file(),'Foundation headers missing'
-            assert (sdk/'usr/lib/libSystem.tbd').is_file(),'libSystem link stubs missing'
-            target=SDK_HOME/item['sdkRoot'];backup=SDK_HOME/(item['sdkRoot']+'.minis-backup')
-            if backup.exists():raise RuntimeError('Previous SDK backup exists; preserve and inspect before replacing: '+str(backup))
-            if target.exists():target.rename(backup)
-            try:sdk.rename(target)
-            except BaseException:
-                if backup.exists():backup.rename(target)
-                raise
-            if backup.exists():shutil.rmtree(backup)
-        print('INSTALLED '+str(target),flush=True)
-    return {'sdkVersions':[x['version'] for x in catalog['sdks']],'status':'installed; build probes still required'}
+    target=SDK_HOME/item['sdkRoot']
+    if target.exists():
+        if sdk_valid(target):return {'version':version,'path':str(target),'status':'already installed; existing SDK preserved'}
+        raise RuntimeError('Existing SDK directory is incomplete; preserve and inspect before replacing: '+str(target))
+    if shutil.disk_usage(SDK_HOME).free<2_000_000_000:raise RuntimeError('Installing selected SDK requires at least 2 GB free space')
+    with tempfile.TemporaryDirectory(prefix='.sdk-stage-',dir=SDK_HOME) as d:
+        stage=pathlib.Path(d);archive=stage/item['file'];extract=stage/'extract'
+        print('DOWNLOAD SDK '+version+' '+item['url'],flush=True)
+        count=download_sdk(item,archive)
+        print('VERIFIED SDK '+version+' bytes='+str(count)+' sha256='+item['sha256'],flush=True)
+        extract_sdk(archive,extract)
+        sdk=extract/item['sdkRoot']
+        if not sdk_valid(sdk):raise RuntimeError('SDK headers or link stubs missing')
+        if target.exists():raise RuntimeError('SDK target appeared during install; existing SDK preserved: '+str(target))
+        sdk.rename(target)
+    print('INSTALLED '+str(target),flush=True)
+    return {'version':version,'path':str(target),'bytes':count,'sha256':item['sha256'],'status':'installed; build probes still required'}
 def doctor():
     probes={
       'clang':['clang','--version'],'MachO linker':['ld64.lld','--version'],
@@ -73,7 +123,7 @@ def doctor():
             p=subprocess.run(cmd,capture_output=True,text=True,timeout=20)
             result[label]={'ready':p.returncode==0,'exitCode':p.returncode,'detail':(p.stdout+p.stderr)[-2000:]}
         except Exception as e:result[label]={'ready':False,'detail':str(e)}
-    result['SDKs']=[p.name for p in SDK_HOME.glob('iPhoneOS*.sdk') if (p/'usr/lib/libSystem.tbd').exists()]
+    result['SDKs']=[p.name for p in SDK_HOME.glob('iPhoneOS*.sdk') if sdk_valid(p)]
     for module in ['PIL','openpyxl','reportlab','docx','pypdf','matplotlib','pefile','lief','dnfile']:
         try:__import__(module);result['Python '+module]={'ready':True}
         except ImportError:result['Python '+module]={'ready':False,'detail':'module missing'}
@@ -184,11 +234,12 @@ def build(args):
     return {'artifact':str(out),'bytes':out.stat().st_size,'sha256':sha(out),'status':'built; execution/device verification separate'}
 def main():
     p=argparse.ArgumentParser();sub=p.add_subparsers(dest='action',required=True)
-    sub.add_parser('doctor');sub.add_parser('install-sdks')
+    sub.add_parser('doctor');sub.add_parser('sdk-status')
+    install=sub.add_parser('install-sdk');install.add_argument('--sdk',choices=[i['version'] for i in sdk_catalog()],required=True)
     b=sub.add_parser('build');b.add_argument('--target',choices=['dylib','deb','ipa','apk','exe'],required=True);b.add_argument('--project',required=True);b.add_argument('--output',required=True);b.add_argument('--sdk',choices=['15.6','16.5','17.5','18.6'],default='16.5');b.add_argument('--minimum',default='15.4');b.add_argument('--remote',default='')
     args=p.parse_args()
     try:
-        result=doctor() if args.action=='doctor' else install_sdks() if args.action=='install-sdks' else build(args)
+        result=doctor() if args.action=='doctor' else sdk_status() if args.action=='sdk-status' else install_sdk(args.sdk) if args.action=='install-sdk' else build(args)
         print(json.dumps(result,ensure_ascii=False,indent=2))
     except Exception as e:print(json.dumps({'error':str(e),'status':'failed'},ensure_ascii=False),file=sys.stderr);sys.exit(1)
 if __name__=='__main__':main()

@@ -136,6 +136,25 @@ extension AIChatViewModel {
             )
         }
 
+        // A helper's expert profile is an execution policy, not merely a
+        // schema hint: a stale/replayed/hallucinated tool call cannot bypass it.
+        if let profile = helperConfig?.expertProfile, !profile.allowsTool(tu.name) {
+            let denied = "Error: tool \(tu.name) is unavailable to this expert profile. No operation was executed."
+            if msgIdx < messages.count, blockIdx < messages[msgIdx].blocks.count {
+                messages[msgIdx].blocks[blockIdx].content = denied
+                messages[msgIdx].blocks[blockIdx].toolStatus = .failed(message: denied)
+            }
+            let snapshot = ToolSnapshot(type: .text, text: denied, mediaRef: nil, duration: nil)
+            return ToolExecOutcome(
+                toolId: tu.id, toolName: tu.name,
+                resultPart: .toolResult(id: tu.id, name: tu.name, content: denied, isError: true),
+                snapshotEntry: (toolName: tu.name, snapshot: snapshot),
+                snapshotItem: ToolSnapshotItem(id: tu.id, toolName: tu.name, snapshot: snapshot,
+                                               mediaResolver: await ChatStore.shared.mediaFileURLResolver()),
+                cancelled: false
+            )
+        }
+
         var toolOutput: String = ""
         var toolSuccess: Bool = false
         var toolImageData: Data?
@@ -613,6 +632,33 @@ extension AIChatViewModel {
                 ctLogger.info("[EnvVarRedact] shell_execute: masked \(redactHits) env-var value(s) in tool result")
             }
             toolOutput = redactedOut
+
+        case "workspace_search":
+            // Base64 JSON becomes one quoted argument; neither query nor root
+            // is ever interpolated as shell syntax.
+            let payload = Data(argsJson.utf8).base64EncodedString()
+            let timeout = min(30, max(1, (toolArgs["timeout"] as? Int) ?? 10))
+            do {
+                let result = try await executeCommand(
+                    "if ! command -v python3 >/dev/null 2>&1; then apk add --no-cache python3 >/dev/null 2>&1 || { echo 'Python runtime unavailable: apk install failed'; exit 127; }; fi; python3 /usr/local/bin/minis-workspace-search '\(payload)'",
+                    timeout: TimeInterval(timeout + 180), lineCallback: { _ in })
+                toolOutput = result.output
+                if result.exitCode == 0,
+                   let data = result.output.data(using: .utf8),
+                   let response = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let status = response["status"] as? String {
+                    toolSuccess = status == "ok" || status == "partial"
+                } else {
+                    toolOutput = "Workspace search unavailable: \(result.output)"
+                    toolSuccess = false
+                }
+            } catch {
+                toolOutput = "Workspace search unavailable: \(error.localizedDescription)"
+                toolSuccess = false
+            }
+            if msgIdx < messages.count, blockIdx < messages[msgIdx].blocks.count {
+                messages[msgIdx].blocks[blockIdx].content = toolOutput
+            }
 
         case "file_read":
             let fileResult: FileToolResult

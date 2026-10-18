@@ -796,6 +796,10 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     /// prefix stays stable across turns (see trimWarmUpToFit).
     var warmUpDropByMarker: [String: Int] = [:]
     var contextFixedTokens = 0
+    /// Base-prompt snapshot paired with contextFixedTokens. A Prompt Library
+    /// edit can happen between turns; carry its estimated delta into the
+    /// pre-send meter rather than waiting for the in-loop full measurement.
+    var contextFixedBasePrompt: String?
     var lastDispatchEstimate = 0
     /// [T-ctx-overflow-attribute-dispatch] Model id and window of the request
     /// in flight, so a rejection is attributed to the model that received it.
@@ -1272,6 +1276,34 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     var sessionInputTokens: Int = 0
     /// Cumulative output tokens across all API calls in this session.
     var sessionOutputTokens: Int = 0
+
+    /// UI-facing statistics deliberately distinguish provider-reported usage
+    /// (persisted in per-call records and restored on session load) from the
+    /// calibrated estimate for the *next* request. Neither number is a claimed
+    /// token saving; the two describe different requests after compaction.
+    struct ContextEfficiencyStats {
+        let actualFreshInputTokens: Int
+        let actualCacheReadTokens: Int
+        let actualCacheWriteTokens: Int
+        let actualOutputTokens: Int
+        let actualLastReportedContextTokens: Int?
+        let estimatedNextContextTokens: Int
+        let modelContextWindow: Int?
+    }
+
+    var contextEfficiencyStats: ContextEfficiencyStats {
+        ensureContextFixedTokens()
+        let last = messages.last(where: { $0.role == .assistant && ($0.usage?.latestContextTokens ?? 0) > 0 })
+        return ContextEfficiencyStats(
+            actualFreshInputTokens: sessionInputTokens,
+            actualCacheReadTokens: sessionCacheReadTokens,
+            actualCacheWriteTokens: sessionCacheWriteTokens,
+            actualOutputTokens: sessionOutputTokens,
+            actualLastReportedContextTokens: last?.usage?.latestContextTokens,
+            estimatedNextContextTokens: measureOutboundContextTokens(),
+            modelContextWindow: currentModelContextWindow
+        )
+    }
 
     /// Session-level token totals.
     var sessionTokenStats: (input: Int, output: Int, cacheRead: Int, cacheWrite: Int, context: Int, loopCount: Int) {
@@ -2458,9 +2490,49 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     /// it; the loop replaces this with the exact figure (skills, MCP and memory
     /// fragments included) before its first request.
     func ensureContextFixedTokens() {
-        guard contextFixedTokens == 0 else { return }
-        contextFixedTokens = ContextSizeMeter.estimateFixedTokens(systemPrompt: baseSystemPrompt,
-                                                                  tools: makeAgentTools())
+        let currentBase = composedBaseSystemPrompt
+        if contextFixedTokens == 0 {
+            contextFixedTokens = ContextSizeMeter.estimateFixedTokens(systemPrompt: currentBase,
+                                                                      tools: makeAgentTools())
+        } else if let oldBase = contextFixedBasePrompt, oldBase != currentBase {
+            // Only the base changed. Preserve the previously measured share of
+            // skill/MCP/memory fragments and tool schemas; the full prompt is
+            // measured again at the next actual dispatch.
+            let oldTokens = ContextSizeMeter.estimateTokens(oldBase)
+            let newTokens = ContextSizeMeter.estimateTokens(currentBase)
+            contextFixedTokens = max(1, contextFixedTokens - oldTokens + newTokens)
+        }
+        contextFixedBasePrompt = currentBase
+    }
+
+    /// The app's customizable prompt library is assembled once at the actual
+    /// request boundary, not merely previewed in settings. Provider fallbacks
+    /// and the context meter consume this same base.
+    var composedBaseSystemPrompt: String {
+        if let profile = helperConfig?.expertProfile {
+            let childBase = profile.injectFullRules ? baseSystemPrompt
+                : helperIdentitySection + (profile.injectBaseline ? "\n\n" + ExpertProfile.baseline : "")
+            return childBase
+        }
+        return PromptLibraryStore.shared.compose(base: baseSystemPrompt)
+    }
+
+    /// A skill, MCP listing, or memory note can also be present in a selected
+    /// custom prompt fragment. Do not send the same complete block twice.
+    private static func appendUniquePromptFragment(_ fragment: String, to prompt: inout String) {
+        let text = fragment.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !prompt.contains(text) else { return }
+        prompt += "\n\n" + text
+    }
+
+    private func appendExpertPromptFragments(to prompt: inout String) {
+        guard let profile = helperConfig?.expertProfile else { return }
+        if profile.injectSkills {
+            Self.appendUniquePromptFragment(ExpertProfileStore.shared.boundSkillFragment(profile: profile), to: &prompt)
+        }
+        if profile.injectProjectRules, let sid = helperConfig?.parentSessionId ?? sessionId {
+            Self.appendUniquePromptFragment(ExpertProfileStore.shared.projectRulesFragment(sessionId: sid), to: &prompt)
+        }
     }
 
     private var baseSystemPrompt: String {
@@ -2511,7 +2583,7 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
             // [T-sub-agents-v1] The roster the model chooses from, same gate as
             // the bullet above. Generated from the same list the tool schema's
             // enumValues use, so a name can never appear in one and not the other.
-            + ((isHelper || !Self.toolEnabled(.agents)) ? "" : Self.subAgentRosterSection())
+            + ((isHelper || !Self.toolEnabled(.agents)) ? "" : Self.subAgentRosterSection(sessionId: fsSessionId))
             + "- memory_write: Save a memory entry to today's daily log (YYYY-MM-DD.md). Use proactively to note user preferences, project patterns, and important context.\n"
             + "- memory_get: Recall memories with keyword search. Check memory at the start of new topics to leverage past knowledge.\n\n"
             + "Current time (approximate): \(approximateTimeString) (\(TimeZone.current.identifier)). "
@@ -2670,6 +2742,9 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     /// model knows the tools won't be registered, the memory files won't
     /// be injected, and what to tell the user if they ask about memory.
     private var memoryStatusFragment: String {
+        if helperConfig?.expertProfile?.injectMemory == false {
+            return "\n\nMemory context: not injected for this expert task. Rely on the task brief and tools actually registered."
+        }
         if memoryEnabled {
             return "\n\nMemory status: ENABLED for this session. GLOBAL.md and recent daily logs have been injected above (if non-empty), and memory_get / memory_write are available in the tool list."
         } else {
@@ -6081,7 +6156,7 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
         // [T-subagent-turn-countdown] Fired once, a few rounds before the cliff.
         var helperTurnWarningInjected = false
 
-        var userSystemPrompt = baseSystemPrompt
+        var userSystemPrompt = composedBaseSystemPrompt
         // `var` for [T-ios-switch-model-next-request]: a mid-turn model switch
         // replaces it so the next request carries the new model's limits.
         var activeModel = ProviderConfigStore.shared.entry(for: entry.id)?.model ?? selectedModel
@@ -6096,15 +6171,17 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
         // [T-p1-delegate-task] A helper inherits the PARENT session's skill
         // and MCP enablement (the user configured those for the conversation
         // that spawned it; the child session has no overrides of its own).
-        if let sid = helperConfig?.parentSessionId ?? sessionId,
+        if helperConfig?.expertProfile?.injectSkills != false,
+           let sid = helperConfig?.parentSessionId ?? sessionId,
            let skillFragment = SkillStore.shared.skillPromptFragment(for: sid) {
-            userSystemPrompt += "\n\n" + skillFragment
+            Self.appendUniquePromptFragment(skillFragment, to: &userSystemPrompt)
         }
+        appendExpertPromptFragments(to: &userSystemPrompt)
 
         // [T-mcp-integration-ios] Inject Top-20 enabled MCP server metadata.
         if let sid = helperConfig?.parentSessionId ?? sessionId,
            let mcpFragment = MCPStore.shared.systemPromptSnippet(for: sid) {
-            userSystemPrompt += "\n\n" + mcpFragment
+            Self.appendUniquePromptFragment(mcpFragment, to: &userSystemPrompt)
         }
 
         // [T-memory-toggle-gates-injection-and-tools-ios] Memory injection
@@ -6117,12 +6194,12 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
         // session so a repro shows whether loadSession seeded it from the
         // global default.
         AppLogger(category: "MemDiag").info("[MemDiag] inject-decision sid=\(self.sessionId?.prefix(8) ?? "nil") vm.memoryEnabled=\(self.memoryEnabled)")
-        if memoryEnabled {
+        if memoryEnabled && helperConfig?.expertProfile?.injectMemory != false {
             if let memoryFragment = Self.loadGlobalMemoryFragment() {
-                userSystemPrompt += "\n\n" + memoryFragment
+                Self.appendUniquePromptFragment(memoryFragment, to: &userSystemPrompt)
             }
             if let dailyFragment = Self.loadRecentDailyMemoryFragment() {
-                userSystemPrompt += "\n\n" + dailyFragment
+                Self.appendUniquePromptFragment(dailyFragment, to: &userSystemPrompt)
             }
         }
         // Authoritative memory-status footer (overrides any earlier
@@ -6340,9 +6417,9 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
                     // right after the base prompt (both the setup code and the
                     // fallback rebuild add them first), so replacing that
                     // prefix leaves skills / MCP / memory untouched.
-                    let oldPrefix = baseSystemPrompt + Self.modelPromptFragments(promptModel)
+                    let oldPrefix = composedBaseSystemPrompt + Self.modelPromptFragments(promptModel)
                     if userSystemPrompt.hasPrefix(oldPrefix) {
-                        userSystemPrompt = baseSystemPrompt + Self.modelPromptFragments(newEntry.model)
+                        userSystemPrompt = composedBaseSystemPrompt + Self.modelPromptFragments(newEntry.model)
                             + String(userSystemPrompt.dropFirst(oldPrefix.count))
                     } else {
                         logger.warning("🔀 model switch: system prompt prefix did not match — kept previous model fragments")
@@ -6512,6 +6589,7 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
             // can change mid-loop, e.g. the helper wrap-up path) so the guards
             // below and the calibration pair see the real fixed share.
             contextFixedTokens = ContextSizeMeter.estimateFixedTokens(systemPrompt: userSystemPrompt, tools: tools)
+            contextFixedBasePrompt = composedBaseSystemPrompt
 
             // Context window management: offload old tool content if approaching limit
             let activeModelForOffload = ProviderConfigStore.shared.entry(for: activeEntryId ?? "")?.model ?? selectedModel
@@ -6776,7 +6854,7 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
             let stream = try await streamWithGroupFallback(
                 provider: provider,
                 messages: contextHistory,
-                baseSystemPrompt: baseSystemPrompt,
+                baseSystemPrompt: composedBaseSystemPrompt,
                 systemPrompt: userSystemPrompt,
                 tools: tools,
                 model: activeModel,
@@ -6808,7 +6886,7 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
                 }
                 logger.info("🔀AGENT_LOOP provider updated after fallback: \(prevEntryId ?? "nil") → \(newEntryId)")
                 provider = await makeAgentProvider(for: newEntry)
-                userSystemPrompt = baseSystemPrompt
+                userSystemPrompt = composedBaseSystemPrompt
                 if let capFragment = newEntry.model.capabilityPromptFragment {
                     userSystemPrompt += "\n\n" + capFragment
                 }
@@ -6819,25 +6897,27 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
                 // path: a helper uses its PARENT's skill / MCP enablement.
                 // Keying on the child id here made a sub-agent that fell back
                 // lose the parent's skills and MCP servers mid-run.
-                if let sid = helperConfig?.parentSessionId ?? sessionId,
+                if helperConfig?.expertProfile?.injectSkills != false,
+                   let sid = helperConfig?.parentSessionId ?? sessionId,
                    let skillFragment = SkillStore.shared.skillPromptFragment(for: sid) {
-                    userSystemPrompt += "\n\n" + skillFragment
+                    Self.appendUniquePromptFragment(skillFragment, to: &userSystemPrompt)
                 }
+                appendExpertPromptFragments(to: &userSystemPrompt)
                 // [T-mcp-integration-ios] Inject Top-20 enabled MCP metadata.
                 if let sid = helperConfig?.parentSessionId ?? sessionId,
                    let mcpFragment = MCPStore.shared.systemPromptSnippet(for: sid) {
-                    userSystemPrompt += "\n\n" + mcpFragment
+                    Self.appendUniquePromptFragment(mcpFragment, to: &userSystemPrompt)
                 }
                 // [T-memory-toggle-gates-injection-and-tools-ios] Mirror
                 // the gate from the first injection site — fallback to a
                 // new provider must respect the per-session memoryEnabled
                 // toggle the same way the initial system prompt did.
-                if memoryEnabled {
+                if memoryEnabled && helperConfig?.expertProfile?.injectMemory != false {
                     if let memoryFragment = Self.loadGlobalMemoryFragment() {
-                        userSystemPrompt += "\n\n" + memoryFragment
+                        Self.appendUniquePromptFragment(memoryFragment, to: &userSystemPrompt)
                     }
                     if let dailyFragment = Self.loadRecentDailyMemoryFragment() {
-                        userSystemPrompt += "\n\n" + dailyFragment
+                        Self.appendUniquePromptFragment(dailyFragment, to: &userSystemPrompt)
                     }
                 }
                 userSystemPrompt += memoryStatusFragment
@@ -7080,7 +7160,7 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
                     streamResult = try await streamWithGroupFallbackUntilContent(
                         provider: provider,
                         messages: applyRequestImageBudget(effectiveAgentHistory()),
-                        baseSystemPrompt: baseSystemPrompt,
+                        baseSystemPrompt: composedBaseSystemPrompt,
                         systemPrompt: userSystemPrompt,
                         tools: tools,
                         model: activeModel,
@@ -7154,7 +7234,7 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
                         streamResult = try await streamWithGroupFallbackUntilContent(
                             provider: provider,
                             messages: applyRequestImageBudget(effectiveAgentHistory()),
-                            baseSystemPrompt: baseSystemPrompt,
+                            baseSystemPrompt: composedBaseSystemPrompt,
                             systemPrompt: userSystemPrompt,
                             tools: tools,
                             model: activeModel,

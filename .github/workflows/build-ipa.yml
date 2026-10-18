@@ -79,6 +79,14 @@ jobs:
           /tmp/signing-policy-tests
           python3 tools/test_frida_installer.py
           python3 -m unittest discover -s tests -p test_rea_install.py
+          python3 -m unittest discover -s tests -p test_workspace_search.py
+          python3 -m unittest discover -s tests -p test_ios_context_efficiency.py
+          swiftc src/ios/Providers/ExpertPolicy.swift src/ios/MinisTests/Standalone/ExpertPolicyTests.swift -o /tmp/expert-policy-tests
+          /tmp/expert-policy-tests
+          python3 tools/prepare_context_efficiency_tests.py /tmp/ContextEfficiencyExtractedTests.swift
+          swiftc -parse-as-library /tmp/ContextEfficiencyExtractedTests.swift -o /tmp/context-efficiency-tests
+          /tmp/context-efficiency-tests
+          swift src/ios/MinisTests/Standalone/CompactMarkerSemanticsTests.swift
 
       - name: Swift syntax preflight
         run: find src/ios \( -path '*/MinisTests' -o -path '*/MinisUITests' \) -prune -o -name '*.swift' -print0 | xargs -0 xcrun swiftc -frontend -parse
@@ -128,7 +136,7 @@ jobs:
       - name: Build rclone (iOS)
         run: ./deps/build_rclone_ios.sh
 
-      - name: Bundle verified iOS 15-18 SDK archives
+      - name: Validate on-demand SDK catalog (no SDK archives embedded)
         run: python3 tools/prepare_build_workbench.py
 
       - name: Bundle verified offline Frida runtime

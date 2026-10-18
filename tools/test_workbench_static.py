@@ -61,6 +61,23 @@ class WorkbenchContracts(unittest.TestCase):
         self.assertIn('iOS dylib 编译',read('src/ios/Workbench.swift'))
         catalog=json.loads(read('src/ios/BuildWorkbench.bundle/sdk-catalog.json'))
         self.assertEqual([i['version'] for i in catalog['sdks']],['15.6','16.5','17.5','18.6'])
+    def test_diagnostics_lifecycle_and_component_status(self):
+        code=read('src/ios/Workbench.swift')
+        self.assertIn('diagnosticTask = Task.detached',code)
+        self.assertIn('.onAppear { model.startDiagnosis(onlyIfEmpty:true) }',code)
+        self.assertNotIn('.task { if model.results.isEmpty { await model.diagnose() } }',code)
+        self.assertIn('catch is CancellationError {',code)
+        self.assertIn('diagnosticInterrupted = true',code)
+        self.assertIn('workbench-diagnostics',code)
+        self.assertIn('workbench-component-status',code)
+        self.assertIn('上次验证已安装 · 待运行复检',code)
+        self.assertIn('rememberVerified(name)',code)
+        self.assertIn('.onAppear { model.startComponentProbeIfNeeded() }',code)
+        self.assertIn('let pending = result.exitCode == 0 && proof?.cached == true',code)
+        self.assertIn('已安装 · 上次验证（待实时复检）',code)
+        self.assertIn('["action":"status-rea","deep":true]',code)
+        self.assertIn('action == "status-rea" ? 720 : 240',code)
+        self.assertIn('timeout:name == "REA CLI 与 MCP" ? 720 : 60',code)
     def test_desktop_connection_uses_keychain_and_host_pin(self):
         code=read('src/ios/Workbench.swift')
         for token in ['SecItemAdd','StrictHostKeyChecking=yes','UserKnownHostsFile','completeFileProtectionUnlessOpen']:

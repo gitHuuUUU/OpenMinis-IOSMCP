@@ -8,9 +8,11 @@ by `doctor`; they are never installed or represented as ready here.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import os
+import platform
 import re
 import queue
 import shutil
@@ -31,9 +33,13 @@ REA_SKILL_DEST = SKILLS_ROOT / "rea-reverse-engineer-anything"
 MCP_PROTOCOL_VERSION = "2025-06-18"
 LOG_PATH = Path(os.environ.get("MINIS_REA_LOG_PATH", "/var/log/minis-rea-install.log"))
 MCP_TIMEOUT_SECONDS = 120
-DOCTOR_TIMEOUT_SECONDS = 120
+DOCTOR_TIMEOUT_SECONDS = 60
+DEEP_DOCTOR_TIMEOUT_SECONDS = 180
 NPM_TIMEOUT_SECONDS = 900
+DOCTOR_CACHE_TTL_SECONDS = 300
+CLI_VERSION_TIMEOUT_MAX_SECONDS = 270
 MANAGED_WRAPPER_MARKER = "# minis-managed-rea-wrapper-v1"
+STAGE_MARKER = ".minis-rea-stage.json"
 
 
 class InstallError(RuntimeError):
@@ -106,8 +112,9 @@ def _paths(prefix: Path) -> tuple[Path, Path]:
     return package, entry
 
 
-def _version(node: str, entry: Path) -> str:
-    result = _run([node, str(entry), "--version"], timeout=30, cwd=entry.parent.parent)
+def _version(node: str, entry: Path, *, timeout: int | None = None) -> str:
+    result = _run([node, str(entry), "--version"],
+                  timeout=timeout or _adaptive_cli_timeout(entry), cwd=entry.parent.parent)
     text = (result.stdout + "\n" + result.stderr).strip()
     match = re.search(r"(?<!\d)(\d+\.\d+\.\d+)(?!\d)", text)
     if not match:
@@ -115,22 +122,200 @@ def _version(node: str, entry: Path) -> str:
     return match.group(1)
 
 
-def _doctor(node: str, entry: Path) -> dict[str, Any]:
-    result = _run([node, str(entry), "doctor", "--format", "json", "--full-output"],
-                  timeout=DOCTOR_TIMEOUT_SECONDS, cwd=entry.parent.parent,
-                  check=False, log_output=False)
+def _adaptive_cli_timeout(entry: Path) -> int:
+    """Give cold ARM guest starts more time; scale with the shipped CLI bundle."""
+    arch = platform.machine().lower()
+    base = 180 if arch in {"aarch64", "arm64", "armv8l"} else 120
+    try:
+        bundle = entry.parent.parent / "dist"
+        byte_count = sum(p.stat().st_size for p in bundle.rglob("*") if p.is_file())
+    except OSError:
+        byte_count = 0
+    scaled = base + int((byte_count / (1024 * 1024)) * 3)
+    return min(CLI_VERSION_TIMEOUT_MAX_SECONDS, max(base, scaled))
+
+
+def _fsync_file(path: Path) -> None:
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _fsync_dir(path: Path) -> None:
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    try:
+        fd = os.open(path, flags)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
+def _atomic_json(path: Path, value: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(value, handle, separators=(",", ":"), ensure_ascii=False)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_name, path)
+        _fsync_dir(path.parent)
+    finally:
+        if os.path.exists(temp_name):
+            os.unlink(temp_name)
+
+
+def _managed_regular_file(path: Path, root: Path) -> bool:
+    try:
+        root_real = root.resolve(strict=True)
+        path_stat = path.lstat()
+        path_real = path.resolve(strict=True)
+        path_real.relative_to(root_real)
+        return not path.is_symlink() and path_stat.st_mode & 0o170000 == 0o100000
+    except (OSError, ValueError):
+        return False
+
+
+def _sha256_file(path: Path, root: Path) -> str:
+    if not _managed_regular_file(path, root):
+        raise InstallError(f"Managed verification input is missing, linked, or outside package root: {path.name}")
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _package_fingerprint(root: Path, entry: Path, node_version: str) -> dict[str, str]:
+    return {
+        "nodeVersion": node_version,
+        "entrySha256": _sha256_file(entry, root),
+        "packageLockSha256": _sha256_file(root / "package-lock.json", root),
+    }
+
+
+def _doctor_cache_path(entry: Path) -> Path:
+    return entry.parents[3] / ".minis-rea-doctor-cache.json"
+
+
+def _read_doctor_cache(path: Path, fingerprint: dict[str, str], deep: bool) -> dict[str, Any] | None:
+    try:
+        if path.is_symlink() or not _managed_regular_file(path, path.parent):
+            return None
+        cache = json.loads(path.read_text(encoding="utf-8"))
+        if cache.get("reaVersion") != REA_VERSION:
+            return None
+        if any(cache.get(key) != value for key, value in fingerprint.items()):
+            return None
+        if cache.get("deep") is not deep:
+            return None
+        if time.time() - float(cache.get("checkedAt", 0)) > DOCTOR_CACHE_TTL_SECONDS:
+            return None
+        doctor = cache.get("doctor")
+        return doctor if isinstance(doctor, dict) else None
+    except (OSError, ValueError, TypeError, AttributeError):
+        return None
+
+
+def _validation_cache_path(root: Path) -> Path:
+    return root / ".minis-rea-validation-cache.json"
+
+
+def _read_validation_cache(root: Path, entry: Path,
+                           fingerprint: dict[str, str]) -> dict[str, Any] | None:
+    path = _validation_cache_path(root)
+    try:
+        if path.is_symlink() or not _managed_regular_file(path, root):
+            return None
+        cache = json.loads(path.read_text(encoding="utf-8"))
+        if cache.get("reaVersion") != REA_VERSION:
+            return None
+        if any(cache.get(key) != value for key, value in fingerprint.items()):
+            return None
+        if time.time() - float(cache.get("verifiedAt", 0)) > DOCTOR_CACHE_TTL_SECONDS:
+            return None
+        mcp = cache.get("mcp")
+        if not isinstance(mcp, dict) or mcp.get("initialize") is not True or mcp.get("toolsList") is not True:
+            return None
+        return cache
+    except (OSError, ValueError, TypeError, AttributeError):
+        return None
+
+
+def _write_validation_cache(root: Path, fingerprint: dict[str, str],
+                            mcp: dict[str, Any], doctor: dict[str, Any]) -> dict[str, Any]:
+    verified_at = time.time()
+    cache = {
+        "reaVersion": REA_VERSION,
+        **fingerprint,
+        "verifiedAt": verified_at,
+        "mcp": mcp,
+        "doctor": {k: v for k, v in doctor.items() if k != "cached"},
+    }
+    _atomic_json(_validation_cache_path(root), cache)
+    return {
+        "live": True,
+        "cached": False,
+        "verifiedAt": verified_at,
+        **fingerprint,
+    }
+
+
+def _doctor(node: str, entry: Path, *, deep: bool = False,
+            use_cache: bool = True) -> dict[str, Any]:
+    node_version = _run([node, "--version"], timeout=10).stdout.strip().lstrip("v")
+    cache_path = _doctor_cache_path(entry)
+    package_root = entry.parents[3]
+    try:
+        fingerprint = _package_fingerprint(package_root, entry, node_version)
+    except InstallError:
+        fingerprint = {"nodeVersion": node_version}
+    if use_cache:
+        cached = _read_doctor_cache(cache_path, fingerprint, deep)
+        if cached is not None:
+            return {**cached, "cached": True}
+    command = [node, str(entry), "doctor", "--format", "json"]
+    if deep:
+        command.append("--full-output")
+    try:
+        result = _run(command,
+                      timeout=DEEP_DOCTOR_TIMEOUT_SECONDS if deep else DOCTOR_TIMEOUT_SECONDS,
+                      cwd=entry.parent.parent, check=False, log_output=False)
+    except InstallError as exc:
+        return {
+            "completed": False,
+            "healthy": False,
+            "environmentHealthy": False,
+            "backendStatus": "incomplete_or_unavailable",
+            "error": str(exc),
+            "cached": False,
+        }
     try:
         envelope = json.loads(result.stdout)
     except (json.JSONDecodeError, TypeError) as exc:
-        raise InstallError("REA doctor did not return valid JSON") from exc
-    if not isinstance(envelope, dict) or not isinstance(envelope.get("data"), dict):
-        raise InstallError("REA doctor JSON has no data object")
-    data = envelope["data"]
+        LOG.warning("REA doctor returned invalid JSON: %s", exc)
+        return {"completed": False, "healthy": False, "environmentHealthy": False,
+                "backendStatus": "incomplete_or_unavailable", "cached": False}
+    if not isinstance(envelope, dict):
+        return {"completed": False, "healthy": False, "environmentHealthy": False,
+                "backendStatus": "incomplete_or_unavailable", "cached": False}
+    data = envelope.get("data") if isinstance(envelope.get("data"), dict) else envelope
+    if not isinstance(data, dict):
+        return {"completed": False, "healthy": False, "environmentHealthy": False,
+                "backendStatus": "incomplete_or_unavailable", "cached": False}
     healthy = data.get("healthy") is True
     environment_healthy = data.get("environment_healthy") is True
     # Provider details can contain machine-specific paths/configuration. Keep
     # the public result to status/counts; the full diagnostic is in the log.
-    return {
+    summary = {
         "completed": True,
         "exitCode": result.returncode,
         "healthy": healthy,
@@ -138,7 +323,19 @@ def _doctor(node: str, entry: Path) -> dict[str, Any]:
         "scopeCheckCount": len(data.get("scope_checks", [])) if isinstance(data.get("scope_checks"), list) else None,
         "providerInspectionCount": len(data.get("providerInspections", [])) if isinstance(data.get("providerInspections"), list) else None,
         "backendStatus": "ready" if healthy else "incomplete_or_unavailable",
+        "cached": False,
     }
+    try:
+        _atomic_json(cache_path, {
+            "reaVersion": REA_VERSION,
+            **fingerprint,
+            "deep": deep,
+            "checkedAt": time.time(),
+            "doctor": {k: v for k, v in summary.items() if k != "cached"},
+        })
+    except OSError as exc:
+        LOG.warning("could not persist doctor cache: %s", exc)
+    return summary
 
 
 def _send_json(proc: subprocess.Popen[str], value: dict[str, Any]) -> None:
@@ -243,21 +440,85 @@ def _mcp_probe(node: str, entry: Path, timeout: int = MCP_TIMEOUT_SECONDS) -> di
 
 def _package_lock_is_compatible(prefix: Path) -> bool:
     try:
+        if prefix.is_symlink() or not prefix.is_dir():
+            return False
+        package_json_path = prefix / "package.json"
+        lock_path = prefix / "package-lock.json"
+        if not _managed_regular_file(package_json_path, prefix) or not _managed_regular_file(lock_path, prefix):
+            return False
         package_json = json.loads((prefix / "package.json").read_text(encoding="utf-8"))
-        lock = json.loads((prefix / "package-lock.json").read_text(encoding="utf-8"))
+        lock = json.loads(lock_path.read_text(encoding="utf-8"))
         declared = package_json.get("dependencies", {}).get("rea-agents")
         locked_root = lock.get("packages", {}).get("", {}).get("dependencies", {}).get("rea-agents")
         installed = lock.get("packages", {}).get("node_modules/rea-agents", {}).get("version")
-        return declared == REA_VERSION and locked_root == REA_VERSION and installed == REA_VERSION
+        return (
+            lock.get("lockfileVersion") in (2, 3)
+            and declared == REA_VERSION
+            and locked_root == REA_VERSION
+            and installed == REA_VERSION
+        )
     except (OSError, ValueError, AttributeError):
         return False
 
 
+def _stage_marker_path(stage: Path) -> Path:
+    return stage / STAGE_MARKER
+
+
+def _write_stage_marker(stage: Path, state: str) -> None:
+    _atomic_json(_stage_marker_path(stage), {
+        "kind": "minis-rea-install-stage",
+        "version": REA_VERSION,
+        "state": state,
+        "updatedAt": time.time(),
+    })
+
+
+def _stage_state(stage: Path) -> str | None:
+    try:
+        marker_path = _stage_marker_path(stage)
+        if stage.is_symlink() or not stage.is_dir() or not _managed_regular_file(marker_path, stage):
+            return None
+        marker = json.loads(marker_path.read_text(encoding="utf-8"))
+        if marker.get("kind") != "minis-rea-install-stage" or marker.get("version") != REA_VERSION:
+            return None
+        return marker.get("state") if marker.get("state") in {"preparing", "prepared"} else None
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def _staged_package_is_ready(stage: Path) -> bool:
+    return _stage_state(stage) == "prepared" and _managed_package_is_ready(stage)
+
+
+def _managed_package_is_ready(root: Path) -> bool:
+    if not _package_lock_is_compatible(root):
+        return False
+    package, entry = _paths(root)
+    try:
+        package_version = json.loads((package / "package.json").read_text(encoding="utf-8")).get("version")
+    except (OSError, ValueError, AttributeError):
+        return False
+    return (
+        package_version == REA_VERSION
+        and _managed_regular_file(package / "package.json", root)
+        and _managed_regular_file(entry, root)
+    )
+
+
+def _validate_wrapper_target() -> None:
+    if WRAPPER.is_symlink():
+        raise InstallError(f"Refusing to replace symlink wrapper: {WRAPPER}")
+    if WRAPPER.exists():
+        existing = WRAPPER.read_text(encoding="utf-8", errors="replace")
+        if MANAGED_WRAPPER_MARKER not in existing:
+            raise InstallError(f"Custom {WRAPPER} exists; left untouched")
+
+
 def _prepare_package(npm: str, stage: Path, node: str) -> None:
-    target_package, _ = _paths(PREFIX)
     if PREFIX.is_symlink():
         raise InstallError(f"Refusing symlink install root: {PREFIX}")
-    stage.mkdir(parents=True, mode=0o755)
+    stage.mkdir(parents=True, mode=0o755, exist_ok=True)
     if PREFIX.is_dir() and _package_lock_is_compatible(PREFIX):
         shutil.copy2(PREFIX / "package.json", stage / "package.json")
         shutil.copy2(PREFIX / "package-lock.json", stage / "package-lock.json")
@@ -283,6 +544,13 @@ def _prepare_package(npm: str, stage: Path, node: str) -> None:
         raise InstallError("REA package metadata is missing after npm install") from exc
     if actual != REA_VERSION or not entry.is_file():
         raise InstallError(f"Pinned REA package/entrypoint missing (expected {REA_VERSION}, got {actual})")
+    for critical_file in (stage / "package.json", stage / "package-lock.json",
+                          package / "package.json", entry):
+        if not _managed_regular_file(critical_file, stage):
+            raise InstallError(f"Managed install file is missing, linked, or outside staging tree: {critical_file.name}")
+        _fsync_file(critical_file)
+    _fsync_dir(stage / "node_modules")
+    _fsync_dir(stage)
 
 
 def _publish_package(stage: Path) -> None:
@@ -290,12 +558,13 @@ def _publish_package(stage: Path) -> None:
     if PREFIX.exists():
         if PREFIX.is_symlink() or not PREFIX.is_dir():
             raise InstallError(f"Refusing unexpected install target: {PREFIX}")
-        backup = PREFIX.with_name(f"{PREFIX.name}.backup-{int(time.time())}")
+        backup = PREFIX.with_name(f"{PREFIX.name}.backup-{time.time_ns()}")
         if backup.exists():
             raise InstallError(f"Backup path already exists: {backup}")
         os.replace(PREFIX, backup)
     try:
         os.replace(stage, PREFIX)
+        _fsync_dir(PREFIX.parent)
     except BaseException:
         if backup is not None and backup.exists() and not PREFIX.exists():
             os.replace(backup, PREFIX)
@@ -306,13 +575,9 @@ def _publish_package(stage: Path) -> None:
 
 def _publish_wrapper(node: str) -> None:
     WRAPPER.parent.mkdir(parents=True, exist_ok=True)
-    if WRAPPER.is_symlink():
-        raise InstallError(f"Refusing to replace symlink wrapper: {WRAPPER}")
+    _validate_wrapper_target()
     if WRAPPER.exists():
-        existing = WRAPPER.read_text(encoding="utf-8", errors="replace")
-        if MANAGED_WRAPPER_MARKER not in existing:
-            raise InstallError(f"Custom {WRAPPER} exists; left untouched")
-        backup = WRAPPER.with_name(f"rea.backup-{int(time.time())}")
+        backup = WRAPPER.with_name(f"rea.backup-{time.time_ns()}")
         if backup.exists():
             raise InstallError(f"Wrapper backup path already exists: {backup}")
         shutil.copy2(WRAPPER, backup)
@@ -329,6 +594,7 @@ def _publish_wrapper(node: str) -> None:
             os.fsync(handle.fileno())
         os.chmod(temp_name, 0o755)
         os.replace(temp_name, WRAPPER)
+        _fsync_dir(WRAPPER.parent)
     finally:
         if os.path.exists(temp_name):
             os.unlink(temp_name)
@@ -364,57 +630,126 @@ def _installed_entry() -> tuple[str, Path]:
 def install() -> dict[str, Any]:
     node, npm, node_version = _node_and_npm()
     PREFIX.parent.mkdir(parents=True, exist_ok=True)
-    stage = PREFIX.with_name(f".{PREFIX.name}.stage-{os.getpid()}-{int(time.time())}")
-    if stage.exists():
-        raise InstallError(f"Staging path already exists: {stage}")
+    _validate_wrapper_target()
+    active_ready = _managed_package_is_ready(PREFIX)
+    if active_ready:
+        LOG.info("reusing verified active REA package at %s; npm will not be rerun", PREFIX)
+        install_root = PREFIX
+        publish_stage = False
+        npm_install_path = "reused_active"
+    else:
+        stage = PREFIX.with_name(f".{PREFIX.name}.stage")
+        if stage.exists() and _stage_state(stage) is None:
+            raise InstallError(f"Unrecognized staging directory; preserved without modifying: {stage}")
+        if stage.is_symlink():
+            raise InstallError(f"Refusing symlink staging directory: {stage}")
+        if _staged_package_is_ready(stage):
+            LOG.info("reusing verified npm stage at %s; npm will not be rerun", stage)
+            npm_install_path = "reused_stage"
+        else:
+            stage.mkdir(parents=True, mode=0o755, exist_ok=True)
+            _write_stage_marker(stage, "preparing")
+            _prepare_package(npm, stage, node)
+            package, stage_entry = _paths(stage)
+            if not _package_lock_is_compatible(stage) or not _managed_regular_file(stage_entry, stage):
+                raise InstallError("npm staging validation failed; staging tree retained for diagnosis")
+            _write_stage_marker(stage, "prepared")
+            npm_install_path = "npm_install"
+        install_root = stage
+        publish_stage = True
+
+    _, stage_entry = _paths(install_root)
+    version_timeout = _adaptive_cli_timeout(stage_entry)
+    actual = _version(node, stage_entry, timeout=version_timeout)
+    if actual != REA_VERSION:
+        raise InstallError(f"REA version mismatch: expected {REA_VERSION}, got {actual}; verified npm stage retained")
+    doctor = _doctor(node, stage_entry)
+    mcp = _mcp_probe(node, stage_entry)
+    # All actual CLI/MCP checks happen before publishing or registering. The
+    # prepared npm stage survives recoverable CLI/probe failures so a retry
+    # does not repeat the long npm download.
+    if publish_stage:
+        marker_path = _stage_marker_path(install_root)
+        if marker_path.exists():
+            marker_path.unlink()
+            _fsync_dir(install_root)
+        _publish_package(install_root)
+    _publish_wrapper(node)
+    package, _ = _installed_entry()
+    skill_status = _install_official_skill(package)
+    _, published_entry = _installed_entry()
     try:
-        _prepare_package(npm, stage, node)
-        _, stage_entry = _paths(stage)
-        actual = _version(node, stage_entry)
-        if actual != REA_VERSION:
-            raise InstallError(f"REA version mismatch: expected {REA_VERSION}, got {actual}")
-        doctor = _doctor(node, stage_entry)
-        mcp = _mcp_probe(node, stage_entry)
-        # All protocol/package checks happen before publishing or registering.
-        # Doctor health is separately reported because missing analysis engines
-        # do not mean the MCP runtime failed to install.
-        _publish_package(stage)
-        _publish_wrapper(node)
-        package, _ = _installed_entry()
-        skill_status = _install_official_skill(package)
-        return {
-            "status": "installed",
-            "installed": True,
-            "version": actual,
-            "nodeVersion": node_version,
-            "packageLock": str(PREFIX / "package-lock.json"),
-            "mcp": mcp,
-            "doctor": doctor,
-            "skill": {"status": skill_status, "path": str(REA_SKILL_DEST)},
-            "registrationReady": True,
-        }
-    finally:
-        if stage.exists():
-            shutil.rmtree(stage)
+        fingerprint = _package_fingerprint(PREFIX, published_entry, node_version)
+        verification = _write_validation_cache(PREFIX, fingerprint, mcp, doctor)
+    except (InstallError, OSError) as exc:
+        LOG.warning("could not persist verified runtime cache: %s", exc)
+        verification = {"live": True, "cached": False, "verifiedAt": time.time()}
+    return {
+        "status": "installed",
+        "installed": True,
+        "version": actual,
+        "nodeVersion": node_version,
+        "cliVersionTimeoutSeconds": version_timeout,
+        "npmInstallPath": npm_install_path,
+        "packageLock": str(PREFIX / "package-lock.json"),
+        "mcp": mcp,
+        "doctor": doctor,
+        "verification": verification,
+        "skill": {"status": skill_status, "path": str(REA_SKILL_DEST)},
+        "registrationReady": True,
+    }
 
 
-def diagnose() -> dict[str, Any]:
+def diagnose(*, deep: bool = False) -> dict[str, Any]:
     node, _npm, node_version = _node_and_npm()
     package, entry = _installed_entry()
-    if not entry.is_file() or not _package_lock_is_compatible(PREFIX):
+    if not _managed_package_is_ready(PREFIX):
         raise InstallError("REA package/lock is not installed at the managed path")
-    actual = _version(node, entry)
+    fingerprint = _package_fingerprint(PREFIX, entry, node_version)
+    if not deep:
+        cache = _read_validation_cache(PREFIX, entry, fingerprint)
+        if cache is not None:
+            doctor = cache.get("doctor") if isinstance(cache.get("doctor"), dict) else {
+                "completed": False, "healthy": False,
+                "environmentHealthy": False,
+                "backendStatus": "not_included_in_last_verification",
+            }
+            return {
+                "status": "last_verified",
+                "installed": True,
+                "version": REA_VERSION,
+                "nodeVersion": node_version,
+                "cliVersionTimeoutSeconds": _adaptive_cli_timeout(entry),
+                "doctor": {**doctor, "cached": True},
+                "mcp": {**cache["mcp"], "cached": True},
+                "verification": {
+                    "live": False,
+                    "cached": True,
+                    "verifiedAt": cache.get("verifiedAt"),
+                    "entrySha256": fingerprint["entrySha256"],
+                    "packageLockSha256": fingerprint["packageLockSha256"],
+                    "nodeVersion": node_version,
+                },
+                "packageLock": str(PREFIX / "package-lock.json"),
+                "registrationReady": False,
+            }
+    version_timeout = _adaptive_cli_timeout(entry)
+    actual = _version(node, entry, timeout=version_timeout)
     if actual != REA_VERSION:
         raise InstallError(f"REA version mismatch: expected {REA_VERSION}, got {actual}")
-    doctor = _doctor(node, entry)
+    doctor = _doctor(node, entry, deep=deep, use_cache=not deep)
     mcp = _mcp_probe(node, entry)
+    fingerprint = _package_fingerprint(PREFIX, entry, node_version)
+    verification = _write_validation_cache(PREFIX, fingerprint, mcp, doctor)
     return {
         "status": "ready" if mcp["initialize"] and mcp["toolsList"] else "failed",
         "installed": True,
         "version": actual,
         "nodeVersion": node_version,
+        "cliVersionTimeoutSeconds": version_timeout,
         "doctor": doctor,
         "mcp": mcp,
+        "verification": verification,
         "packageLock": str(PREFIX / "package-lock.json"),
         "registrationReady": True,
     }
@@ -423,17 +758,23 @@ def diagnose() -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("install", "status", "doctor", "verify"), nargs="?", default="install")
+    parser.add_argument("--deep", action="store_true",
+                        help="refresh full REA backend diagnostics instead of using the brief cached status")
     args = parser.parse_args()
     try:
-        result = install() if args.action == "install" else diagnose()
+        result = install() if args.action == "install" else diagnose(deep=args.deep)
         print(json.dumps(result, separators=(",", ":"), ensure_ascii=False))
         return 0
     except Exception as exc:
         LOG.exception("REA %s failed", args.action)
+        stage = PREFIX.with_name(f".{PREFIX.name}.stage")
+        stage_state = _stage_state(stage) if args.action == "install" else None
         print(json.dumps({
             "status": "failed",
             "installed": False if args.action == "install" else None,
             "registrationReady": False,
+            "stageRetained": stage_state is not None,
+            "stageState": stage_state,
             "error": str(exc),
             "log": str(LOG_PATH),
         }, separators=(",", ":"), ensure_ascii=False))

@@ -108,7 +108,7 @@ func walkBackUserTurnsBounded(_ agentHistory: [AgentMessage], anchorIdx: Int, ma
     return WalkBackResult(priorIdx: acceptedPriorIdx, userTextTurnsFound: acceptedUserTextTurns, messageCount: acceptedMessageCount, stopReason: "reachedStart")
 }
 
-let compactKeepRecentUserTurns = 3
+let compactKeepRecentUserTurns = 1
 let summaryPrefix = "<context-summary>"
 
 /// effectiveAgentHistoryUncounted, v2 branch only (the one every marker
@@ -264,7 +264,7 @@ do {
     let after = effectiveAgentHistory(history, marker: marker)
     checkEq("agentHistory.count is UNCHANGED by a successful compaction", history.count, 10)
     check("…while the effective count shrinks", after.count < before)
-    checkEq("kept tail = last 3 user-text turns leading into the anchor (+ standalone summary)", after.count, 9)
+    checkEq("kept tail = last user-text turn leading into the anchor (+ standalone summary)", after.count, 3)
     check("the summary rides at the end when nothing follows the anchor",
           { if case .text(let t)? = after.last?.parts.first { return t.hasPrefix(summaryPrefix) }; return false }())
     // A guard written against the raw count would have refused the retry.

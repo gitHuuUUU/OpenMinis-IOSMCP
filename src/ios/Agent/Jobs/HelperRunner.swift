@@ -35,6 +35,7 @@ struct HelperConfig {
     var subAgentName: String = ""
     /// Standing instructions from that definition, appended to the child brief.
     var subAgentInstructions: String = ""
+    var expertProfile: ExpertProfile? = nil
 }
 
 extension AIChatViewModel {
@@ -412,7 +413,7 @@ extension AIChatViewModel {
         }
         // Resolved before the model, because a pinned Model Group on the
         // definition overrides the requested tier.
-        let roster = SubAgentStore.shared.subAgents
+        let roster = SubAgentStore.shared.subAgents.filter { ExpertProfileStore.shared.profile(for: $0.id).isAvailable(in: parentSid) }
         guard let subAgent = SubAgentRoster.resolve(name: requestedAgentName, in: roster) else {
             let known = roster.map(\.name).joined(separator: ", ")
             return reject("unknown_agent", "No sub agent named \"\(requestedAgentName ?? "")\". Available: \(known). Omit `agent` to use the general one.")
@@ -466,11 +467,11 @@ extension AIChatViewModel {
                                           title: displayTitle, modelOrigin: resolution.origin,
                                           subAgentId: subAgent.id,
                                           subAgentName: subAgent.name,
-                                          subAgentInstructions: subAgent.instructions)
-        // No long-term memory for helpers (design §4.3 drops memory_write;
-        // flipping the session toggle drops both tools AND the memory
-        // injection so prompt and tool list stay consistent — see report).
-        child.memoryEnabled = false
+                                          subAgentInstructions: subAgent.instructions,
+                                          expertProfile: ExpertProfileStore.shared.profiles[subAgent.id])
+        // Legacy helpers remain memory-free. An explicitly configured expert
+        // can opt into the same memory injection/tool gate as its snapshot.
+        child.memoryEnabled = ExpertProfileStore.shared.profiles[subAgent.id]?.injectMemory ?? false
         child.suppressGeneralCompletionNotification = true
         // Shared browser: same tab set as the parent (T-p2-shared-workspace).
         child.browserTabPool = browserTabPool
@@ -1303,12 +1304,16 @@ extension AIChatViewModel {
     /// (identity pollution): describe the environment, do not assign identity.
     var helperIdentitySection: String {
         guard let cfg = helperConfig else { return "" }
+        let deliveryContract = cfg.expertProfile == nil
+            ? "The final message must contain the complete deliverable itself, not a description or 'see above'. If you produced a file, paste its full content into the final message as well."
+            : "Return the task's actual result, verification evidence and artifact paths concisely. Include full content when the task explicitly asks for it; otherwise let the parent read large artifacts from the shared workspace instead of duplicating their entire contents."
         return """
-        You are running as a helper (sub-agent) inside an app called Minis, on an iOS device with a fully functional iSH Linux shell (Alpine Linux, aarch64). This is the calling environment, not your identity — keep your own model identity unchanged.
-        A parent agent delegated ONE focused task to you: "\(cfg.title)". You cannot see the parent conversation and it cannot see yours; everything you need is in the task text. Work the task to completion using your tools, then finish with a single clear final answer — that final message is returned verbatim to the parent agent as the result, and it is the ONLY thing the parent receives. So the final message must contain the complete deliverable itself: the full report, document, list, code or answer the task asked for, in full — never a summary of what you did, a pointer to a file you wrote, or "see above". If you produced a file, paste its full content into the final message as well. Do not ask the parent or the user questions; make reasonable assumptions and state them. Do not restate the task or add meta-commentary.
+        You are running as a helper (sub-agent) inside an app called MinisRe, on an iOS device with a fully functional iSH Linux shell (Alpine Linux, aarch64). This is the calling environment, not your identity — keep your own model identity unchanged.
+        A parent agent delegated ONE focused task to you: "\(cfg.title)". You cannot see the parent conversation and it cannot see yours; everything you need is in the task text. Work the task to completion using your tools, then finish with a single clear final answer — that final message is returned verbatim to the parent agent as the result, and it is the ONLY thing the parent receives. \(deliveryContract) Do not ask the parent or the user questions; make reasonable assumptions and state them. Do not restate the task or add meta-commentary.
         Browser: the browser is shared with the parent and with other agents. You may only use your own tabs (up to \(BrowserTabPool.agentTabQuota)); list_tabs shows just yours. To open a page, navigate (a tab of yours is picked or created) or use new_tab; never guess tab ids you did not receive, and reuse your tabs by navigating them instead of opening more.
         You have at most \(cfg.maxTurns) tool rounds; on the last one tools are withdrawn and you are asked to write the deliverable from what you have, so start writing before you run out. If the task genuinely exceeds what you can do at your capability level, end your final message with a line `[ESCALATE] <one-line reason>` so the parent can rerun it on a stronger model.
         \(Self.subAgentInstructionsSection(cfg.subAgentInstructions))
+        Expert working mode: \(cfg.expertProfile?.defaultMode ?? "inherit"). When mode is review, prioritize evidence-based findings; when plan, provide a plan without tools. Return verified conclusions and artifact paths concisely unless the task explicitly requires full content.
         """
     }
 
@@ -1566,7 +1571,7 @@ extension AIChatViewModel {
         if agentName?.isEmpty ?? true {
             agentName = await Self.persistedAgentName(toolUseId: toolUseId, sessionId: parentSid)
         }
-        let roster = SubAgentStore.shared.subAgents
+        let roster = SubAgentStore.shared.subAgents.filter { ExpertProfileStore.shared.profile(for: $0.id).isAvailable(in: parentSid) }
         var subAgent = roster.first { $0.isBuiltIn } ?? SubAgentDefinition.makeBuiltIn()
         var namedAgentMissing: String?
         if let agentName, !agentName.isEmpty {
@@ -1604,7 +1609,7 @@ extension AIChatViewModel {
         let (child, fresh) = ViewModelCache.shared.getOrCreate(for: childId, kind: .child)
         if fresh || child.messages.isEmpty { await child.loadSession() }
         child.sessionSource = sessionSource
-        child.memoryEnabled = false
+        child.memoryEnabled = ExpertProfileStore.shared.profiles[subAgent.id]?.injectMemory ?? false
         child.suppressGeneralCompletionNotification = true
         child.browserTabPool = browserTabPool
 
@@ -1625,7 +1630,8 @@ extension AIChatViewModel {
                                           modelOrigin: resolution.origin,
                                           subAgentId: subAgent.id,
                                           subAgentName: subAgent.name,
-                                          subAgentInstructions: subAgent.instructions)
+                                          subAgentInstructions: subAgent.instructions,
+                                          expertProfile: ExpertProfileStore.shared.profiles[subAgent.id])
         ProviderConfigStore.shared.setBinding(
             SessionModelBinding(sessionId: childId, primarySource: resolution.source), for: childId)
         // [T-subagent-thinking-inherit] A resumed run re-resolves its model, so

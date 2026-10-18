@@ -559,6 +559,10 @@
 		RCL000119 /* BackupHistoryDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = RCL000219 /* BackupHistoryDetailView.swift */; };
 		RCL000120 /* BackupCategoryIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = RCL000220 /* BackupCategoryIcon.swift */; };
 		RCL000121 /* BackupHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = RCL000221 /* BackupHUD.swift */; };
+		9BC4FA4A7028445C9CF63D6D /* ExpertPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F8B9666BB88448DB0D321F0 /* ExpertPolicy.swift */; };
+		DB73D01A4A24432B88B64E89 /* ExpertProfileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BB791C8D31D4139B47B8471 /* ExpertProfileStore.swift */; };
+		378826C9912E4CA38B0CEABD /* ExpertLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EACB9CC1250D45F3ACAAD86E /* ExpertLibraryView.swift */; };
+		5E42CA4D55E34F979003E0DD /* WorkspaceSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEC9C0A48BC846C6A969ABAF /* WorkspaceSearchView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1281,6 +1285,10 @@
 		RCL000219 /* BackupHistoryDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupHistoryDetailView.swift; sourceTree = "<group>"; };
 		RCL000220 /* BackupCategoryIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupCategoryIcon.swift; sourceTree = "<group>"; };
 		RCL000221 /* BackupHUD.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupHUD.swift; sourceTree = "<group>"; };
+		1F8B9666BB88448DB0D321F0 /* ExpertPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Providers/ExpertPolicy.swift"; sourceTree = "<group>"; };
+		0BB791C8D31D4139B47B8471 /* ExpertProfileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Providers/ExpertProfileStore.swift"; sourceTree = "<group>"; };
+		EACB9CC1250D45F3ACAAD86E /* ExpertLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/Settings/ExpertLibraryView.swift"; sourceTree = "<group>"; };
+		EEC9C0A48BC846C6A969ABAF /* WorkspaceSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/Settings/WorkspaceSearchView.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -1533,6 +1541,10 @@
 				5A71E40627414A22AC4433B5 /* WorkbenchBridge.h */,
 				C750EAE1C4194A9BBB57C7D9 /* WorkbenchBridge.m */,
 				B821A73AC4F54A39B02503A1 /* Workbench.swift */,
+				EEC9C0A48BC846C6A969ABAF /* WorkspaceSearchView.swift */,
+				EACB9CC1250D45F3ACAAD86E /* ExpertLibraryView.swift */,
+				0BB791C8D31D4139B47B8471 /* ExpertProfileStore.swift */,
+				1F8B9666BB88448DB0D321F0 /* ExpertPolicy.swift */,
 				E5QA0102 /* AppDelegate.swift */,
 				E5E000018 /* Minis.entitlements */,
 				E5PV00002 /* PrivacyInfo.xcprivacy */,
@@ -2844,6 +2856,10 @@
 				E51000001 /* MinisApp.swift in Sources */,
 				AEFE6D0D52B54498B10A8F71 /* WorkbenchBridge.m in Sources */,
 				FFF8F8476EAD43AEACE06025 /* Workbench.swift in Sources */,
+				5E42CA4D55E34F979003E0DD /* WorkspaceSearchView.swift in Sources */,
+				378826C9912E4CA38B0CEABD /* ExpertLibraryView.swift in Sources */,
+				DB73D01A4A24432B88B64E89 /* ExpertProfileStore.swift in Sources */,
+				9BC4FA4A7028445C9CF63D6D /* ExpertPolicy.swift in Sources */,
 				E5FPBH02 /* FileProviderBootHealth.swift in Sources */,
 				E5QA0001 /* QuickActionRouter.swift in Sources */,
 				E5QA0003 /* QuickActionWorkflow.swift in Sources */,

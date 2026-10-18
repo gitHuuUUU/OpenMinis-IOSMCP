@@ -8167,12 +8167,18 @@ private struct SettingsSheet: View {
                     NavigationLink {
                         UsageStatsView()
                     } label: {
-                        Label("Token Usage", systemImage: "chart.line.uptrend.xyaxis.circle.fill")
+                        Label("Token 统计", systemImage: "chart.line.uptrend.xyaxis.circle.fill")
                     }
                 } header: {
                     Text("LLM Providers")
                 } footer: {
                     Text("Configure which models the agent uses, manage API keys & OAuth for each provider, and create model groups for fallback or load balancing.")
+                }
+
+                Section("专家与工作区") {
+                    NavigationLink("专家") { ExpertLibraryView() }
+                    NavigationLink("提示词") { PromptLibraryView() }
+                    NavigationLink("工作区文件与代码搜索") { WorkspaceSearchView() }
                 }
 
                 Section("Appearance") {

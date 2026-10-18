@@ -82,18 +82,126 @@ enum WorkbenchError: LocalizedError {
     @Published var installError = ""
     @Published var installSucceeded = false
     private var reverseRuntimeBusy = false
+    private var diagnosticTask: Task<Void, Never>?
+    private var componentProbeTask: Task<Void, Never>?
+    private var componentProbeStarted = false
+    @Published var diagnosticInterrupted = false
+    @Published var diagnosticCurrentProbe = ""
     @Published var diagnosticStarted: Date?
     @Published var diagnosticDuration: TimeInterval = 0
     @Published var desktopStatus = UserDefaults.standard.string(forKey:"desktop.lastStatus") ?? "尚未从手机检测连接"
+    private static let componentNames = ["Codex","Theos","CoreTools","ReverseTools","Python","Frida","REA"]
+    private static let verifiedComponentsKey = "workbench.verifiedComponents"
+    init() {
+        let cached = Set(UserDefaults.standard.stringArray(forKey: Self.verifiedComponentsKey) ?? [])
+        for name in Self.componentNames where cached.contains(name) {
+            componentStatus[name] = "上次验证已安装 · 待运行复检"
+        }
+    }
+    private func rememberVerified(_ name: String) {
+        var names = Set(UserDefaults.standard.stringArray(forKey: Self.verifiedComponentsKey) ?? [])
+        names.insert(name)
+        UserDefaults.standard.set(names.sorted(), forKey: Self.verifiedComponentsKey)
+    }
+    private func reaProof(_ output: String) -> (cached: Bool, liveReady: Bool)? {
+        let json = output.components(separatedBy: "\n").first ?? ""
+        guard let data = json.data(using: .utf8),
+              let result = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let verification = result["verification"] as? [String: Any] else { return nil }
+        let live = verification["live"] as? Bool == true
+        let cached = result["status"] as? String == "last_verified" && verification["cached"] as? Bool == true && !live
+        let ready = result["status"] as? String == "ready" && result["registrationReady"] as? Bool == true && live
+        return (cached, ready)
+    }
+    func startDiagnosis(repair: Bool = false, onlyIfEmpty: Bool = false) {
+        guard diagnosticTask == nil, !busy, !(onlyIfEmpty && !results.isEmpty) else { return }
+        busy = true
+        let priorProbe = componentProbeTask
+        priorProbe?.cancel()
+        // Owned by the model, not SwiftUI .task: navigating away must not cancel the guest command.
+        diagnosticTask = Task.detached(priority: .userInitiated) { [weak self] in
+            if let priorProbe { await priorProbe.value }
+            guard let self else { return }
+            await self.diagnose(repair: repair)
+        }
+    }
+    func startComponentProbeIfNeeded() {
+        guard !componentProbeStarted, componentProbeTask == nil, diagnosticTask == nil, !busy else { return }
+        componentProbeStarted = true
+        componentProbeTask = Task.detached(priority: .utility) { [weak self] in
+            guard let self else { return }
+            await self.probeComponents()
+        }
+    }
+    private func probeComponents() async {
+        defer { componentProbeTask = nil }
+        let probes: [(String,String)] = [
+            ("Codex","codex --version"),
+            ("Theos","test -f /opt/theos/makefiles/common.mk && command -v make && command -v clang"),
+            ("CoreTools","command -v bash && command -v curl && command -v git && command -v file"),
+            ("ReverseTools","command -v llvm-objdump && command -v strings && command -v readelf"),
+            ("Python","python3 --version && python3 -c 'import ssl,sqlite3,json'"),
+            ("Frida","python3 /usr/local/lib/minis-frida/install.py status"),
+            ("REA","python3 /usr/local/lib/minis-reverse-tools/rea_install.py status")
+        ]
+        for (name, command) in probes {
+            if Task.isCancelled { componentProbeStarted = false; return }
+            if busy { componentProbeStarted = false; return }
+            do {
+                if name == "REA" { componentStatus[name] = "状态检查中 · 缓存缺失时冷启动最多约 12 分钟" }
+                let result = try await run(command, timeout: name == "REA" ? 720 : 60, sessionId: "workbench-component-status")
+                if Task.isCancelled { componentProbeStarted = false; return }
+                if name == "REA", result.exitCode == 0, reaProof(result.output)?.cached == true {
+                    componentStatus[name] = "已安装 · 上次验证（待实时复检）"
+                    rememberVerified(name)
+                } else if result.exitCode == 0 && (name != "REA" || reaProof(result.output)?.liveReady == true) {
+                    componentStatus[name] = "已安装 · 运行探针通过"
+                    rememberVerified(name)
+                } else {
+                    componentStatus[name] = "未通过运行探针 · rc=\(result.exitCode)"
+                }
+            } catch is CancellationError {
+                componentProbeStarted = false
+                return
+            } catch {
+                componentStatus[name] = "待复检 · \(error.localizedDescription)"
+                record("组件复检 \(name)：\(error.localizedDescription)")
+            }
+        }
+    }
+    func checkRuntimeComponent(_ name: String) async {
+        guard !busy, name == "Frida" || name == "REA" else { return }
+        busy = true
+        defer { busy = false }
+        if let task = componentProbeTask { task.cancel(); await task.value }
+        do {
+            if name == "REA" { componentStatus[name] = "冷启动实时复检中 · 最长约 12 分钟" }
+            let output = try await reverseRuntime(name == "Frida" ? ["action":"status-frida"] : ["action":"status-rea","deep":true])
+            if name == "REA", reaProof(output)?.liveReady != true { throw WorkbenchError.unavailable("REA 未返回实时就绪证据") }
+            componentStatus[name] = "已安装 · 运行探针通过"
+            rememberVerified(name)
+            record(output)
+        } catch is CancellationError {
+            componentStatus[name] = "待复检 · 检测已取消"
+        } catch {
+            componentStatus[name] = "未通过运行探针"
+            record(error.localizedDescription)
+        }
+    }
     func installFromUI(_ name: String) async {
         guard !busy else { return }
         busy = true; installError = ""; installSucceeded = false
+        if let task = componentProbeTask { task.cancel(); await task.value }
         installingName = name; installStage = "准备"
         defer { busy = false }
         do {
             try await install(name)
             installStage = "完成"; installSucceeded = true
             componentStatus[name] = "已安装 · 启动检查通过"
+            rememberVerified(name)
+        } catch is CancellationError {
+            installError = "安装已取消；请重新运行探针确认当前状态"
+            componentStatus[name] = "待复检 · 安装中断"
         } catch {
             installError = error.localizedDescription
             componentStatus[name] = "安装失败 · 可重试"
@@ -266,7 +374,7 @@ enum WorkbenchError: LocalizedError {
         }
         return String(data:data,encoding:.utf8) ?? "WDA 返回非文本响应"
     }
-    func run(_ command: String, timeout: TimeInterval = 900) async throws -> ISHCommandResult {
+    func run(_ command: String, timeout: TimeInterval = 900, sessionId: String = "workbench") async throws -> ISHCommandResult {
         guard !RootfsManager.shared.didResetWhileBooted else { throw WorkbenchError.unavailable("Linux 环境已重置，需要重启应用，不能重用旧内核挂载") }
         if !ISHKernel.shared.isBooted {
             let manager = RootfsManager.shared
@@ -282,7 +390,7 @@ enum WorkbenchError: LocalizedError {
             manager.applyDefaultMountOverlay()
             JailbreakFullAccessManager.shared.enableIfJailbroken()
         }
-        return try await ISHExecutionCoordinator.shared.execute(sessionId:"workbench", command:command, timeout:timeout, lineCallback:{ [weak self] line in
+        return try await ISHExecutionCoordinator.shared.execute(sessionId:sessionId, command:command, timeout:timeout, lineCallback:{ [weak self] line in
             Task { @MainActor in
                 guard let self = self else { return }
                 if line.contains("MINIS_STAGE:") {
@@ -298,17 +406,21 @@ enum WorkbenchError: LocalizedError {
         try? fm.createDirectory(at:root,withIntermediateDirectories:true)
         try? Data(log.utf8).write(to:root.appendingPathComponent("diagnostics.log"),options:.atomic)
     }
-    func diagnose(repair: Bool = false) async {
-        guard !busy else { return }; busy=true; defer { busy=false }
+    private func diagnose(repair: Bool = false) async {
+        defer { busy = false; diagnosticTask = nil }
         results=[]
+        diagnosticInterrupted = false
+        diagnosticCurrentProbe = ""
         diagnosticStarted=Date()
-        defer { diagnosticDuration=Date().timeIntervalSince(diagnosticStarted ?? Date()) }
+        defer { diagnosticDuration=Date().timeIntervalSince(diagnosticStarted ?? Date()); diagnosticCurrentProbe = "" }
         if repair {
             do { for (component, probe) in [("CoreTools","command -v curl && command -v git && command -v file"), ("Python","command -v python3"), ("ReverseTools","command -v llvm-objdump && command -v readelf"), ("Codex","codex --version"), ("Theos","test -f /opt/theos/makefiles/common.mk")] {
-                    let result = try await run(probe, timeout: 30)
-                    if result.exitCode != 0 { do { try await install(component) } catch { record("\(component)：\(error.localizedDescription)") } }
+                    try Task.checkCancellation()
+                    let result = try await run(probe, timeout: 30, sessionId: "workbench-diagnostics")
+                    if result.exitCode != 0 { do { try await install(component) } catch is CancellationError { throw CancellationError() } catch { record("\(component)：\(error.localizedDescription)") } }
                 }
                 importAgents() }
+            catch is CancellationError { diagnosticInterrupted = true; record("修复诊断已取消"); return }
             catch { record("修复：\(error.localizedDescription)") }
         }
         let checks: [(String,String)] = [
@@ -324,13 +436,31 @@ enum WorkbenchError: LocalizedError {
             ("REA CLI 与 MCP", "python3 /usr/local/lib/minis-reverse-tools/rea_install.py status"),
             ("Theos", "test -f /opt/theos/makefiles/common.mk && command -v make && command -v clang"),
             ("Linux C 编译", "p=/tmp/minis-cc-$$; printf 'int main(){return 0;}' > \"$p.c\"; clang \"$p.c\" -o \"$p\" && \"$p\"; r=$?; rm -f \"$p.c\" \"$p\"; exit $r"),
-            ("iOS dylib 编译", "p=/tmp/minis-ios-$$; printf 'int minis_probe(void){return 1;}' > \"$p.c\"; clang --target=arm64-apple-ios15.4 -isysroot /opt/theos/sdks/iPhoneOS16.5.sdk -fuse-ld=lld -dynamiclib \"$p.c\" -o \"$p.dylib\" && file \"$p.dylib\"; r=$?; rm -f \"$p.c\" \"$p.dylib\"; exit $r"),
-            ("iOS SDK", "for v in 15.6 16.5 17.5 18.6; do s=/opt/theos/sdks/iPhoneOS$v.sdk; test -f \"$s/System/Library/Frameworks/Foundation.framework/Headers/Foundation.h\" && test -f \"$s/usr/lib/libSystem.tbd\" || exit 1; echo \"SDK $v headers + link stubs OK\"; done")]
+            ("iOS dylib 编译", "s=; for v in 16.5 15.6 17.5 18.6; do p=/opt/theos/sdks/iPhoneOS$v.sdk; if test -f \"$p/usr/lib/libSystem.tbd\"; then s=$p; break; fi; done; test -n \"$s\" || exit 1; p=/tmp/minis-ios-$$; printf 'int minis_probe(void){return 1;}' > \"$p.c\"; clang --target=arm64-apple-ios15.4 -isysroot \"$s\" -fuse-ld=lld -dynamiclib \"$p.c\" -o \"$p.dylib\" && file \"$p.dylib\"; r=$?; rm -f \"$p.c\" \"$p.dylib\"; exit $r"),
+            ("iOS SDK", "found=0; for v in 15.6 16.5 17.5 18.6; do s=/opt/theos/sdks/iPhoneOS$v.sdk; if test -f \"$s/System/Library/Frameworks/Foundation.framework/Headers/Foundation.h\" && test -f \"$s/usr/lib/libSystem.tbd\"; then echo \"SDK $v headers + link stubs OK\"; found=1; fi; done; test $found -eq 1")]
         for (name,command) in checks {
-            do { let result=try await run(command,timeout:60); results.append(WorkbenchCheck(name:name,ok:result.exitCode==0,detail:result.output)); record("\(name) rc=\(result.exitCode)\n\(result.output)") }
-            catch { results.append(WorkbenchCheck(name:name,ok:false,detail:error.localizedDescription)); record("\(name)：\(error.localizedDescription)") }
+            if Task.isCancelled { diagnosticInterrupted = true; record("诊断已取消，后续探针未运行"); break }
+            do {
+                diagnosticCurrentProbe = name == "REA CLI 与 MCP" ? "REA 状态检查中（缓存缺失时冷启动最多约 12 分钟）" : name
+                let result=try await run(command,timeout:name == "REA CLI 与 MCP" ? 720 : 60,sessionId:"workbench-diagnostics")
+                if result.exitCode == -1 && result.output.contains("Command cancelled") { diagnosticInterrupted = true; record("诊断命令被取消，后续探针未运行"); break }
+                let proof = name == "REA CLI 与 MCP" ? reaProof(result.output) : nil
+                let pending = result.exitCode == 0 && proof?.cached == true
+                let passed = result.exitCode == 0 && !pending && (name != "REA CLI 与 MCP" || proof?.liveReady == true)
+                let detail = pending ? "已安装，上次验证通过；本次仅读取缓存，待点击组件内的实时复检。\n" + result.output : result.output
+                results.append(WorkbenchCheck(name:name,ok:passed,detail:detail,pending:pending))
+                if let component = ["Frida Python 与 CLI":"Frida","REA CLI 与 MCP":"REA"][name] ?? (Self.componentNames.contains(name) ? name : nil) {
+                    componentStatus[component] = pending ? "已安装 · 上次验证（待实时复检）" : (passed ? "已安装 · 运行探针通过" : "未通过运行探针 · rc=\(result.exitCode)")
+                    if passed || pending { rememberVerified(component) }
+                }
+                record("\(name) rc=\(result.exitCode)\n\(result.output)")
+            } catch is CancellationError {
+                diagnosticInterrupted = true; record("诊断已取消，后续探针未运行"); break
+            } catch {
+                results.append(WorkbenchCheck(name:name,ok:false,detail:error.localizedDescription)); record("\(name)：\(error.localizedDescription)")
+            }
         }
-        results.append(WorkbenchCheck(name:"本机文件权限",ok:fm.isReadableFile(atPath:"/var/mobile/Containers/Data/Application"),detail:"按实际目录读取权限检测；iSH 内 root 不等于 iOS root"))
+        if !diagnosticInterrupted { results.append(WorkbenchCheck(name:"本机文件权限",ok:fm.isReadableFile(atPath:"/var/mobile/Containers/Data/Application"),detail:"按实际目录读取权限检测；iSH 内 root 不等于 iOS root")) }
     }
     func install(_ name: String) async throws {
         if name == "Frida" || name == "REA" {
@@ -387,7 +517,7 @@ enum WorkbenchError: LocalizedError {
         default: throw WorkbenchError.unavailable("未知组件")
         }
         installStage = "下载安装与验证"
-        let result=try await run("set -e; " + command,timeout:1800); record("安装 \(name) rc=\(result.exitCode)\n\(result.output)")
+        let result=try await run("set -e; " + command,timeout:1800,sessionId:"workbench-install"); record("安装 \(name) rc=\(result.exitCode)\n\(result.output)")
         guard result.exitCode==0 else { throw WorkbenchError.unavailable("\(name) 安装或启动验证失败：\(result.output.suffix(1000))") }
     }
     func reverseRuntime(_ args: [String:Any]) async throws -> String {
@@ -401,26 +531,26 @@ enum WorkbenchError: LocalizedError {
         let installing = action.hasPrefix("install-")
         if installing {
             installStage = "准备 Python 依赖"
-            let setup = try await run("set -e; if ! command -v python3 >/dev/null || ! python3 -m pip --version >/dev/null 2>&1; then apk add --no-cache python3 py3-pip; fi; test -f /usr/lib/libgcc_s.so.1 || apk add --no-cache libgcc",timeout:300)
+            let setup = try await run("set -e; if ! command -v python3 >/dev/null || ! python3 -m pip --version >/dev/null 2>&1; then apk add --no-cache python3 py3-pip; fi; test -f /usr/lib/libgcc_s.so.1 || apk add --no-cache libgcc",timeout:300,sessionId:"workbench-reverse")
             guard setup.exitCode == 0 else { throw WorkbenchError.unavailable(setup.output) }
         }
         if action == "install-rea" {
             installStage = "准备 Node.js 与 npm"
-            let setup = try await run("apk add --no-cache --upgrade nodejs npm",timeout:600)
+            let setup = try await run("apk add --no-cache --upgrade nodejs npm",timeout:600,sessionId:"workbench-reverse")
             guard setup.exitCode == 0 else { throw WorkbenchError.unavailable(setup.output) }
         }
         let command: String
         if action == "install-frida" {
             guard let bundle = Bundle.main.url(forResource:"BuildWorkbench",withExtension:"bundle") else { throw WorkbenchError.unavailable("缺少内置 Frida wheel 资源") }
-            let setup=try await run("mkdir -p /opt/minis-workbench",timeout:60)
+            let setup=try await run("mkdir -p /opt/minis-workbench",timeout:60,sessionId:"workbench-reverse")
             guard setup.exitCode == 0, ISHKernel.shared.bindMountPath("/opt/minis-workbench",toHostPath:bundle.path,readOnly:true) == 0 else { throw WorkbenchError.unavailable("无法挂载内置 Frida 资源") }
             command = "python3 /usr/local/lib/minis-frida/install.py install --bundle /opt/minis-workbench/frida"
         } else if action == "status-frida" {
             command = "python3 /usr/local/lib/minis-frida/install.py status"
         } else {
-            command = "python3 /usr/local/lib/minis-reverse-tools/rea_install.py " + (installing ? "install" : "status")
+            command = "python3 /usr/local/lib/minis-reverse-tools/rea_install.py " + (installing ? "install" : "status") + ((!installing && (args["deep"] as? Bool == true)) ? " --deep" : "")
         }
-        let result = try await run(command,timeout:installing ? 1800 : 240)
+        let result = try await run(command,timeout:installing ? 1800 : (action == "status-rea" ? 720 : 240),sessionId:"workbench-reverse")
         record("逆向工具 \(action) rc=\(result.exitCode)\n\(result.output)")
         guard result.exitCode == 0 else { throw WorkbenchError.unavailable("工具尚未就绪 rc=\(result.exitCode)\n\(result.output.suffix(3000))") }
         if action == "install-rea" {
@@ -442,18 +572,21 @@ enum WorkbenchError: LocalizedError {
             _ = try await desktopTool(["action":"download","path":local,"remotePath":output])
             return built+"\n已下载到手机共享产物目录："+local
         }
-        guard ["doctor","install-sdks","build"].contains(action),
+        guard ["doctor","sdk-status","install-sdk","build"].contains(action),
               let bundle=Bundle.main.url(forResource:"BuildWorkbench",withExtension:"bundle") else {
             throw WorkbenchError.unavailable("构建工作台资源或动作不可用")
         }
         let setup=try await run("mkdir -p /opt/minis-workbench",timeout:120)
         guard setup.exitCode==0 else { throw WorkbenchError.unavailable(setup.output) }
         guard ISHKernel.shared.bindMountPath("/opt/minis-workbench",toHostPath:bundle.path,readOnly:true)==0 else {
-            throw WorkbenchError.unavailable("无法只读挂载内置 SDK 与构建脚本")
+            throw WorkbenchError.unavailable("无法只读挂载 SDK 目录与构建脚本")
         }
         func quote(_ value:String)->String { "'"+value.replacingOccurrences(of:"'",with:"'\"'\"'")+"'" }
         var command="python3 /opt/minis-workbench/minis_build.py "+action
-        if action=="build" {
+        if action=="install-sdk" {
+            guard let value=args["sdk"] as? String, !value.isEmpty else { throw WorkbenchError.unavailable("缺少 SDK 版本") }
+            command += " --sdk "+quote(value)
+        } else if action=="build" {
             for key in ["target","project","output"] {
                 guard let value=args[key] as? String, !value.isEmpty else { throw WorkbenchError.unavailable("缺少构建参数：\(key)") }
                 command += " --\(key) "+quote(value)
@@ -462,7 +595,7 @@ enum WorkbenchError: LocalizedError {
                 if let value=args[key] as? String, !value.isEmpty { command += " --\(key) "+quote(value) }
             }
         }
-        let result=try await run(command,timeout:1800)
+        let result=try await run(command,timeout:action=="install-sdk" ? 3600 : 1800)
         record("BuildWorkbench \(action) rc=\(result.exitCode)\n\(result.output)")
         guard result.exitCode==0 else { throw WorkbenchError.unavailable(result.output) }
         return result.output
@@ -541,7 +674,10 @@ enum WorkbenchError: LocalizedError {
     }
 
 }
-struct WorkbenchCheck: Identifiable { let id=UUID(); let name:String; let ok:Bool; let detail:String }
+struct WorkbenchCheck: Identifiable {
+    let id=UUID(); let name:String; let ok:Bool; let detail:String; let pending:Bool
+    init(name:String,ok:Bool,detail:String,pending:Bool=false) { self.name=name; self.ok=ok; self.detail=detail; self.pending=pending }
+}
 
 struct AttachmentWorkbenchSheet: View {
     let choose: (String) -> Void
@@ -638,9 +774,10 @@ struct DevelopmentWorkbenchView: View {
             }
             if !status.isEmpty { Section { Text(status).font(.caption) } }
             Section(header:Text("实际检测结果：\(model.results.filter(\.ok).count)/\(model.results.count) 通过")) {
-                ForEach(model.results) { row in HStack(alignment:.top) { Image(systemName:row.ok ? "checkmark.circle.fill" : "exclamationmark.circle").foregroundColor(row.ok ? .green : .orange); VStack(alignment:.leading) { Text(row.name); Text(row.detail.isEmpty ? (row.ok ? "探针成功" : "探针失败") : String(row.detail.suffix(1500))).font(.caption).foregroundColor(.secondary) } } }
+                ForEach(model.results) { row in HStack(alignment:.top) { Image(systemName:row.pending ? "clock" : (row.ok ? "checkmark.circle.fill" : "exclamationmark.circle")).foregroundColor(row.ok ? .green : .orange); VStack(alignment:.leading) { Text(row.name); Text(row.detail.isEmpty ? (row.pending ? "待实时复检" : (row.ok ? "探针成功" : "探针失败")) : String(row.detail.suffix(1500))).font(.caption).foregroundColor(.secondary) } } }
             }
         }.navigationTitle("开发环境与诊断")
+        .onAppear { model.startComponentProbeIfNeeded() }
     }
 }
 struct RuntimeComponentView: View {
@@ -664,7 +801,7 @@ struct RuntimeComponentView: View {
                     .buttonStyle(.borderedProminent).disabled(model.busy)
                 if name == "Frida" || name == "REA" {
                     Text("Frida 安装真实 Linux ARM64/musl 模块及 CLI，不代理到电脑；访问原生 iOS 目标仍需实际 Frida Server/Gadget 和权限。REA 会独立报告 MCP 握手与分析引擎状态。").font(.caption).foregroundColor(.secondary)
-                    Button("检测实际运行状态") { Task { do { model.record(try await model.reverseRuntime(["action": name == "Frida" ? "status-frida" : "status-rea"])) } catch { model.record(error.localizedDescription) } } }.disabled(model.busy)
+                    Button("检测实际运行状态") { Task { await model.checkRuntimeComponent(name) } }.disabled(model.busy)
                 }
                 Text("Theos 的项目文件安装成功不代表已具备 iOS SDK。诊断会单独检查手机编译和 iOS SDK。").font(.caption).foregroundColor(.secondary)
                 if active { Text(String(model.log.suffix(6000))).font(.system(.caption,design:.monospaced)).textSelection(.enabled) }
@@ -677,24 +814,26 @@ struct WorkbenchDiagnosticsView: View {
     var body: some View {
         List {
             Section {
-                Label(model.busy ? "正在检查核心能力" : (model.results.isEmpty ? "等待检查" : "检查完成"),systemImage:model.busy ? "clock" : "stethoscope")
+                Label(model.busy ? "正在检查核心能力" : (model.diagnosticInterrupted ? "检查已中断" : (model.results.isEmpty ? "等待检查" : "检查完成")),systemImage:model.busy ? "clock" : "stethoscope")
                 Text("\(model.results.filter(\.ok).count)/\(model.results.count) 项通过 · \(Int(model.diagnosticDuration)) 秒").font(.caption)
-                Button("运行诊断") { Task { await model.diagnose() } }.disabled(model.busy)
-                Button("自动修复并重新检查") { Task { await model.diagnose(repair:true) } }.disabled(model.busy)
+                if model.busy && !model.diagnosticCurrentProbe.isEmpty { Text(model.diagnosticCurrentProbe).font(.caption).foregroundColor(.secondary) }
+                if model.diagnosticInterrupted { Text("仅显示已运行探针；取消后的项目未计为失败。").font(.caption).foregroundColor(.secondary) }
+                Button("运行诊断") { model.startDiagnosis() }.disabled(model.busy)
+                Button("自动修复并重新检查") { model.startDiagnosis(repair:true) }.disabled(model.busy)
             }
             ForEach(["基础运行","项目能力","可选能力","组件与工具"],id:\.self) { group in
                 Section(header:Text(group)) {
                     ForEach(model.results.filter { row in diagnosticGroup(row.name) == group }) { row in
                         HStack(alignment:.top) {
-                            Image(systemName:row.ok ? "checkmark.circle" : "exclamationmark.circle").foregroundColor(row.ok ? .green : .orange)
+                            Image(systemName:row.pending ? "clock" : (row.ok ? "checkmark.circle" : "exclamationmark.circle")).foregroundColor(row.ok ? .green : .orange)
                             VStack(alignment:.leading) { Text(row.name); Text(String(row.detail.suffix(1500))).font(.caption).foregroundColor(.secondary).textSelection(.enabled) }
                         }
                     }
                 }
             }
         }.navigationTitle("运行诊断")
-        .toolbar { ToolbarItem(placement:.navigationBarTrailing) { Button("复制") { UIPasteboard.general.string=model.results.map { "\($0.ok ? "PASS" : "FAIL") \($0.name)\n\($0.detail)" }.joined(separator:"\n") } } }
-        .task { if model.results.isEmpty { await model.diagnose() } }
+        .toolbar { ToolbarItem(placement:.navigationBarTrailing) { Button("复制") { UIPasteboard.general.string=model.results.map { "\($0.pending ? "PENDING" : ($0.ok ? "PASS" : "FAIL")) \($0.name)\n\($0.detail)" }.joined(separator:"\n") } } }
+        .onAppear { model.startDiagnosis(onlyIfEmpty:true) }
     }
     private func diagnosticGroup(_ name:String)->String {
         if ["命令执行","项目文件","本机文件权限"].contains(name) { return "基础运行" }
@@ -721,9 +860,11 @@ struct MultiPlatformWorkbenchView:View {
     var body:some View {
         Form {
             Section { NavigationLink("提速与温控",destination:RuntimeEfficiencyView()) }
-            Section(header:Text("内置 SDK 15–18")) {
-                Text("已随包携带：15.6、16.5、17.5、18.6。首次安装四套 SDK 需要至少 2 GB 可用空间；核对 SHA256 后解压到 Theos。SDK 不等于完整 Xcode。").font(.caption)
-                Button("安装内置四套 SDK") { perform(["action":"install-sdks"]) }.disabled(model.busy)
+            Section(header:Text("按需下载 iOS SDK 15–18")) {
+                Text("选择一套 SDK 单独下载并安装到 Theos；下载后核对字节数和 SHA256。已有 SDK 不覆盖，四套归档均不随 IPA 携带；单次安装需要至少 2 GB 可用空间。SDK 不等于完整 Xcode。").font(.caption)
+                Picker("SDK 版本",selection:$sdk) { ForEach(["15.6","16.5","17.5","18.6"],id:\.self) { Text($0).tag($0) } }
+                Button("下载并安装所选 SDK") { perform(["action":"install-sdk","sdk":sdk]) }.disabled(model.busy)
+                Button("查看 SDK 安装状态") { perform(["action":"sdk-status"]) }.disabled(model.busy)
                 Button("检测所有构建与分析组件") { perform(["action":"doctor"]) }.disabled(model.busy)
                 Button("安装构建、文档与分析基础依赖") {
                     Task {
@@ -736,7 +877,6 @@ struct MultiPlatformWorkbenchView:View {
                 Picker("产物",selection:$target) { ForEach(["dylib","deb","ipa","apk","exe"],id:\.self) { Text($0).tag($0) } }
                 TextField("源码／项目／APP 目录",text:$project).textInputAutocapitalization(.never).autocorrectionDisabled()
                 TextField("产物输出路径",text:$output).textInputAutocapitalization(.never).autocorrectionDisabled()
-                Picker("SDK",selection:$sdk) { ForEach(["15.6","16.5","17.5","18.6"],id:\.self) { Text($0).tag($0) } }
                 Picker("执行位置",selection:$remote) { Text("手机本地").tag("");Text("当前 Windows 电脑").tag("windows") }
                 TextField("可选 Mac/Linux SSH 主机别名",text:$remote).textInputAutocapitalization(.never).autocorrectionDisabled()
                 Button("构建并校验产物") { perform(["action":"build","target":target,"project":project,"output":output,"sdk":sdk,"remote":remote]) }.disabled(model.busy)
