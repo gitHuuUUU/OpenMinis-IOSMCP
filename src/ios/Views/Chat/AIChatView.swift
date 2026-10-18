@@ -2875,14 +2875,6 @@ struct AIChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment:.leading,spacing:20) {
-                        LegacyTranscriptScrollProbe { near, interacting in
-                            legacyScrollInteracting = interacting
-                            // A drag immediately suspends following, before the
-                            // lazy bottom sentinel disappears from the viewport.
-                            if interacting { legacyFollowBottom = false }
-                            else if near { legacyFollowBottom = true }
-                            vm.isNearBottom = near && !interacting
-                        }.frame(height:0)
                         ForEach(vm.messages) { message in
                             ChatMessageRow(
                                 message:message,
@@ -2910,6 +2902,14 @@ struct AIChatView: View {
                     }
                     .padding(.horizontal,16)
                     .padding(.top,12)
+                    // Attach to the persistent content container, not a lazy
+                    // first/last row that can be unmounted while reading.
+                    .background(LegacyTranscriptScrollProbe { near, interacting in
+                        legacyScrollInteracting = interacting
+                        if interacting { legacyFollowBottom = false }
+                        else if near { legacyFollowBottom = true }
+                        vm.isNearBottom = near && !interacting
+                    }.frame(width:0,height:0),alignment:.topLeading)
                 }
                 .coordinateSpace(name:"legacyTranscript")
                 .simultaneousGesture(DragGesture(minimumDistance:3).onChanged { _ in

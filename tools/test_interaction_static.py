@@ -11,6 +11,7 @@ class InteractionContracts(unittest.TestCase):
     def test_live_scroll_observation_not_lazy_sentinel(self):
         s=read('src/ios/Views/Chat/AIChatView.swift')
         self.assertNotIn('LegacyTranscriptBottomKey',s)
+        self.assertIn('.background(LegacyTranscriptScrollProbe',s)
         for piece in ['found.observe(\\.contentOffset','found.observe(\\.contentSize','scroll.isDecelerating','legacyFollowBottom=false','removeTarget(self','settled?.cancel()']:
             self.assertIn(piece,s)
     def test_follow_latches_during_growth_and_drag(self):
