@@ -140,6 +140,13 @@ struct AboutView: View {
                     }
                 }
             }
+            // MARK: - Community
+            Section {
+                Text("QQ交流群：1082489804")
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityLabel("QQ交流群：1082489804")
+            }
         }
         .navigationTitle("About")
         .navigationBarTitleDisplayMode(.inline)
