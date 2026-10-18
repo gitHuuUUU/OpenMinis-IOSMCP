@@ -43,7 +43,10 @@ import Combine
                   let handle = try? FileHandle(forReadingFrom: url) else { continue }
             defer { try? handle.close() }
             let bytes = (try? handle.read(upToCount: 8192)) ?? Data()
-            guard let text = String(data: bytes, encoding: .utf8), !text.isEmpty else { continue }
+            guard !bytes.isEmpty else { continue }
+            // A bounded read may end inside a multibyte Chinese character.
+            // Preserve the valid prefix instead of silently dropping the file.
+            let text = String(decoding: bytes, as: UTF8.self)
             sections.append("--- Workspace instructions: \(name) (up to 8 KB; read file for remainder) ---\n\(text)")
         }
         return sections.joined(separator: "\n\n")
