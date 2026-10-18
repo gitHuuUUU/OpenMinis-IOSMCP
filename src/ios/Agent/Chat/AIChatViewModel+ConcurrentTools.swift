@@ -373,6 +373,9 @@ extension AIChatViewModel {
         case "desktop_tool":
             toolOutput=try await DeviceWorkbench.shared.desktopTool(toolArgs)
             toolSuccess=true
+        case "reverse_runtime":
+            toolOutput=try await DeviceWorkbench.shared.reverseRuntime(toolArgs)
+            toolSuccess=true
         case "workbench_build":
             toolOutput=try await DeviceWorkbench.shared.buildWorkbench(toolArgs)
             toolSuccess=true

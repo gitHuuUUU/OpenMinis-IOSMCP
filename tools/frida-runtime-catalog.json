@@ -1,0 +1,48 @@
+{
+  "release": "rootfs-tooling-v1",
+  "asset": "frida-17.24.1-alpine321-aarch64-bundle.tar.gz",
+  "bytes": 68226671,
+  "sha256": "61d852c78012a76935a6bf19c59dbda72a54e03a559e041fd8fa4117dc1d6963",
+  "manifest": {
+    "frida_version": "17.24.1",
+    "frida_tools_version": "14.11.0",
+    "python_major_minor": "3.12",
+    "wheels": [
+      {
+        "filename": "colorama-0.4.6-py2.py3-none-any.whl",
+        "bytes": 25335,
+        "sha256": "4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6"
+      },
+      {
+        "filename": "frida-17.24.1-cp37-abi3-linux_aarch64.whl",
+        "bytes": 61680528,
+        "sha256": "537e1e0aafdf65489d15c3729f61c5728eea6f17526a4bec2f5dce4d1a9e95e6"
+      },
+      {
+        "filename": "frida_tools-14.11.0-py3-none-any.whl",
+        "bytes": 4720744,
+        "sha256": "bb2f74e582550732c42529bba654cdaecc4254cd7f2c697ea185314d33418df2"
+      },
+      {
+        "filename": "prompt_toolkit-3.0.53-py3-none-any.whl",
+        "bytes": 392288,
+        "sha256": "01c0891d7f9237d5e339f7d3e42cdae80b7534abb1c7c0e3352efba6231492f2"
+      },
+      {
+        "filename": "pygments-2.21.0-py3-none-any.whl",
+        "bytes": 1250147,
+        "sha256": "2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9"
+      },
+      {
+        "filename": "wcwidth-0.9.2-cp310-abi3-musllinux_1_2_aarch64.whl",
+        "bytes": 782134,
+        "sha256": "c3d80f39ba4653a595edae9aa46a509d14883790a8fc23c5db221ceb207f64b7"
+      },
+      {
+        "filename": "websockets-13.1-cp312-cp312-musllinux_1_2_aarch64.whl",
+        "bytes": 165311,
+        "sha256": "3c78383585f47ccb0fcf186dcb8a43f5438bd7d8f47d69e0b56f71bf431a0a68"
+      }
+    ]
+  }
+}

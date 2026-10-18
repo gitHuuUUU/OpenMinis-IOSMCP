@@ -81,6 +81,7 @@ enum WorkbenchError: LocalizedError {
     @Published var componentStatus: [String: String] = [:]
     @Published var installError = ""
     @Published var installSucceeded = false
+    private var reverseRuntimeBusy = false
     @Published var diagnosticStarted: Date?
     @Published var diagnosticDuration: TimeInterval = 0
     @Published var desktopStatus = UserDefaults.standard.string(forKey:"desktop.lastStatus") ?? "尚未从手机检测连接"
@@ -319,6 +320,8 @@ enum WorkbenchError: LocalizedError {
             ("CoreTools", "command -v bash && command -v curl && command -v unzip && command -v file"),
             ("Python", "python3 --version && python3 -c 'import ssl,sqlite3,json'"),
             ("ReverseTools", "command -v llvm-objdump && command -v strings && command -v readelf"),
+            ("Frida Python 与 CLI", "python3 /usr/local/lib/minis-frida/install.py status"),
+            ("REA CLI 与 MCP", "python3 /usr/local/lib/minis-reverse-tools/rea_install.py status"),
             ("Theos", "test -f /opt/theos/makefiles/common.mk && command -v make && command -v clang"),
             ("Linux C 编译", "p=/tmp/minis-cc-$$; printf 'int main(){return 0;}' > \"$p.c\"; clang \"$p.c\" -o \"$p\" && \"$p\"; r=$?; rm -f \"$p.c\" \"$p\"; exit $r"),
             ("iOS dylib 编译", "p=/tmp/minis-ios-$$; printf 'int minis_probe(void){return 1;}' > \"$p.c\"; clang --target=arm64-apple-ios15.4 -isysroot /opt/theos/sdks/iPhoneOS16.5.sdk -fuse-ld=lld -dynamiclib \"$p.c\" -o \"$p.dylib\" && file \"$p.dylib\"; r=$?; rm -f \"$p.c\" \"$p.dylib\"; exit $r"),
@@ -330,6 +333,10 @@ enum WorkbenchError: LocalizedError {
         results.append(WorkbenchCheck(name:"本机文件权限",ok:fm.isReadableFile(atPath:"/var/mobile/Containers/Data/Application"),detail:"按实际目录读取权限检测；iSH 内 root 不等于 iOS root"))
     }
     func install(_ name: String) async throws {
+        if name == "Frida" || name == "REA" {
+            _ = try await reverseRuntime(["action": name == "Frida" ? "install-frida" : "install-rea"])
+            return
+        }
         installStage = "准备"
         let command: String
         switch name {
@@ -382,6 +389,46 @@ enum WorkbenchError: LocalizedError {
         installStage = "下载安装与验证"
         let result=try await run("set -e; " + command,timeout:1800); record("安装 \(name) rc=\(result.exitCode)\n\(result.output)")
         guard result.exitCode==0 else { throw WorkbenchError.unavailable("\(name) 安装或启动验证失败：\(result.output.suffix(1000))") }
+    }
+    func reverseRuntime(_ args: [String:Any]) async throws -> String {
+        guard !reverseRuntimeBusy else { throw WorkbenchError.unavailable("另一个逆向工具安装/诊断任务正在执行") }
+        reverseRuntimeBusy = true
+        defer { reverseRuntimeBusy = false }
+        let action = args["action"] as? String ?? "status-frida"
+        guard ["install-frida","status-frida","install-rea","status-rea"].contains(action) else {
+            throw WorkbenchError.unavailable("动作需要 install-frida、status-frida、install-rea 或 status-rea")
+        }
+        let installing = action.hasPrefix("install-")
+        if installing {
+            installStage = "准备 Python 依赖"
+            let setup = try await run("set -e; if ! command -v python3 >/dev/null || ! python3 -m pip --version >/dev/null 2>&1; then apk add --no-cache python3 py3-pip; fi; test -f /usr/lib/libgcc_s.so.1 || apk add --no-cache libgcc",timeout:300)
+            guard setup.exitCode == 0 else { throw WorkbenchError.unavailable(setup.output) }
+        }
+        if action == "install-rea" {
+            installStage = "准备 Node.js 与 npm"
+            let setup = try await run("apk add --no-cache --upgrade nodejs npm",timeout:600)
+            guard setup.exitCode == 0 else { throw WorkbenchError.unavailable(setup.output) }
+        }
+        let command: String
+        if action == "install-frida" {
+            guard let bundle = Bundle.main.url(forResource:"BuildWorkbench",withExtension:"bundle") else { throw WorkbenchError.unavailable("缺少内置 Frida wheel 资源") }
+            let setup=try await run("mkdir -p /opt/minis-workbench",timeout:60)
+            guard setup.exitCode == 0, ISHKernel.shared.bindMountPath("/opt/minis-workbench",toHostPath:bundle.path,readOnly:true) == 0 else { throw WorkbenchError.unavailable("无法挂载内置 Frida 资源") }
+            command = "python3 /usr/local/lib/minis-frida/install.py install --bundle /opt/minis-workbench/frida"
+        } else if action == "status-frida" {
+            command = "python3 /usr/local/lib/minis-frida/install.py status"
+        } else {
+            command = "python3 /usr/local/lib/minis-reverse-tools/rea_install.py " + (installing ? "install" : "status")
+        }
+        let result = try await run(command,timeout:installing ? 1800 : 240)
+        record("逆向工具 \(action) rc=\(result.exitCode)\n\(result.output)")
+        guard result.exitCode == 0 else { throw WorkbenchError.unavailable("工具尚未就绪 rc=\(result.exitCode)\n\(result.output.suffix(3000))") }
+        if action == "install-rea" {
+            guard MCPStore.shared.registerInstalledREA(verifiedInstallResult: Data(result.output.trimmingCharacters(in: .whitespacesAndNewlines).utf8)) else {
+                return result.output + "\nREA 已安装，但未覆盖现有自定义或禁用的 MCP 配置；请在 MCP 设置中核对。"
+            }
+        }
+        return result.output + "\n注意：Linux guest Frida 客户端不等于原生 iOS 进程附加权限；REA MCP 握手不等于全部分析引擎就绪。"
     }
     func buildWorkbench(_ args:[String:Any]) async throws -> String {
         let action=args["action"] as? String ?? "doctor"
@@ -560,8 +607,8 @@ struct DevelopmentWorkbenchView: View {
             Section(header:Text("开发环境与诊断")) {
                 NavigationLink("SDK 与多平台构建工作台") { MultiPlatformWorkbenchView() }
                 NavigationLink("内置终端") { ISHTerminalView(showCloseButton: true) }
-                NavigationLink("Tools · 三个基础工具包") { List { Text("CoreTools：文件、网络与项目工具"); Text("ReverseTools：LLVM / binutils / GDB"); Text("Python：解释器及 pip") }.navigationTitle("Tools") }
-                ForEach(["Codex","Theos","CoreTools","ReverseTools","Python"],id:\.self) { name in
+                NavigationLink("Tools · 基础与逆向工具") { List { Text("CoreTools：文件、网络与项目工具"); Text("ReverseTools：LLVM / binutils / GDB"); Text("Python：解释器及 pip"); Text("Frida：内置 ARM64/musl Python 模块与 CLI，实际启动验证"); Text("REA：固定版本 CLI、官方技能及 MCP；引擎另行检测") }.navigationTitle("Tools") }
+                ForEach(["Codex","Theos","CoreTools","ReverseTools","Python","Frida","REA"],id:\.self) { name in
                     NavigationLink { RuntimeComponentView(name:name) } label: {
                         HStack { Text(name); Spacer(); Text(model.componentStatus[name] ?? "查看与安装").font(.caption).foregroundColor(.secondary) }
                     }
@@ -615,6 +662,10 @@ struct RuntimeComponentView: View {
                 if active && !model.installError.isEmpty { Text(model.installError).foregroundColor(.red).textSelection(.enabled) }
                 Button(model.busy ? "正在安装…" : "安装 / 修复") { Task { await model.installFromUI(name) } }
                     .buttonStyle(.borderedProminent).disabled(model.busy)
+                if name == "Frida" || name == "REA" {
+                    Text("Frida 安装真实 Linux ARM64/musl 模块及 CLI，不代理到电脑；访问原生 iOS 目标仍需实际 Frida Server/Gadget 和权限。REA 会独立报告 MCP 握手与分析引擎状态。").font(.caption).foregroundColor(.secondary)
+                    Button("检测实际运行状态") { Task { do { model.record(try await model.reverseRuntime(["action": name == "Frida" ? "status-frida" : "status-rea"])) } catch { model.record(error.localizedDescription) } } }.disabled(model.busy)
+                }
                 Text("Theos 的项目文件安装成功不代表已具备 iOS SDK。诊断会单独检查手机编译和 iOS SDK。").font(.caption).foregroundColor(.secondary)
                 if active { Text(String(model.log.suffix(6000))).font(.system(.caption,design:.monospaced)).textSelection(.enabled) }
             }.padding()

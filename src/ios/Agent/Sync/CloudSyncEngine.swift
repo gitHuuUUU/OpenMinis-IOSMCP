@@ -540,6 +540,11 @@ final class CloudSyncEngine: ObservableObject {
     }
 
     func start() async {
+        guard AppSigningCapabilities.hasMinisCloudKit else {
+            syncStatus = .disabled
+            logger.warning("[CloudSync] start skipped: current signature lacks the configured CloudKit container")
+            return
+        }
         guard isEnabled else {
             syncStatus = .disabled
             return

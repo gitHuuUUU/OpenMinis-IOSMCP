@@ -153,3 +153,6 @@ src/ios/BuildWorkbench.bundle/*.tar.xz
 
 __pycache__/
 *.pyc
+
+# Verified binary wheels fetched by build pipeline
+src/ios/BuildWorkbench.bundle/frida/

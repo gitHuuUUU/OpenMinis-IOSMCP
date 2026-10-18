@@ -72,12 +72,20 @@ jobs:
       - name: Browser interactions and production address resolver
         run: python3 tools/test_browser_interaction.py --require-swift
 
+      - name: Signing capability and Frida installer regressions
+        run: |
+          python3 src/ios/MinisTests/Standalone/SigningCapabilityWiringTests.py
+          swiftc src/ios/Shared/SigningCapabilityPolicy.swift src/ios/MinisTests/Standalone/SigningCapabilityPolicyTests.swift -o /tmp/signing-policy-tests
+          /tmp/signing-policy-tests
+          python3 tools/test_frida_installer.py
+          python3 -m unittest discover -s tests -p test_rea_install.py
+
       - name: Swift syntax preflight
         run: find src/ios \( -path '*/MinisTests' -o -path '*/MinisUITests' \) -prune -o -name '*.swift' -print0 | xargs -0 xcrun swiftc -frontend -parse
 
       - name: Test missing App Group storage fallback
         run: |
-          xcrun swiftc src/ios/Shared/PendingShare.swift src/ios/Shared/SharedContainerStore.swift tools/StorageFallbackTests.swift -o /tmp/minis-storage-tests
+          xcrun swiftc src/ios/Shared/PendingShare.swift src/ios/Shared/SigningCapabilityPolicy.swift src/ios/Shared/SharedContainerStore.swift tools/StorageFallbackTests.swift -o /tmp/minis-storage-tests
           /tmp/minis-storage-tests
 
       - name: Set up Go (rclone / ish tooling)
@@ -123,6 +131,11 @@ jobs:
       - name: Bundle verified iOS 15-18 SDK archives
         run: python3 tools/prepare_build_workbench.py
 
+      - name: Bundle verified offline Frida runtime
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/prepare_frida_workbench.py
+
       - name: Build Minis app (unsigned)
         run: |
           # The repo ships only the .example config; the pbxproj references the
@@ -159,11 +172,20 @@ jobs:
           codesign --verify --deep --strict "$STAGED_APP"
           codesign -d --entitlements :- "$STAGED_APP" > build/trollstore-entitlements.plist
           cd build && zip -q -r ../IOS-MCP.ipa Payload && cd ..
+          # A separate empty-entitlement payload for certificate re-signing.
+          # This is NOT signed by a user certificate and cannot install as-is.
+          codesign --force --sign - --timestamp=none --generate-entitlement-der --entitlements src/ios/OrdinarySigning.entitlements "$STAGED_APP"
+          codesign --verify --deep --strict "$STAGED_APP"
+          codesign -d --entitlements :- "$STAGED_APP" > build/sideload-entitlements.plist
+          cd build && zip -q -r ../MinisRe-Sideload.ipa Payload && cd ..
           echo "IPA size: $(du -h IOS-MCP.ipa | cut -f1)"
           unzip -l IOS-MCP.ipa | tail -5
 
       - name: Validate actual iOS 15.4 binary minimums
-        run: python3 tools/validate_ipa.py IOS-MCP.ipa
+        run: |
+          python3 tools/validate_ipa.py IOS-MCP.ipa
+          python3 tools/validate_ipa.py MinisRe-Sideload.ipa
+          python3 tools/validate_signing_flavors.py IOS-MCP.ipa MinisRe-Sideload.ipa
 
       - name: Upload IPA to GitHub Release
         env:
@@ -173,9 +195,12 @@ jobs:
           OUTPUT="IOS-MCP-${GITHUB_SHA:0:7}.ipa"
           cp IOS-MCP.ipa "$OUTPUT"
           shasum -a 256 "$OUTPUT" > "$OUTPUT.sha256"
+          SIDELOAD="MinisRe-${GITHUB_SHA:0:7}-Sideload.ipa"
+          cp MinisRe-Sideload.ipa "$SIDELOAD"
+          shasum -a 256 "$SIDELOAD" > "$SIDELOAD.sha256"
           SYMBOLS="IOS-MCP-${GITHUB_SHA:0:7}-symbols.zip"
           DSYM="build/DerivedData/Build/Products/Release-iphoneos/Minis.app.dSYM"
           test -d "$DSYM"
           ditto -c -k --keepParent "$DSYM" "$SYMBOLS"
-          gh release upload rootfs-tooling-v1 "$OUTPUT" "$OUTPUT.sha256" "$SYMBOLS" --repo "$GITHUB_REPOSITORY"
+          gh release upload rootfs-tooling-v1 "$OUTPUT" "$OUTPUT.sha256" "$SIDELOAD" "$SIDELOAD.sha256" "$SYMBOLS" --repo "$GITHUB_REPOSITORY"
           echo "Uploaded $OUTPUT"

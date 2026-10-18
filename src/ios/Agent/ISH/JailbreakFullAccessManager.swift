@@ -4,9 +4,8 @@
 //
 //  [IOS-MCP] Full-access bridge for jailbroken devices.
 //
-//  When installed via TrollStore on a jailbroken iPhone (platform-application
-//  + com.apple.private.security.no-container entitlements), the app is not
-//  sandboxed to its own container: the REAL iOS filesystem is reachable. This
+//  When installed with effective platform-application and no-sandbox
+//  entitlements on a jailbroken iPhone, the real iOS filesystem may be reachable. This
 //  manager exposes that filesystem inside the iSH guest so the agent (and the
 //  user's terminal) operates with root semantics over the whole device:
 //
@@ -45,6 +44,10 @@ final class JailbreakFullAccessManager {
     /// stock (non-jailbroken) devices or before the kernel has booted.
     func enableIfJailbroken() {
         guard UserDefaults.standard.bool(forKey: "workbench.fullRead"), !enabled, ISHKernel.shared.isBooted else { return }
+        guard isJailbroken, AppSigningCapabilities.canAccessOutsideAppContainer else {
+            logger.info("JB: external mounts unavailable under this installation; keeping the app-container guest")
+            return
+        }
 
         // Ensure the guest mount points exist in meta.db before binding.
         ensureFakefsDir("/ios")

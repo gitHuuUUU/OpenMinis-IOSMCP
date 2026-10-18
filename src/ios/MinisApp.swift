@@ -203,6 +203,10 @@ struct MinisApp: App {
     @available(iOS 17.0, *)
     @MainActor
     private static func startSyncEngines() async {
+        guard AppSigningCapabilities.hasMinisCloudKit else {
+            lifecycleLog.info("[CloudSync] skipped: this signature has no Minis CloudKit entitlement")
+            return
+        }
         await SyncV2Bootstrap.startIfEnabled()
         if !SyncV2Bootstrap.shouldPauseV1() {
             await CloudSyncEngine.shared.start()
@@ -435,7 +439,9 @@ struct MinisApp: App {
                     Self.logFPSyncTracePaths()
                     // Start watching shared/skills/memory subtrees so iSH writes
                     // and FileBrowserView mutations propagate to the Files app.
-                    AppGroupChangeWatcher.shared.start()
+                    if SharedContainerStore.hasSharedAppGroupContainer {
+                        AppGroupChangeWatcher.shared.start()
+                    }
                     // Activate security scopes for user-mounted external folders
                     // (e.g. Obsidian vault in iCloud Drive). Held for app lifetime.
                     MountedFoldersManager.shared.activateAll()
@@ -643,7 +649,7 @@ struct MinisApp: App {
             // active tick, observed as endless `[iCloud] mergeRemoteMessage
             // SKIP (local newer)` log spam plus continuous v1-side dirty
             // drain that competes with v2's send pipeline.
-            if #available(iOS 17.0, *) {
+            if #available(iOS 17.0, *), AppSigningCapabilities.hasMinisCloudKit {
                 Task { @MainActor in
                     if SyncV2Bootstrap.shouldPauseV1() {
                         // [T-icloud-device-heartbeat] Re-announce this device on
@@ -799,6 +805,10 @@ struct MinisApp: App {
 
     private static func registerFileProviderDomain() {
         guard #available(iOS 16.0, *) else { return }
+        guard SharedContainerStore.hasSharedAppGroupContainer else {
+            lifecycleLog.info("[FileProvider] domain unavailable without the App Group container")
+            return
+        }
         logAppUpdateMarkerForFPTrace()
 
         // [T-ios-fp-mac-bootcrash] Circuit breaker, NOT a blanket disable.

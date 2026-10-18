@@ -132,6 +132,16 @@ Select the **Minis** scheme and build. For a device build, set your own team
 under *Signing & Capabilities* — the project ships with an empty
 `DEVELOPMENT_TEAM`.
 
+The default Xcode signing file is `src/ios/OrdinarySigning.entitlements` for
+the app and its extensions. It requests no App Group, CloudKit, private
+filesystem, or other restricted capability, so those features degrade when
+their effective entitlements are absent. If your provisioning profiles actually
+grant a capability, select matching entitlement files per target in Xcode;
+editing a plist alone cannot grant cross-app filesystem access. The separate
+`src/ios/TrollStore.entitlements` is only for the post-build TrollStore signing
+path, not ordinary certificate signing. Verify the **signed** entitlements of
+the installed build rather than assuming the source plist was embedded.
+
 From the command line:
 
 ```sh
@@ -295,3 +305,12 @@ Minis is **GPLv3** because it links iSH (GPLv3) and PRoot (GPLv2). If you
 change how the native dependencies are built, keep FFmpeg on its LGPL
 configuration and preserve the vendored `LICENSE` files. See
 [LICENSE](LICENSE) and [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+
+
+## MinisRe Frida / REA runtime (2026-10-18)
+- Frida 17.24.1 / frida-tools 14.11.0, Python 3.12, Alpine 3.21 aarch64/musl. Seven offline wheels are fetched by `tools/prepare_frida_workbench.py`; the exact private asset digest and per-wheel hashes are pinned in `tools/frida-runtime-catalog.json`. No credentials belong in that catalog or IPA.
+- Reproduce using `tools/build_frida_runtime.sh` in native `alpine:3.21.8` aarch64 Docker. Official Frida core devkit and Python source are SHA-256 pinned. The isolated devkit header requires the documented exact g_str_equal macro removal before generated bindings compile. Preserve upstream licenses carried in the wheels/source.
+- In app: Development Environment -> Frida -> Install. This runs the real offline venv installer, validates every wheel and probes Python import, Frida CLI and device manager before publishing wrappers. Runtime libgcc, Python/pip may first be installed from Alpine repositories. Global Python imports use a managed .pth pointing to the verified environment; custom CLI files are backed up.
+- AI tool `reverse_runtime`: install-frida / status-frida / install-rea / status-rea. REA 6.4.0 installation downloads npm dependencies and requires network + Node 22.19+ compatible engine. It copies the official technical skill and registers local stdio MCP only after initialize/tools-list succeeds; custom or disabled REA entries are preserved. MCP success does not mean optional commercial analysis engines are installed.
+- Actual Linux guest Frida client/module is not native iOS process access. Native app attachment additionally needs an appropriate running server/Gadget and device permissions. Certificate self-signing does not grant unrestricted filesystem/task access. Nothing here claims ordinary signing unlocks those capabilities.
+- Validation so far: native Alpine aarch64 full wheel build/offline install/import/CLI/device enumeration passed; REA isolated WSL Linux install+MCP handshake returned 170 tools. Native iOS/iSH execution and another phone's launch require device regression; no exact crash cause established without .ips.

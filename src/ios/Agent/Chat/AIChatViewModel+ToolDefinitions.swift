@@ -251,6 +251,11 @@ extension AIChatViewModel {
             parameters:["action":AgentToolParam(type:.string,description:"probe, run, upload, download"),"command":AgentToolParam(type:.string,description:"PowerShell command on the Windows PC"),"path":AgentToolParam(type:.string,description:"Local Linux guest file path"),"remotePath":AgentToolParam(type:.string,description:"Windows file path, use forward slashes for transfers")],required:["action"]
         ))
         tools.append(AgentToolDefinition(
+            name:"reverse_runtime",
+            description:"Install or verify real bundled Linux ARM64/musl Frida Python/CLI runtime and pinned REA CLI/official skill/MCP. install-frida verifies offline wheel hashes, real module import and CLI before success. install-rea verifies CLI and MCP protocol then registers the server without overwriting existing configuration. These are Linux guest clients, not proof of native iOS attach privileges or every analysis engine. No remote proxy or fake module.",
+            parameters:["action":AgentToolParam(type:.string,description:"Operation",enumValues:["install-frida","status-frida","install-rea","status-rea"])],required:["action"]
+        ))
+        tools.append(AgentToolDefinition(
             name:"workbench_build",
             description:"Inspect real development dependencies, install bundled iOS15-18 SDKs, or build dylib/DEB/IPA/APK/EXE using available local or configured SSH toolchains. Do not claim execution/device verification from build success. IPA input is a built .app; Android/Windows require their toolchain. Paths are Linux guest paths.",
             parameters:[

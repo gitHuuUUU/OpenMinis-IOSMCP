@@ -137,6 +137,10 @@ enum SyncV2Bootstrap {
     /// Idempotent — running twice is harmless.
     @MainActor
     static func startIfEnabled() async {
+        guard AppSigningCapabilities.hasMinisCloudKit else {
+            logger.warning("[SyncCore] v2 start skipped: current signature lacks the configured CloudKit container")
+            return
+        }
         guard isEnabled else {
             logger.debug("[SyncCore] v2 disabled (flag off) — staying on v1")
             return

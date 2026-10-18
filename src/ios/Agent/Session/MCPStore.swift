@@ -293,6 +293,63 @@ final class MCPStore: ObservableObject {
         }
     }
 
+    /// Register the verified, app-managed REA CLI as a local stdio MCP server.
+    /// The guest installer performs package/version/doctor/initialize/tools-list
+    /// checks first; this method validates that JSON evidence again, writes the
+    /// non-secret transport entry, and verifies it survived the atomic save. It intentionally does
+    /// not overwrite a user-defined server named `rea` or re-enable a server the
+    /// user previously disabled.
+    @discardableResult
+    func registerInstalledREA(verifiedInstallResult: Data) -> Bool {
+        let command = "/usr/local/bin/rea"
+        let args = ["mcp"]
+        guard let result = try? JSONSerialization.jsonObject(with: verifiedInstallResult) as? [String: Any],
+              result["status"] as? String == "installed",
+              result["installed"] as? Bool == true,
+              result["version"] as? String == "6.4.0",
+              result["registrationReady"] as? Bool == true,
+              let mcp = result["mcp"] as? [String: Any],
+              mcp["initialize"] as? Bool == true,
+              mcp["toolsList"] as? Bool == true,
+              (mcp["toolCount"] as? Int ?? 0) > 0 else {
+            AppLogger(category: "MCPStore").warning("[REA] installer JSON lacks checked package/MCP evidence; not registering")
+            return false
+        }
+
+        if let existing = servers.first(where: { $0.id == "rea" }) {
+            guard existing.command == command, existing.args == args else {
+                AppLogger(category: "MCPStore").warning("[REA] existing 'rea' server differs; preserving user config")
+                return false
+            }
+            guard existing.enabled else {
+                AppLogger(category: "MCPStore").info("[REA] matching server is user-disabled; preserving disabled state")
+                return false
+            }
+        } else {
+            add(MCPServerConfig(
+                id: "rea",
+                note: "REA 6.4.0 · local stdio MCP; analysis-engine readiness is reported separately",
+                enabled: true,
+                command: command,
+                args: args,
+                startupTimeoutSeconds: 120
+            ))
+        }
+
+        guard let data = try? Data(contentsOf: serversFileURL),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let entries = root["mcpServers"] as? [String: Any],
+              let entry = entries["rea"] as? [String: Any],
+              entry["command"] as? String == command,
+              (entry["args"] as? [String]) == args,
+              (entry["enabled"] as? Bool) == true else {
+            AppLogger(category: "MCPStore").error("[REA] servers.json read-back verification failed")
+            return false
+        }
+        AppLogger(category: "MCPStore").info("[REA] registered verified stdio MCP at \(command) mcp")
+        return true
+    }
+
     private func readServersFromDisk() -> [MCPServerConfig] {
         guard let data = try? Data(contentsOf: serversFileURL) else {
             AppLogger(category: "MCPStore").info("[Load] no servers.json at \(serversFileURL.path)")
