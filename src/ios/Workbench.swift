@@ -848,7 +848,7 @@ struct MultiPlatformWorkbenchView:View {
     @State private var target="dylib"
     @State private var project="/var/minis/workspace"
     @State private var output="/var/minis/shared/output.dylib"
-    @State private var sdk="16.5"
+    @AppStorage("workbench.selectedSDK") private var sdk="16.5"
     @State private var remote=""
     @State private var importComputer=false
     func perform(_ args:[String:Any]) {
