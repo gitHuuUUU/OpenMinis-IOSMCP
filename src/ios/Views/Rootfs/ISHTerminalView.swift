@@ -449,7 +449,7 @@ class ISHTerminalViewModel: ObservableObject {
     /// Serial queue for sending input to the kernel TTY.
     /// tty_input() acquires a pthread mutex that can block when the kernel is busy,
     /// so we must never call it on the main thread.
-    private let inputQueue = DispatchQueue(label: "com.iosmcp.terminal.input")
+    private let inputQueue = DispatchQueue(label: "com.minisre.terminal.input")
 
     func sendInput(_ data: Data) {
         let tEnq = TerminalRedrawLog.nowMs()

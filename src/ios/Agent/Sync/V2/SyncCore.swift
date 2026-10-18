@@ -270,7 +270,7 @@ final class SyncCore {
                 }
             }
         }
-        m.start(queue: DispatchQueue(label: "com.iosmcp.sync.pathMonitor"))
+        m.start(queue: DispatchQueue(label: "com.minisre.sync.pathMonitor"))
         pathMonitor = m
     }
 

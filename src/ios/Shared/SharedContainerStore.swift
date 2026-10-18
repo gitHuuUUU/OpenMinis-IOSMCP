@@ -3,7 +3,7 @@ import Foundation
 /// Reads and writes PendingShare data to the App Group shared container.
 /// Compiled into both the main app target and the Share Extension target.
 enum SharedContainerStore {
-    static let appGroupID = "group.com.iosmcp.app"
+    static let appGroupID = "group.com.minisre.app"
 
     /// Resolve once per process. Missing App Group permissions must not trap
     /// during launch. The fallback is persistent Library storage, never tmp.

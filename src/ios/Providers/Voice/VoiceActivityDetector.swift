@@ -76,7 +76,7 @@ final class VoiceActivityDetector: NSObject {
     /// re-entering a chat built a new panel → new engine → working mic, while
     /// staying put reused the poisoned one forever.
     private var audioEngine = AVAudioEngine()
-    private let vadQueue = DispatchQueue(label: "com.iosmcp.app.vad", qos: .userInteractive)
+    private let vadQueue = DispatchQueue(label: "com.minisre.app.vad", qos: .userInteractive)
     private var vad: MinisEnergyVAD?
 
     // MARK: - Adaptive gain (noise-aware AGC)

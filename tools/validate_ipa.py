@@ -6,6 +6,10 @@ with zipfile.ZipFile(p) as z:
     bad=z.testzip(); assert bad is None,bad
     info=plistlib.loads(z.read("Payload/Minis.app/Info.plist"))
     report.update({k:info.get(k) for k in ["CFBundleIdentifier","CFBundleShortVersionString","MinimumOSVersion","CFBundleExecutable"]})
+    assert info['CFBundleIdentifier'] == 'com.minisre.app', info
+    assert info['CFBundleDisplayName'] == 'MinisRe', info
+    assert info['CFBundleShortVersionString'] == '1.0', info
+    report['CFBundleDisplayName'] = info['CFBundleDisplayName']
     assert tuple(map(int,info["MinimumOSVersion"].split("."))) <= (15,4),info
     report["plugins"]=[n for n in z.namelist() if "/PlugIns/" in n]
     for n in z.namelist():

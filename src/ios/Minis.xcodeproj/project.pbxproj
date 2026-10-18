@@ -3385,7 +3385,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.iosmcp.MinisUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.MinisUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -3405,7 +3405,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.iosmcp.MinisUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.MinisUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -3437,7 +3437,7 @@
 				);
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.iosmcp.MinisTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.MinisTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -3466,7 +3466,7 @@
 				);
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.iosmcp.MinisTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.MinisTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -3643,15 +3643,16 @@
 					"@executable_path/Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/../../deps/libs";
-				MARKETING_VERSION = 1.14;
+				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = (
 					"-lish_emu",
 					"-lish",
 					"-lfakefs",
 				);
 				OTHER_SWIFT_FLAGS = "";
-				PRODUCT_BUNDLE_IDENTIFIER = com.iosmcp.app;
-					INFOPLIST_KEY_CFBundleDisplayName = "IOS-MCP";
+				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.app;
+					INFOPLIST_KEY_CFBundleDisplayName = "MinisRe";
+				INFOPLIST_KEY_CFBundleName = "MinisRe";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/MinisApp-Bridging-Header.h";
@@ -3698,15 +3699,16 @@
 					"@executable_path/Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/../../deps/libs";
-				MARKETING_VERSION = 1.14;
+				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = (
 					"-lish_emu",
 					"-lish",
 					"-lfakefs",
 				);
 				OTHER_SWIFT_FLAGS = "";
-				PRODUCT_BUNDLE_IDENTIFIER = com.iosmcp.app;
-					INFOPLIST_KEY_CFBundleDisplayName = "IOS-MCP";
+				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.app;
+					INFOPLIST_KEY_CFBundleDisplayName = "MinisRe";
+				INFOPLIST_KEY_CFBundleName = "MinisRe";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/MinisApp-Bridging-Header.h";
@@ -3724,7 +3726,7 @@
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Share to IOS-MCP";
+				INFOPLIST_KEY_CFBundleDisplayName = "Share to MinisRe";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.4;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -3732,8 +3734,8 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.14;
-				PRODUCT_BUNDLE_IDENTIFIER = com.iosmcp.app.ShareExtension;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.app.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -3751,7 +3753,7 @@
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Share to IOS-MCP";
+				INFOPLIST_KEY_CFBundleDisplayName = "Share to MinisRe";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.4;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -3759,8 +3761,8 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.14;
-				PRODUCT_BUNDLE_IDENTIFIER = com.iosmcp.app.ShareExtension;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.app.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -3778,7 +3780,7 @@
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FileProvider/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "IOS-MCP Files";
+				INFOPLIST_KEY_CFBundleDisplayName = "MinisRe Files";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -3786,8 +3788,8 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.14;
-				PRODUCT_BUNDLE_IDENTIFIER = com.iosmcp.app.FileProvider;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.app.FileProvider;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -3805,7 +3807,7 @@
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FileProvider/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "IOS-MCP Files";
+				INFOPLIST_KEY_CFBundleDisplayName = "MinisRe Files";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -3813,8 +3815,8 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.14;
-				PRODUCT_BUNDLE_IDENTIFIER = com.iosmcp.app.FileProvider;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.app.FileProvider;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -3840,8 +3842,8 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.14;
-				PRODUCT_BUNDLE_IDENTIFIER = com.iosmcp.app.AgentWidget;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.app.AgentWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -3867,8 +3869,8 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.14;
-				PRODUCT_BUNDLE_IDENTIFIER = com.iosmcp.app.AgentWidget;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.app.AgentWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;

@@ -54,7 +54,7 @@ actor ISHExecutionCoordinator {
     ///
     /// Serial on purpose: concurrent sweeps would contend on the same kernel
     /// lock and multiply the wait rather than shorten it.
-    static let killQueue = DispatchQueue(label: "com.iosmcp.ish.killpg", qos: .userInitiated)
+    static let killQueue = DispatchQueue(label: "com.minisre.ish.killpg", qos: .userInitiated)
 
     /// [T-ish-shell-timeout-preserve-output] Cap on the partial output a
     /// timed-out command may hand back.
