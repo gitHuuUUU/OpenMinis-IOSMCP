@@ -55,6 +55,20 @@ jobs:
       - name: Bundled MCP protocol and tool regression
         run: python3 tools/test_builtin_mcp.py
 
+      - name: Photo picker and interaction source contracts
+        run: |
+          python3 tools/test_photo_picker_static.py
+          python3 tools/test_interaction_static.py
+
+      - name: Execute production assistant text edit regression
+        run: |
+          python3 tools/prepare_assistant_edit_tests.py /tmp/AssistantEditTests.swift
+          swiftc -parse-as-library /tmp/AssistantEditTests.swift -o /tmp/AssistantEditTests
+          /tmp/AssistantEditTests
+
+      - name: Production WDA HTTP fixture regression
+        run: python3 tools/test_wda_bridge.py
+
       - name: Swift syntax preflight
         run: find src/ios \( -path '*/MinisTests' -o -path '*/MinisUITests' \) -prune -o -name '*.swift' -print0 | xargs -0 xcrun swiftc -frontend -parse
 

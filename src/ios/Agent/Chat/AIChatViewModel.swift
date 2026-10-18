@@ -1741,6 +1741,166 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     /// deferred reload; the next safe idle drains it. [T-ios-retry-usermsg-vanish]
     var isTruncatingForRetry = false
 
+
+    // MARK: - In-place editing of completed assistant text
+
+    struct AssistantTextEdit: Identifiable {
+        let id = UUID()
+        let sessionId: String
+        let messageId: UUID
+        let raw: RawMessage
+        let partIndex: Int
+        let blockIds: [UUID]
+        let originalText: String
+        var text: String
+    }
+
+    enum AssistantEditError: LocalizedError {
+        case unavailable(String)
+        var errorDescription: String? {
+            switch self { case .unavailable(let reason): return reason }
+        }
+    }
+
+    @Published private(set) var isSavingAssistantEdit = false
+
+    /// Match the persisted merge chain by its complete text/tool-ID fingerprint,
+    /// never by the UI array index. Reloaded rows also carry an exact sort range.
+    /// Live rows have no range; duplicate fingerprints deliberately fail closed.
+    func assistantTextEdits(for message: ChatMessage) async throws -> [AssistantTextEdit] {
+        guard !isProcessing, !isSavingAssistantEdit, !isTruncatingForRetry,
+              remoteDeviceId == nil, message.role == .assistant,
+              !message.isCompactedHistory, message.error == nil,
+              messages.contains(where: { $0.id == message.id }), let sid = sessionId else {
+            throw AssistantEditError.unavailable("请等待回复完成后再编辑。远程或已压缩消息不可编辑。")
+        }
+        let raws = await ChatStore.shared.loadMessages(sessionId: sid)
+        guard sessionId == sid, !isProcessing,
+              messages.contains(where: { $0.id == message.id }) else {
+            throw AssistantEditError.unavailable("会话已变化，请重新打开编辑。")
+        }
+        var groups: [[RawMessage]] = []
+        var chain: [RawMessage] = []
+        for raw in raws {
+            if raw.isInternalBridge || raw.isToolResultOnly { continue }
+            if raw.role == .assistant { chain.append(raw) }
+            else if !chain.isEmpty { groups.append(chain); chain = [] }
+        }
+        if !chain.isEmpty { groups.append(chain) }
+        let uiSignature = message.blocks.compactMap { block -> String? in
+            if block.kind == .text { return "text:" + block.content }
+            if let id = block.toolUseId { return "tool:" + id }
+            return nil // thinking/info/media are NOT editable
+        }
+        func signature(_ group: [RawMessage], split: Bool) -> [String] {
+            group.flatMap { raw in
+                raw.parts.flatMap { part -> [String] in
+                    switch part {
+                    case .text(let text):
+                        let visible = RawMessage.stripSystemReminders(text)
+                        guard !visible.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
+                        return (split ? RawMessage.splitLongAssistantText(visible) : [visible]).map { "text:" + $0 }
+                    case .toolUse(let tool): return ["tool:" + tool.toolUseId]
+                    default: return []
+                    }
+                }
+            }
+        }
+        let candidates = groups.filter { group in
+            if let first = message.sourceSortOrder, let last = message.lastSourceSortOrder,
+               (group.first?.sortOrder != first || group.last?.sortOrder != last) { return false }
+            return signature(group, split: false) == uiSignature || signature(group, split: true) == uiSignature
+        }
+        guard candidates.count == 1, let group = candidates.first else {
+            throw AssistantEditError.unavailable("无法唯一对应原始消息（可能尚未保存或存在重复回复），未修改任何记录。请重新打开会话后重试。")
+        }
+        let split = signature(group, split: true) == uiSignature
+        let textBlocks = message.blocks.filter { $0.kind == .text }
+        var cursor = 0
+        var edits: [AssistantTextEdit] = []
+        for raw in group {
+            for (partIndex, part) in raw.parts.enumerated() {
+                guard case .text(let original) = part else { continue }
+                let visible = RawMessage.stripSystemReminders(original)
+                guard !visible.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+                let count = split ? RawMessage.splitLongAssistantText(visible).count : 1
+                let blockIds = Array(textBlocks[cursor..<(cursor + count)]).map(\.id)
+                cursor += count
+                // Hidden system metadata must not be exposed or silently discarded.
+                guard visible == original else {
+                    throw AssistantEditError.unavailable("此回复含隐藏系统提示，暂不支持原地编辑；未修改任何记录。")
+                }
+                guard let entry = agentHistory.first(where: { $0.dbMessageId == raw.id }),
+                      entry.role == .assistant, partIndex < entry.parts.count,
+                      case .text(let historyText) = entry.parts[partIndex], historyText == original else {
+                    throw AssistantEditError.unavailable("原始消息与模型上下文的映射缺失或已变化，未保存。请重新打开会话后重试。")
+                }
+                edits.append(AssistantTextEdit(sessionId: sid, messageId: message.id, raw: raw,
+                    partIndex: partIndex, blockIds: blockIds, originalText: original, text: original))
+            }
+        }
+        guard !edits.isEmpty else { throw AssistantEditError.unavailable("此回复没有可编辑的文本。") }
+        return edits
+    }
+
+    /// Rewrite one raw text part in place, preserving tool pairs, media, reasoning,
+    /// attribution and all later rows. ChatStore's void API requires read-back:
+    /// neither the UI nor agentHistory is changed until persistence is confirmed.
+    func saveAssistantTextEdit(_ edit: AssistantTextEdit) async throws {
+        guard !isSavingAssistantEdit, !isProcessing, !isTruncatingForRetry,
+              remoteDeviceId == nil, sessionId == edit.sessionId,
+              let message = messages.first(where: { $0.id == edit.messageId }),
+              !message.isCompactedHistory else {
+            throw AssistantEditError.unavailable("会话正在变化，请稍后重新打开编辑。")
+        }
+        guard !edit.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw AssistantEditError.unavailable("消息文本不能为空。")
+        }
+        isSavingAssistantEdit = true
+        isTruncatingForRetry = true // reuse the existing DB-reload hold
+        defer { isSavingAssistantEdit = false; isTruncatingForRetry = false }
+        let rows = await ChatStore.shared.loadMessages(sessionId: edit.sessionId)
+        guard sessionId == edit.sessionId, !isProcessing,
+              let raw = rows.first(where: { $0.id == edit.raw.id }), raw.parts == edit.raw.parts,
+              let historyIndex = agentHistory.firstIndex(where: { $0.dbMessageId == raw.id }),
+              edit.partIndex < agentHistory[historyIndex].parts.count,
+              case .text(let text) = agentHistory[historyIndex].parts[edit.partIndex], text == edit.originalText,
+              edit.blockIds.allSatisfy({ id in message.blocks.contains { $0.id == id && $0.kind == .text } }) else {
+            throw AssistantEditError.unavailable("原始记录或上下文已变化，未保存。请重新打开编辑。")
+        }
+        var parts = raw.parts
+        parts[edit.partIndex] = .text(edit.text)
+        let saved = await ChatStore.shared.replaceAssistantTextPartsIfUnchanged(
+            sessionId: edit.sessionId, messageId: raw.id, expected: raw.parts, replacement: parts)
+        guard saved else {
+            throw AssistantEditError.unavailable("数据库写入未通过读回校验，未更新显示或模型上下文。")
+        }
+        // Resolve by stable DB identity again after every suspension.
+        guard sessionId == edit.sessionId,
+              let currentMessage = messages.first(where: { $0.id == edit.messageId }),
+              let index = agentHistory.firstIndex(where: { $0.dbMessageId == raw.id }),
+              edit.partIndex < agentHistory[index].parts.count else {
+            throw AssistantEditError.unavailable("记录已写入，但会话已切换，请重新打开会话加载更改。")
+        }
+        agentHistory[index].parts[edit.partIndex] = .text(edit.text)
+        keepAliveHistory = effectiveAgentHistory() // refresh the pre-edit request prefix
+        let ids = Set(edit.blockIds)
+        var newBlocks: [AssistantBlock] = []
+        var replaced = false
+        for block in currentMessage.blocks {
+            if ids.contains(block.id) {
+                if !replaced {
+                    newBlocks += RawMessage.splitLongAssistantText(edit.text).map { AssistantBlock(kind: .text, content: $0) }
+                    replaced = true
+                }
+            } else { newBlocks.append(block) }
+        }
+        currentMessage.blocks = newBlocks
+        currentMessage.content = newBlocks.filter { $0.kind == .text }.map(\.content).joined(separator: "\n\n")
+        messages = Array(messages)
+        retrySnapshotReloadSignal.send()
+    }
+
     // MARK: - Browser
     /// `var`, not `let`: a helper (child) vm adopts its PARENT's pool so both
     /// agents browse in one tab set (T-p2-shared-workspace). Per-agent default
@@ -2826,6 +2986,7 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     ///   the text here keeps a background turn from reading, overwriting, or
     ///   emptying whatever the user is typing at that moment.
     func send(overrideText: String? = nil) {
+        guard !isSavingAssistantEdit else { return }
         CrashReporter.recordSendStage("send-enter")
         // Read-only mode — cannot send messages
         guard remoteDeviceId == nil else { return }
@@ -3439,6 +3600,7 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     /// Retry the next agent loop iteration (continue from where the error occurred,
     /// keeping all previously completed tool blocks and conversation history).
     func retry() {
+        guard !isSavingAssistantEdit else { return }
         guard !isProcessing else { return }
         guard let lastMsg = messages.last, lastMsg.role == .assistant else { return }
 
@@ -3644,6 +3806,7 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     /// Resume an interrupted agent loop. Injects a "Continue" user message
     /// into agentHistory so the model knows to pick up where it left off.
     func resume() {
+        guard !isSavingAssistantEdit else { return }
         guard !isProcessing, canResume else { return }
         // [T-ios-orphan-user-tail GH#262/#263] A tail of "user turn with no
         // reply at all" has no assistant row to resume INTO — the reply never
@@ -3940,6 +4103,7 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     }
 
     func retryFromMessage(_ messageId: UUID, replacementAttachments: [InputAttachment]? = nil) {
+        guard !isSavingAssistantEdit else { return }
         guard !isProcessing else { return }
         // [T-ios-retry-keyboard] Re-running from an existing user message is a
         // retry, not a new send.
@@ -4075,6 +4239,7 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     /// (`keepUpTo - 1`), so the surviving history ends on the PREVIOUS
     /// assistant turn — still a valid, self-consistent context.
     func deleteFromMessage(_ messageId: UUID) {
+        guard !isSavingAssistantEdit else { return }
         guard !isProcessing else { return }
         // Same truncation guard as retry: a deferred iCloud-sync reload landing
         // mid-truncation would rebuild `messages` from a stale DB snapshot and
@@ -4331,6 +4496,7 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     /// truncating at the preceding user message — delegate to
     /// retryFromMessage(precedingUser) and skip the sub-message rewrite.
     func retryFromToolBlock(blockId: UUID) {
+        guard !isSavingAssistantEdit else { return }
         guard !isProcessing else { return }
 
         // Locate the assistant UI message + the target block's index within it.
@@ -8034,3 +8200,17 @@ enum LLMProviderError: LocalizedError {
     }
 }
 
+
+// MARK: - Assistant edit persistence compare/write/read-back
+
+extension ChatStore {
+    /// One actor turn, with no suspension between comparison and read-back.
+    /// A queued iCloud update cannot interleave and overwrite a newer row.
+    func replaceAssistantTextPartsIfUnchanged(sessionId: String, messageId: String,
+                                             expected: [ContentPart], replacement: [ContentPart]) -> Bool {
+        guard let row = loadMessages(sessionId: sessionId).first(where: { $0.id == messageId }),
+              row.role == .assistant, row.parts == expected else { return false }
+        updateMessageParts(messageId: messageId, parts: replacement)
+        return loadMessages(sessionId: sessionId).first(where: { $0.id == messageId })?.parts == replacement
+    }
+}

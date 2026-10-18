@@ -102,6 +102,7 @@ enum WorkbenchError: LocalizedError {
     let fm = FileManager.default
     var root: URL { SharedContainerStore.storageContainerURL.appendingPathComponent("Workbench", isDirectory: true) }
     var fullRead: Bool { UserDefaults.standard.bool(forKey: "workbench.fullRead") }
+    var automaticApps:Bool { UserDefaults.standard.object(forKey:"workbench.autoApps") as? Bool ?? true }
     func refreshApps() {
         apps = MinisDeviceBridge.applications().compactMap { item in
             guard let bid = item["bundleID"], let name = item["name"] else { return nil }
@@ -112,6 +113,13 @@ enum WorkbenchError: LocalizedError {
         guard let data = UserDefaults.standard.data(forKey: "workbench.apps.\(session)"),
               let items = try? JSONDecoder().decode([DeviceAppRecord].self, from: data) else { return [] }
         return items
+    }
+    func accessibleApps(_ session:String)->[DeviceAppRecord] {
+        if automaticApps {
+            if apps.isEmpty { refreshApps() }
+            return apps
+        }
+        return selected(session)
     }
     func select(_ app: DeviceAppRecord, session: String) throws -> URL {
         var items = selected(session)
@@ -130,7 +138,7 @@ enum WorkbenchError: LocalizedError {
     func checkedPath(_ path: String, session: String) throws -> URL {
         guard path.hasPrefix("/") else { throw WorkbenchError.unavailable("需要绝对设备路径") }
         let url = URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL
-        let roots = selected(session).flatMap(\.roots) + [SharedContainerStore.storageContainerURL.path, NSHomeDirectory()]
+        let roots = accessibleApps(session).flatMap(\.roots) + [SharedContainerStore.storageContainerURL.path, NSHomeDirectory()]
         guard fullRead || roots.contains(where: { base in
             let normalized = URL(fileURLWithPath: base).resolvingSymlinksInPath().standardizedFileURL.path
             return url.path == normalized || url.path.hasPrefix(normalized + "/")
@@ -140,18 +148,19 @@ enum WorkbenchError: LocalizedError {
     func tool(_ args: [String: Any], session: String) async throws -> String {
         let action = args["action"] as? String ?? "inspect"
         let bid = args["bundle_id"] as? String ?? selected(session).first?.bundleID ?? ""
+        if automaticApps, !bid.isEmpty, !apps.contains(where:{$0.bundleID==bid}) { refreshApps() }
         switch action {
         case "list":
             refreshApps()
             return String(data: try JSONEncoder().encode(apps), encoding: .utf8) ?? "[]"
         case "inspect":
-            let entries = selected(session).filter { bid.isEmpty || $0.bundleID == bid }
+            let entries = accessibleApps(session).filter { bid.isEmpty || $0.bundleID == bid }
             let report: [String: Any] = ["selected": entries.map { ["bundleID":$0.bundleID,"bundlePath":$0.bundlePath,"dataPath":$0.dataPath] },
-                "fullReadRequested": fullRead, "varReadable": fm.isReadableFile(atPath: "/var/mobile/Containers/Data/Application"),
+                "fullReadRequested": fullRead, "automaticApps":automaticApps, "varReadable": fm.isReadableFile(atPath: "/var/mobile/Containers/Data/Application"),
                 "wdaURL": UserDefaults.standard.string(forKey: "workbench.wdaURL") ?? "", "wdaSession": UserDefaults.standard.string(forKey: "workbench.wdaSession") ?? ""]
             return String(data: try JSONSerialization.data(withJSONObject: report, options: .prettyPrinted), encoding: .utf8) ?? "{}"
         case "open":
-            guard selected(session).contains(where: { $0.bundleID == bid }) else { throw WorkbenchError.unavailable("目标应用尚未添加到当前对话") }
+            guard accessibleApps(session).contains(where: { $0.bundleID == bid }) else { throw WorkbenchError.unavailable("未找到目标应用；可刷新应用列表或开启自动应用访问") }
             guard MinisDeviceBridge.openApplication(bid) else { throw WorkbenchError.unavailable("系统未允许启动该应用") }
             return "系统已接受打开应用请求：\(bid)"
         case "list_files", "read_file", "write_file":
@@ -168,31 +177,85 @@ enum WorkbenchError: LocalizedError {
             let handle = try FileHandle(forReadingFrom: url); defer { try? handle.close() }
             let data = try handle.read(upToCount: 262144) ?? Data()
             return String(data: data, encoding: .utf8) ?? "二进制文件（前 \(data.count) 字节）：\(data.base64EncodedString())"
-        case "get_ui", "tap", "type", "screenshot":
-            return try await wda(action, args: args)
+        case "ui_status":
+            if !bid.isEmpty, !accessibleApps(session).contains(where:{$0.bundleID==bid}) { throw WorkbenchError.unavailable("目标应用不在可访问列表") }
+            let base=try wdaBase()
+            let sid=try await ensureWDASession(base:base,bundleID:bid,verifyCached:true)
+            return "WDA 已建立会话：\(sid)。应用启动和目录读取使用原生桥；UI 操作将使用此会话。"
+        case "get_ui", "tap", "type", "screenshot", "swipe":
+            guard !bid.isEmpty, accessibleApps(session).contains(where:{$0.bundleID==bid}) else { throw WorkbenchError.unavailable("请先列出应用并指定 bundle_id，或在当前对话添加目标应用") }
+            var targetArgs=args; targetArgs["bundle_id"]=bid
+            return try await wda(action, args: targetArgs)
         default: throw WorkbenchError.unavailable("未知 device_app 操作：\(action)")
         }
     }
-    func wda(_ action: String, args: [String: Any]) async throws -> String {
+    func wdaBase() throws -> URL {
         let raw = UserDefaults.standard.string(forKey: "workbench.wdaURL") ?? "http://127.0.0.1:8100"
         guard let base = URL(string: raw), ["http","https"].contains(base.scheme ?? "") else { throw WorkbenchError.unavailable("WebDriverAgent 地址无效") }
-        let sid = UserDefaults.standard.string(forKey: "workbench.wdaSession") ?? ""
-        guard !sid.isEmpty else { throw WorkbenchError.unavailable("尚未配置运行中的 WebDriverAgent session；打开应用和文件读取不依赖 WDA") }
+        return base
+    }
+    func wdaJSON(_ base:URL,_ path:String,_ body:[String:Any]?=nil) async throws -> [String:Any] {
+        var request=URLRequest(url:base.appendingPathComponent(path)); request.timeoutInterval=15
+        if let body { request.httpMethod="POST"; request.setValue("application/json",forHTTPHeaderField:"Content-Type"); request.httpBody=try JSONSerialization.data(withJSONObject:body) }
+        let data:Data; let response:URLResponse
+        do { (data,response)=try await URLSession.shared.data(for:request) }
+        catch { throw WorkbenchError.unavailable("无法连接 WDA：\(error.localizedDescription)。应用启动/目录读取仍可用；触摸和输入需要设备上实际运行的 UI 后端。") }
+        guard let object=try JSONSerialization.jsonObject(with:data) as? [String:Any] else { throw WorkbenchError.unavailable("WDA 返回非 JSON") }
+        let value=object["value"] as? [String:Any]
+        if let error=value?["error"] as? String {
+            if error == "invalid session id" { UserDefaults.standard.removeObject(forKey:"workbench.wdaSession") }
+            throw WorkbenchError.unavailable("WDA \(error)：\(value?["message"] as? String ?? "")")
+        }
+        guard let http=response as? HTTPURLResponse,(200..<300).contains(http.statusCode) else { throw WorkbenchError.unavailable("WDA HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)") }
+        return object
+    }
+    func ensureWDASession(base:URL,bundleID:String,verifyCached:Bool=false) async throws -> String {
+        if let sid=UserDefaults.standard.string(forKey:"workbench.wdaSession"),!sid.isEmpty {
+            if !verifyCached { return sid }
+            if let live=try? await wdaJSON(base,"session/\(sid)"),
+               let value=live["value"] as? [String:Any],value["sessionId"] as? String == sid { return sid }
+            UserDefaults.standard.removeObject(forKey:"workbench.wdaSession")
+        }
+        if let existing=try? await wdaJSON(base,"sessions"),let sessions=existing["value"] as? [[String:Any]],
+           let sid=sessions.compactMap({$0["id"] as? String ?? $0["sessionId"] as? String}).first {
+            UserDefaults.standard.set(sid,forKey:"workbench.wdaSession"); return sid
+        }
+        var capabilities:[String:Any]=[:]
+        if !bundleID.isEmpty { capabilities["bundleId"]=bundleID }
+        let object=try await wdaJSON(base,"session",["capabilities":["alwaysMatch":capabilities]])
+        let value=object["value"] as? [String:Any]
+        guard let sid=object["sessionId"] as? String ?? value?["sessionId"] as? String,!sid.isEmpty else { throw WorkbenchError.unavailable("WDA 未返回实际会话 ID") }
+        UserDefaults.standard.set(sid,forKey:"workbench.wdaSession"); return sid
+    }
+    func wda(_ action: String, args: [String: Any]) async throws -> String {
+        let base=try wdaBase()
+        let sid=try await ensureWDASession(base:base,bundleID:args["bundle_id"] as? String ?? "")
+        if let bid=args["bundle_id"] as? String,!bid.isEmpty {
+            _ = try await wdaJSON(base,"session/\(sid)/wda/apps/activate",["bundleId":bid])
+        }
         let suffix: String
         var body: [String: Any]?
         switch action {
-        case "tap": suffix = "wda/tap/0"; guard let x=args["x"] as? NSNumber, let y=args["y"] as? NSNumber else { throw WorkbenchError.unavailable("缺少 x/y") }; body=["x":x,"y":y]
+        case "tap": suffix = "wda/tap"; guard let x=args["x"] as? NSNumber, let y=args["y"] as? NSNumber else { throw WorkbenchError.unavailable("缺少 x/y") }; body=["x":x,"y":y]
         case "type": suffix="wda/keys"; body=["value":Array((args["text"] as? String ?? "").map { String($0) })]
+        case "swipe":
+            guard let x=args["x"] as? NSNumber,let y=args["y"] as? NSNumber,let endX=args["end_x"] as? NSNumber,let endY=args["end_y"] as? NSNumber else { throw WorkbenchError.unavailable("滑动需要 x/y/end_x/end_y") }
+            suffix="wda/dragfromtoforduration"; body=["fromX":x,"fromY":y,"toX":endX,"toY":endY,"duration":0.4]
         case "screenshot": suffix="screenshot"
         default: suffix="source"
         }
         var request=URLRequest(url: base.appendingPathComponent("session").appendingPathComponent(sid).appendingPathComponent(suffix))
         request.timeoutInterval=20
         if let body { request.httpMethod="POST"; request.setValue("application/json", forHTTPHeaderField:"Content-Type"); request.httpBody=try JSONSerialization.data(withJSONObject:body) }
-        let (data,response)=try await URLSession.shared.data(for: request)
+        var (data,response)=try await URLSession.shared.data(for: request)
+        if action == "tap",(response as? HTTPURLResponse)?.statusCode == 404 {
+            request.url=base.appendingPathComponent("session/\(sid)/wda/tap/0")
+            (data,response)=try await URLSession.shared.data(for:request)
+        }
         guard let http=response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw WorkbenchError.unavailable("WDA 请求失败：\((response as? HTTPURLResponse)?.statusCode ?? 0)") }
         if let object = try? JSONSerialization.jsonObject(with: data) as? [String:Any],
            let value = object["value"] as? [String:Any], let error = value["error"] as? String {
+            if error == "invalid session id" { UserDefaults.standard.removeObject(forKey:"workbench.wdaSession") }
             throw WorkbenchError.unavailable("WDA：\(error) \(value["message"] as? String ?? "")")
         }
         if action == "screenshot", let object=try JSONSerialization.jsonObject(with:data) as? [String:Any], let text=object["value"] as? String, let image=Data(base64Encoded:text) {
@@ -487,6 +550,7 @@ struct WorkbenchArtifactsView: View {
 struct DevelopmentWorkbenchView: View {
     @ObservedObject private var model=DeviceWorkbench.shared
     @AppStorage("workbench.fullRead") private var fullRead=false
+    @AppStorage("workbench.autoApps") private var autoApps=true
     @AppStorage("workbench.wdaURL") private var wdaURL="http://127.0.0.1:8100"
     @AppStorage("workbench.wdaSession") private var wdaSession=""
     @State private var showLogs=false
@@ -510,6 +574,8 @@ struct DevelopmentWorkbenchView: View {
                 NavigationLink("日志") { WorkbenchLogView() }
             }
             Section(header:Text("文件与应用调试权限")) {
+                Toggle("允许 AI 自动选择并打开已安装应用",isOn:$autoApps)
+                Text("开启后无需逐个从 + 添加应用；AI 可列出应用、按 bundle ID 启动，并在系统实际允许时读取其安装/数据目录。关闭后恢复仅当前对话所选应用范围。").font(.caption)
                 Toggle("扩展文件访问（全权限请求）",isOn:$fullRead).onChange(of:fullRead) { value in
                     if value { JailbreakFullAccessManager.shared.enableIfJailbroken() } else { JailbreakFullAccessManager.shared.disableAccess() }
                 }
@@ -520,6 +586,7 @@ struct DevelopmentWorkbenchView: View {
             Section(header:Text("跨应用 UI 调试桥")) {
                 TextField("WebDriverAgent URL",text:$wdaURL).textInputAutocapitalization(.never).autocorrectionDisabled()
                 TextField("已运行的 WDA Session ID",text:$wdaSession).textInputAutocapitalization(.never).autocorrectionDisabled()
+                Button("检测并自动建立 UI 会话") { Task { do { status=try await model.tool(["action":"ui_status"],session:"workbench") } catch { status=error.localizedDescription } } }
                 Text("应用启动、目录分析使用本机桥；触摸、输入、界面树和截图必须连接实际运行的 WDA。未部署时不会报告 UI 控制就绪。").font(.caption).foregroundColor(.secondary)
             }
             if !status.isEmpty { Section { Text(status).font(.caption) } }

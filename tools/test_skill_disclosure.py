@@ -31,7 +31,7 @@ tests=r'''
 }
 let store=SkillStore()
 var cases=0
-for n in [0,1,19,20,21,99,100,101,128,256,1000] {
+for n in [0,1,19,20,21,99,100,101,128,175,256,1000] {
  for bundled in [0,min(n,19),min(n,20),min(n,21),n] {
   store.skills=(0..<n).map { i in
    Skill(id:"id-\(i)",name:"skill-\(i)",description:"test",importSource:i<bundled ? .bundled : .file,updatedAt:Date().addingTimeInterval(Double(-i)),useCount:Double(i))
@@ -49,7 +49,7 @@ for n in [0,1,19,20,21,99,100,101,128,256,1000] {
 }
 store.skills=[Skill(id:"disabled-1",name:"disabled",description:"test",importSource:.bundled,updatedAt:Date(),useCount:0)]
 precondition(store.skillPromptFragment(for:"test")==nil)
-print("Skill disclosure regression: \(cases+1) cases passed; real production body, including 128 bundled skills.")
+print("Skill disclosure regression: \(cases+1) cases passed; real production body, including 128 and 175 bundled skills.")
 '''
 with tempfile.TemporaryDirectory(prefix='minis-skill-regression-') as d:
     path=pathlib.Path(d); f=path/'main.swift'; f.write_text(stub+body+tests,encoding='utf-8')

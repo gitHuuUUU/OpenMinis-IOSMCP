@@ -32,104 +32,149 @@ struct PickedAsset {
 /// conflict with existing `.sheet` modifiers on the same view.
 private struct PhotoPickerPresenter: UIViewControllerRepresentable {
     @Binding var isPresented: Bool
-    let configuration: PHPickerConfiguration
+    let maxSelectionCount: Int
+    let matchingImagesOnly: Bool
     let onPicked: ([PickedAsset]) -> Void
 
-    func makeUIViewController(context: Context) -> UIViewController {
-        let host = UIViewController()
-        host.view.frame = .zero
-        return host
-    }
-
-    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
-        context.coordinator.parent=self
-        guard isPresented, !context.coordinator.hosted else { return }
-        // A request must not be consumed until a visible presenter exists.
-        DispatchQueue.main.async { [weak uiViewController] in
-            guard let host=uiViewController, self.isPresented, !context.coordinator.hosted,
-                  let window=host.view.window else { return }
-            var top=window.rootViewController
-            while let next=top?.presentedViewController { top=next }
-            guard let presenter=top, !presenter.isBeingDismissed else { return }
-            let picker=PHPickerViewController(configuration:self.configuration)
-            picker.delegate=context.coordinator
-            context.coordinator.hosted=true
-            context.coordinator.hostingVC=host
-            presenter.present(picker,animated:true)
+    // SwiftUI can update the representable before it has joined a window.
+    final class HostController: UIViewController {
+        var onReady: (() -> Void)?
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            onReady?()
         }
     }
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
+    func makeUIViewController(context: Context) -> HostController {
+        let host = HostController()
+        host.view.frame = .zero
+        context.coordinator.hostingVC = host
+        host.onReady = { [weak coordinator = context.coordinator] in
+            coordinator?.requestPresentation()
+        }
+        return host
     }
+
+    func updateUIViewController(_ host: HostController, context: Context) {
+        context.coordinator.parent = self
+        context.coordinator.requestPresentation()
+    }
+
+    static func dismantleUIViewController(_ host: HostController, coordinator: Coordinator) {
+        host.onReady = nil
+        coordinator.presentationRetry?.cancel()
+        coordinator.hostingVC = nil
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     final class Coordinator: NSObject, PHPickerViewControllerDelegate {
         var parent: PhotoPickerPresenter
         var hosted = false
         weak var hostingVC: UIViewController?
+        var presentationRetry: DispatchWorkItem?
+        private let loadingQueue = DispatchQueue(label: "com.minisapp.photo-picker", qos: .userInitiated)
 
-        init(_ parent: PhotoPickerPresenter) {
-            self.parent = parent
+        init(_ parent: PhotoPickerPresenter) { self.parent = parent }
+
+        func requestPresentation(attempt: Int = 0) {
+            presentationRetry?.cancel()
+            presentationRetry = nil
+            guard parent.isPresented, !hosted, hostingVC != nil else { return }
+            // Only one pending attempt; retry transient sheet transitions rather
+            // than dropping a request before the presenter becomes visible.
+            let work = DispatchWorkItem { [weak self] in
+                guard let self, self.parent.isPresented, !self.hosted,
+                      let host = self.hostingVC else { return }
+                var top = host.view.window?.rootViewController
+                while let next = top?.presentedViewController { top = next }
+                guard let presenter = top, !presenter.isBeingDismissed,
+                      !presenter.isBeingPresented, presenter.transitionCoordinator == nil else {
+                    if attempt < 30 { self.requestPresentation(attempt: attempt + 1) }
+                    return
+                }
+                // Build only on an actual open, never during SwiftUI body updates.
+                var config = PHPickerConfiguration(photoLibrary: .shared())
+                config.selectionLimit = max(1, self.parent.maxSelectionCount)
+                config.filter = self.parent.matchingImagesOnly ? .images : .any(of: [.images, .videos])
+                // Avoid a potentially expensive HEIC/video compatibility conversion.
+                config.preferredAssetRepresentationMode = .current
+                let picker = PHPickerViewController(configuration: config)
+                picker.delegate = self
+                self.hosted = true
+                presenter.present(picker, animated: true)
+            }
+            presentationRetry = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + (attempt == 0 ? 0 : 0.1), execute: work)
         }
 
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-            // Always dismiss, even on cancel.
-            picker.dismiss(animated: true)
+            // Keep hosted true until dismissal completes, including cancellation.
             parent.isPresented = false
-            hosted = false
-
-            let providers = results.map(\.itemProvider)
-            guard !providers.isEmpty else {
-                parent.onPicked([])
+            picker.dismiss(animated: true) { [weak self] in
+                self?.hosted = false
+                self?.requestPresentation()
+            }
+            let onPicked = parent.onPicked
+            guard !results.isEmpty else {
+                onPicked([])
                 return
             }
-
-            var assets: [(Int,PickedAsset)] = []
-            let lock = NSLock()
-            let group = DispatchGroup()
-
-            for (index,pair) in zip(providers, results).enumerated() {
-                let (provider,result)=pair
-                let id = UUID()
-                let isVideo = provider.hasItemConformingToTypeIdentifier(UTType.movie.identifier)
-                // Preserve the original photo's creation date (via its PHAsset
-                // local identifier), mirroring the PhotosPicker path.
-                var assetDate: Date?
-                if [.authorized,.limited].contains(PHPhotoLibrary.authorizationStatus(for:.readWrite)),
-                   let assetID = result.assetIdentifier,
-                   let asset = PHAsset.fetchAssets(withLocalIdentifiers: [assetID], options: nil).firstObject {
-                    assetDate = asset.creationDate
-                }
-
-                group.enter()
-                if isVideo {
-                    provider.loadFileRepresentation(forTypeIdentifier: UTType.movie.identifier) { url, _ in
-                        defer { group.leave() }
-                        guard let url else { return }
-                        let tmp = FileManager.default.temporaryDirectory
-                            .appendingPathComponent("iosmcp-pick-\(id.uuidString).mov")
-                        try? FileManager.default.copyItem(at: url, to: tmp)
-                        let ext = provider.registeredTypeIdentifiers
-                            .compactMap { UTType($0)?.preferredFilenameExtension }
-                            .first
-                        lock.lock(); assets.append((index,PickedAsset(id: id, isVideo: true, data: nil, videoURL: tmp, ext: ext, date: assetDate))); lock.unlock()
-                    }
-                } else {
-                    provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
-                        defer { group.leave() }
-                        guard let data else { return }
-                        let ext = provider.registeredTypeIdentifiers
-                            .compactMap { UTType($0)?.preferredFilenameExtension }
-                            .first
-                        lock.lock(); assets.append((index,PickedAsset(id: id, isVideo: false, data: data, videoURL: nil, ext: ext, date: assetDate))); lock.unlock()
+            // PHAsset lookups and provider setup must not block the dismiss animation.
+            loadingQueue.async {
+                let providers = results.map(\.itemProvider)
+                var dates: [String: Date] = [:]
+                if [.authorized, .limited].contains(PHPhotoLibrary.authorizationStatus(for: .readWrite)) {
+                    let identifiers = results.compactMap(\.assetIdentifier)
+                    if !identifiers.isEmpty {
+                        let fetched = PHAsset.fetchAssets(withLocalIdentifiers: identifiers, options: nil)
+                        fetched.enumerateObjects { asset, _, _ in
+                            if let date = asset.creationDate { dates[asset.localIdentifier] = date }
+                        }
                     }
                 }
-            }
 
-            group.notify(queue: .main) {
-                // Stable order: insertion order of the providers.
-                let ordered = assets.sorted { $0.0 < $1.0 }.map { $0.1 }
-                self.parent.onPicked(ordered)
+                var assets: [(Int,PickedAsset)] = []
+                let lock = NSLock()
+                let group = DispatchGroup()
+
+                for (index,pair) in zip(providers, results).enumerated() {
+                    let (provider,result)=pair
+                    let id = UUID()
+                    let isVideo = provider.hasItemConformingToTypeIdentifier(UTType.movie.identifier)
+                    let assetDate = result.assetIdentifier.flatMap { dates[$0] }
+
+                    group.enter()
+                    if isVideo {
+                        provider.loadFileRepresentation(forTypeIdentifier: UTType.movie.identifier) { url, _ in
+                            defer { group.leave() }
+                            guard let url else { return }
+                            let ext = url.pathExtension.isEmpty ? "mov" : url.pathExtension
+                            let tmp = FileManager.default.temporaryDirectory
+                                .appendingPathComponent("iosmcp-pick-\(id.uuidString).\(ext)")
+                            // The provider URL expires when this callback returns.
+                            // Publish only an actually copied file, never a phantom URL.
+                            do { try FileManager.default.copyItem(at: url, to: tmp) }
+                            catch { return }
+                            lock.lock(); assets.append((index,PickedAsset(id: id, isVideo: true, data: nil, videoURL: tmp, ext: ext, date: assetDate))); lock.unlock()
+                        }
+                    } else {
+                        provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
+                            defer { group.leave() }
+                            guard let data else { return }
+                            let ext = provider.registeredTypeIdentifiers
+                                .compactMap { UTType($0)?.preferredFilenameExtension }
+                                .first
+                            lock.lock(); assets.append((index,PickedAsset(id: id, isVideo: false, data: data, videoURL: nil, ext: ext, date: assetDate))); lock.unlock()
+                        }
+                    }
+                }
+
+                group.notify(queue: .main) {
+                    // Stable order: insertion order of the providers.
+                    let ordered = assets.sorted { $0.0 < $1.0 }.map { $0.1 }
+                    onPicked(ordered)
+                }
             }
         }
     }
@@ -147,12 +192,10 @@ extension View {
                       maxSelectionCount: Int,
                       matchingImagesOnly: Bool = false,
                       onPicked: @escaping ([PickedAsset]) -> Void) -> some View {
-        var config = PHPickerConfiguration(photoLibrary: .shared())
-        config.selectionLimit = maxSelectionCount
-        config.filter = matchingImagesOnly ? .images : .any(of: [.images, .videos])
         return background(
             PhotoPickerPresenter(isPresented: isPresented,
-                                 configuration: config,
+                                 maxSelectionCount: maxSelectionCount,
+                                 matchingImagesOnly: matchingImagesOnly,
                                  onPicked: onPicked)
                 .frame(width: 0, height: 0)
         )

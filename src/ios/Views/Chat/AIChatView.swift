@@ -182,6 +182,8 @@ struct AIChatView: View {
     /// [T-ios-crash-objectdestroy-composer-uaf] Relay for the composer's key
     /// callbacks. See `ComposerActionChannel`.
     @State private var composerActions = ComposerActionChannel()
+    @State private var legacyFollowBottom = true
+    @State private var legacyScrollInteracting = false
 
     /// The actual ViewModel — always derived from the @StateObject to avoid
     /// the @ObservedObject re-init-on-body-recompute problem.
@@ -2873,6 +2875,14 @@ struct AIChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment:.leading,spacing:20) {
+                        LegacyTranscriptScrollProbe { near, interacting in
+                            legacyScrollInteracting = interacting
+                            // A drag immediately suspends following, before the
+                            // lazy bottom sentinel disappears from the viewport.
+                            if interacting { legacyFollowBottom = false }
+                            else if near { legacyFollowBottom = true }
+                            vm.isNearBottom = near && !interacting
+                        }.frame(height:0)
                         ForEach(vm.messages) { message in
                             ChatMessageRow(
                                 message:message,
@@ -2896,22 +2906,28 @@ struct AIChatView: View {
                             .id(message.id)
                         }
                         Color.clear.frame(height:inputBarHeight + (hasFloatingPreview ? 96 : 20))
-                            .background(GeometryReader { proxy in Color.clear.preference(key:LegacyTranscriptBottomKey.self,value:proxy.frame(in:.named("legacyTranscript")).maxY) })
                             .id("legacy-bottom")
                     }
                     .padding(.horizontal,16)
                     .padding(.top,12)
                 }
                 .coordinateSpace(name:"legacyTranscript")
-                .onPreferenceChange(LegacyTranscriptBottomKey.self) { bottom in
-                    let near=bottom <= geometry.size.height+40
-                    if near != vm.isNearBottom { DispatchQueue.main.async { vm.isNearBottom=near } }
-                }
+                .simultaneousGesture(DragGesture(minimumDistance:3).onChanged { _ in
+                    legacyFollowBottom=false
+                    legacyScrollInteracting=true
+                    vm.isNearBottom=false
+                }.onEnded { _ in legacyScrollInteracting=false })
                 .minisScrollDismissesKeyboard(.interactively)
-                .onReceive(vm.forceScrollToBottom) { _ in proxy.scrollTo("legacy-bottom",anchor:.bottom) }
-                .onReceive(vm.scrollToBottomSignal) { _ in if vm.isNearBottom { proxy.scrollTo("legacy-bottom",anchor:.bottom) } }
-                .onReceive(vm.forceScrollToTop) { _ in if let first=vm.messages.first { proxy.scrollTo(first.id,anchor:.top) } }
-                .onChange(of:vm.messages.count) { _ in if vm.isNearBottom { proxy.scrollTo("legacy-bottom",anchor:.bottom) } }
+                .onReceive(vm.forceScrollToBottom) { _ in
+                    guard !legacyScrollInteracting else { return }
+                    legacyFollowBottom=true
+                    proxy.scrollTo("legacy-bottom",anchor:.bottom)
+                }
+                .onReceive(vm.scrollToBottomSignal) { _ in
+                    if legacyFollowBottom && !legacyScrollInteracting { proxy.scrollTo("legacy-bottom",anchor:.bottom) }
+                }
+                .onReceive(vm.forceScrollToTop) { _ in legacyFollowBottom=false; if let first=vm.messages.first { proxy.scrollTo(first.id,anchor:.top) } }
+                .onChange(of:vm.messages.count) { _ in if legacyFollowBottom && !legacyScrollInteracting { proxy.scrollTo("legacy-bottom",anchor:.bottom) } }
             }
         }
     }
@@ -7048,7 +7064,55 @@ final class ComposerActionChannel {
     func send(_ action: Action) -> Bool { handler?(action) ?? false }
 }
 
-private struct LegacyTranscriptBottomKey:PreferenceKey {
-    static var defaultValue:CGFloat=0
-    static func reduce(value:inout CGFloat,nextValue:()->CGFloat) { value=nextValue() }
+/// Observe real UIScrollView offsets without replacing SwiftUI's delegate.
+/// A LazyVStack bottom GeometryReader can retain stale values offscreen.
+private struct LegacyTranscriptScrollProbe:UIViewRepresentable {
+    let changed:(Bool,Bool)->Void
+    func makeUIView(context:Context)->LegacyTranscriptScrollProbeView {
+        let view=LegacyTranscriptScrollProbeView(); view.changed=changed; return view
+    }
+    func updateUIView(_ view:LegacyTranscriptScrollProbeView,context:Context) { view.changed=changed; view.attach() }
+    static func dismantleUIView(_ view:LegacyTranscriptScrollProbeView,coordinator:()) { view.detach() }
+}
+
+private final class LegacyTranscriptScrollProbeView:UIView {
+    var changed:((Bool,Bool)->Void)?
+    private weak var scroll:UIScrollView?
+    private var observations:[NSKeyValueObservation]=[]
+    private var settled:DispatchWorkItem?
+    override func didMoveToWindow() { super.didMoveToWindow(); attach() }
+    func attach() {
+        guard window != nil else { return }
+        var ancestor=superview
+        while let current=ancestor, !(current is UIScrollView) { ancestor=current.superview }
+        guard let found=ancestor as? UIScrollView, found !== scroll else { return }
+        detach(); scroll=found
+        observations=[
+            found.observe(\.contentOffset,options:[.new]) { [weak self] _,_ in self?.sample() },
+            found.observe(\.contentSize,options:[.new]) { [weak self] _,_ in self?.sample() },
+            found.observe(\.bounds,options:[.new]) { [weak self] _,_ in self?.sample() }
+        ]
+        found.panGestureRecognizer.addTarget(self,action:#selector(panChanged))
+        sample()
+    }
+    func detach() {
+        settled?.cancel(); settled=nil
+        scroll?.panGestureRecognizer.removeTarget(self,action:#selector(panChanged))
+        observations.removeAll(); scroll=nil
+    }
+    deinit { settled?.cancel() }
+    @objc private func panChanged() { sample() }
+    private func sample() {
+        guard let scroll else { return }
+        let interacting=scroll.isTracking || scroll.isDragging || scroll.isDecelerating || scroll.panGestureRecognizer.state == .began || scroll.panGestureRecognizer.state == .changed
+        let bottom=scroll.contentOffset.y+scroll.bounds.height-scroll.adjustedContentInset.bottom
+        let near=scroll.contentSize.height-bottom <= 32
+        DispatchQueue.main.async { [weak self] in self?.changed?(near,interacting) }
+        settled?.cancel()
+        if interacting {
+            let work=DispatchWorkItem { [weak self] in self?.sample() }
+            settled=work
+            DispatchQueue.main.asyncAfter(deadline:.now()+0.2,execute:work)
+        }
+    }
 }

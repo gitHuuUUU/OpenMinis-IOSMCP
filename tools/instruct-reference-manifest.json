@@ -1,0 +1,808 @@
+{
+  "archive_sha256": "5605d5244a42e3a9864fccba0e656295cd14db89918c0efb7d7d8ae99826d6be",
+  "ordinary_skills": 47,
+  "original_files": [
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/LICENSE",
+      "packaged_path": "src/ios/default_mount/usr/local/lib/minis-original-tools/LICENSE",
+      "sha256": "2ec9e0643152608ca92fca155f1c527aa09a67dd74293a4f9921c93673982974",
+      "bytes": 1082,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/scripts/game_hacker.py",
+      "packaged_path": "src/ios/default_mount/usr/local/lib/minis-original-tools/scripts/game_hacker.py",
+      "sha256": "e2a351767cde1efd302e514110468f37e294c6e504bc8937cd3f4044676fd322",
+      "bytes": 25615,
+      "notes": [
+        "Windows-only ctypes APIs; can write process memory and inject caller-selected DLL; DLLs not inspected."
+      ]
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/scripts/network_analyzer.py",
+      "packaged_path": "src/ios/default_mount/usr/local/lib/minis-original-tools/scripts/network_analyzer.py",
+      "sha256": "d4446eb37d12b4ee1530de7d18704cd17b403df0ccf060e19f2a94c4d66c83f3",
+      "bytes": 20205,
+      "notes": [
+        "Can intercept/relay/replay target network traffic; netsh trace command uses shell=True with caller-controlled output path. No automatic credential collection/upload observed."
+      ]
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/scripts/pe_analyzer.py",
+      "packaged_path": "src/ios/default_mount/usr/local/lib/minis-original-tools/scripts/pe_analyzer.py",
+      "sha256": "d25a5aa46e9aa64abaa56a4cc4d68b909926143c8788eaec87bc4645e8671cec",
+      "bytes": 27233,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/scripts/software_cracker.py",
+      "packaged_path": "src/ios/default_mount/usr/local/lib/minis-original-tools/scripts/software_cracker.py",
+      "sha256": "5fe0c7b77fed65a82aa1cb3ac6701eea29d065099c9934b0bb4a9b822a7db961",
+      "bytes": 25378,
+      "notes": [
+        "Writes/renames caller-selected target binary; patch_jump has no backup; patch application can report incomplete patches. Generic keygen output does not establish any real license validation."
+      ]
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/scripts/tool_downloader.py",
+      "packaged_path": "src/ios/default_mount/usr/local/lib/minis-original-tools/scripts/tool_downloader.py",
+      "sha256": "c361451fb9fb79a6378112459f45fca9a3dd71eec88401cb71f8c83ea71a6ad7",
+      "bytes": 10223,
+      "notes": [
+        "Downloads external tool archives and installs pip packages; no hash/signature pinning; zip extraction lacks explicit size/link validation. No dependency payloads downloaded or inspected."
+      ]
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/scripts/tool_launcher.py",
+      "packaged_path": "src/ios/default_mount/usr/local/lib/minis-original-tools/scripts/tool_launcher.py",
+      "sha256": "c4d4b257d5ba0e66845541be306de97cca139d49eb985a4b638e2018ba66bdf0",
+      "bytes": 8260,
+      "notes": [
+        "Launches local Windows binaries and .bat via shell=True; dependencies not inspected."
+      ]
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/aimbot-calc/scripts/aimbot_calc.py",
+      "packaged_path": "src/ios/BundledSkills/aimbot-calc/scripts/aimbot_calc.py",
+      "sha256": "d0ca8b37f4790faf2c7c2b0fa07afc1eb66c5224336e6c9568cb49ea574710ff",
+      "bytes": 1103,
+      "notes": [
+        "fov_check uses a placeholder local origin; angle wrapping and pitch behavior require target-specific validation."
+      ]
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/aimbot-calc/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/aimbot-calc/SKILL.md",
+      "sha256": "5e5b1575b8d8400d2e8837ea69ce3fe6925d2fc0d5756961338e441bd166cd31",
+      "bytes": 396,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/aob-scan/scripts/aob_scan.py",
+      "packaged_path": "src/ios/BundledSkills/aob-scan/scripts/aob_scan.py",
+      "sha256": "f83d9d5ee5d08197590495df6f9ab81f2a253bce72b15a5beb6269beb7565ff3",
+      "bytes": 633,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/aob-scan/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/aob-scan/SKILL.md",
+      "sha256": "2a664d0dc06eaed33bc85091e6fee39ba23dc14253a08e72cf55ae495348ba54",
+      "bytes": 427,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/brute-force/scripts/brute_force.py",
+      "packaged_path": "src/ios/BundledSkills/brute-force/scripts/brute_force.py",
+      "sha256": "352c282a0aebd723a56644599890151f23a0dc325f1c1b5f059a2a68f1c64c1b",
+      "bytes": 3128,
+      "notes": [
+        "SSH/FTP code retrieves banners without authenticating; credential success not verified; --output creates directory but does not write report."
+      ]
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/brute-force/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/brute-force/SKILL.md",
+      "sha256": "3cdcb3d315bcda905474f3597b8408f107baf1a901e55f03f78f0ef408025b50",
+      "bytes": 396,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/code-inject/scripts/code_inject.py",
+      "packaged_path": "src/ios/BundledSkills/code-inject/scripts/code_inject.py",
+      "sha256": "a680ca3780dc9347b392482904b97cb4cc167cdeedb548d3f8072348f227dddf",
+      "bytes": 716,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/code-inject/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/code-inject/SKILL.md",
+      "sha256": "9955c58cfeb6e5f3b69df10536cb8c5d72d2ccdeb9ff32b0790bf2b179b87ce6",
+      "bytes": 449,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/dn-decompile/scripts/dn_decompile.py",
+      "packaged_path": "src/ios/BundledSkills/dn-decompile/scripts/dn_decompile.py",
+      "sha256": "df8e365d2c989182c93df73e25b5983f8a7265a0c8bece843bde2a61571db860",
+      "bytes": 432,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/dn-decompile/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/dn-decompile/SKILL.md",
+      "sha256": "e4aa99f8ab5d4e21c8158201f01bbfba8ed92ef2fc3b5860365a7ef4f7da97fc",
+      "bytes": 364,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/dn-edit/scripts/dn_edit.py",
+      "packaged_path": "src/ios/BundledSkills/dn-edit/scripts/dn_edit.py",
+      "sha256": "e5142ca9a3b632ffe07b020273d818f9ca92e74ca0ee796ebcec161839c5a47a",
+      "bytes": 632,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/dn-edit/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/dn-edit/SKILL.md",
+      "sha256": "842d0f2c46edbe561f4042535614527966d57cefdcc7980c8336da7c5d6d50b1",
+      "bytes": 400,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/dn-save/scripts/dn_save.py",
+      "packaged_path": "src/ios/BundledSkills/dn-save/scripts/dn_save.py",
+      "sha256": "7d5d7bec92adc378726de9cbe6a97a3efb7cbdcb52e5ff5d78ba0b1e4b440077",
+      "bytes": 382,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/dn-save/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/dn-save/SKILL.md",
+      "sha256": "e196b072da695770293f61d559fe5f6a842772df117e7dfb40edc700792b38e6",
+      "bytes": 367,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/dns-enum/scripts/dns_enum.py",
+      "packaged_path": "src/ios/BundledSkills/dns-enum/scripts/dns_enum.py",
+      "sha256": "cadd64375bfdda11ce3bab899e3ca5889a51bb0b0e1f33a83c75e86cdef3409b",
+      "bytes": 2391,
+      "notes": [
+        "References threading.ThreadPoolExecutor, which is not provided by threading; DNS record code only provides A-like results."
+      ]
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/dns-enum/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/dns-enum/SKILL.md",
+      "sha256": "fa2e6685683b132cf2017bab05637495b2ca69b555bb7806ebb5448c6082bd11",
+      "bytes": 428,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/dotnet-bypass/scripts/dotnet_bypass.py",
+      "packaged_path": "src/ios/BundledSkills/dotnet-bypass/scripts/dotnet_bypass.py",
+      "sha256": "1033afbfd4e525bd95b503f5f68180d936ee51e27e0b8dd714d2e4b657ab2d09",
+      "bytes": 650,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/dotnet-bypass/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/dotnet-bypass/SKILL.md",
+      "sha256": "7dde256a186b08e6261ad08771ff3c4403eaa309917b8ff78f3b5f01c62f4175",
+      "bytes": 376,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/encrypt-detect/scripts/encrypt_detect.py",
+      "packaged_path": "src/ios/BundledSkills/encrypt-detect/scripts/encrypt_detect.py",
+      "sha256": "2ed07a6510ab0797cd9647a8516d55bc8777f0e42630b70d71680acaa91dc34d",
+      "bytes": 1005,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/encrypt-detect/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/encrypt-detect/SKILL.md",
+      "sha256": "23ab10cdecc28020ef05824f3db0d3985d6394795212bc1e7ca2d84d9afcd5cc",
+      "bytes": 428,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/entity-list/scripts/entity_list.py",
+      "packaged_path": "src/ios/BundledSkills/entity-list/scripts/entity_list.py",
+      "sha256": "dadc36f6250c47478d8a99f46a6930fd69d0b629f07cca9797058f4d8ca59789",
+      "bytes": 680,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/entity-list/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/entity-list/SKILL.md",
+      "sha256": "5b017f435a103341ae59136a979894b4e393d23426907dcc3afc6b250b225103",
+      "bytes": 402,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/esp-law/scripts/esp_law.py",
+      "packaged_path": "src/ios/BundledSkills/esp-law/scripts/esp_law.py",
+      "sha256": "9dd9a5892219ef0e4564c8c0dda1d107b3c67a367a0920698b6f23cd70f20cbd",
+      "bytes": 817,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/esp-law/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/esp-law/SKILL.md",
+      "sha256": "957eb064ccf303a0fab438a2761eb3c1c2095e586bc050e28846af3fbee2232b",
+      "bytes": 447,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/exact-scan/scripts/exact_scan.py",
+      "packaged_path": "src/ios/BundledSkills/exact-scan/scripts/exact_scan.py",
+      "sha256": "d1af00e98530fbf8477d13f9b593fdb00ae00fce333abae16354e7af1504a193",
+      "bytes": 793,
+      "notes": [
+        "Preserve original bytes only; this source is not currently runnable and has not been silently repaired."
+      ]
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/exact-scan/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/exact-scan/SKILL.md",
+      "sha256": "a4edf4b1cbe722b2b68479639fea95bf73dff056ce6d6e71ea25801c5eaf0985",
+      "bytes": 487,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/exec-hook/scripts/exec_hook.py",
+      "packaged_path": "src/ios/BundledSkills/exec-hook/scripts/exec_hook.py",
+      "sha256": "60a4bfbe023c71e31e25bc1c15f71c3e26e4724b1dc3aa6a622dc49d47a7bace",
+      "bytes": 540,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/exec-hook/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/exec-hook/SKILL.md",
+      "sha256": "e05e6f64a8a87525847f4a6ebb77529bcab1fb2846727274e3ffc02b66af3d31",
+      "bytes": 437,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/file-backup/scripts/file_backup.py",
+      "packaged_path": "src/ios/BundledSkills/file-backup/scripts/file_backup.py",
+      "sha256": "ee997ebbe5afdcbd66704090dc2ec161c13e2e328b0698c7004f8c7c9c13fb66",
+      "bytes": 465,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/file-backup/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/file-backup/SKILL.md",
+      "sha256": "b3800f9357d898a28eae3fdbe1999ba5e6115d0630c82ad97d40a18ad2c2138b",
+      "bytes": 368,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/frida-intercept/scripts/frida_intercept.py",
+      "packaged_path": "src/ios/BundledSkills/frida-intercept/scripts/frida_intercept.py",
+      "sha256": "28da4d804dc2eaa92ecef2f724211c794e91fc6871727c292c7a4a2006ca8650",
+      "bytes": 1197,
+      "notes": [
+        "Generated send/recv hook assumptions do not correctly cover WSASend buffer arrays; output file name is caller-derived."
+      ]
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/frida-intercept/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/frida-intercept/SKILL.md",
+      "sha256": "b281843950f60a0382df44ff1bc8d45328eb07b7025519247241e64bbe975473",
+      "bytes": 435,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/full-crack/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/full-crack/SKILL.md",
+      "sha256": "57f0365b5aa87127ea89054613fcb68082241cb4e190871e3b4ea8651e303f74",
+      "bytes": 501,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/full-game/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/full-game/SKILL.md",
+      "sha256": "9abc07be53cee6801f65afbcf429444b21b78082885e096bd686841803c84d76",
+      "bytes": 506,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/full-reverse/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/full-reverse/SKILL.md",
+      "sha256": "3418f495b7c017a9b2dbf4dfdc2d6fc4657364b55f629aabff5a0dc832ff6fe7",
+      "bytes": 467,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/full-unpack/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/full-unpack/SKILL.md",
+      "sha256": "74c54504ad8dc653ed48aaa425367063c59fd504b66af05afdc7e1dc05df9157",
+      "bytes": 409,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/function-decompile/scripts/function_decompile.py",
+      "packaged_path": "src/ios/BundledSkills/function-decompile/scripts/function_decompile.py",
+      "sha256": "05bd9f880582d682c2a1450b1a266a7eda953a4c7ed75a5fd817341c6af29b7f",
+      "bytes": 693,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/function-decompile/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/function-decompile/SKILL.md",
+      "sha256": "1d1940d7cbba63948e2b52ec5bfff181e0c800413bb5f9759d8b3f075603e513",
+      "bytes": 463,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/iat-rebuild/scripts/iat_rebuild.py",
+      "packaged_path": "src/ios/BundledSkills/iat-rebuild/scripts/iat_rebuild.py",
+      "sha256": "6b3c09744be372cd8271bb74cadb5580581b436cf0ab59e8203144c125a20fb6",
+      "bytes": 556,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/iat-rebuild/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/iat-rebuild/SKILL.md",
+      "sha256": "a2937a4584b5b28cdff1c832660a83f73f633d347b361dce59bd4ffa1d83f8a0",
+      "bytes": 382,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/import-analyze/scripts/import_analyze.py",
+      "packaged_path": "src/ios/BundledSkills/import-analyze/scripts/import_analyze.py",
+      "sha256": "eb8d37704cb7e348d97356a3cdc6f5c2dcf1683257e01d6da134272db02ed9a7",
+      "bytes": 722,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/import-analyze/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/import-analyze/SKILL.md",
+      "sha256": "29171e9f1c8f566811b35ab524297a9b24376028eae8313259d4710f613d4adf",
+      "bytes": 451,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/jmp-modify/scripts/jmp_modify.py",
+      "packaged_path": "src/ios/BundledSkills/jmp-modify/scripts/jmp_modify.py",
+      "sha256": "ac010ea39a14437d4e8e70fc003e375a8fb025ed94796fce426640953c4e30c3",
+      "bytes": 665,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/jmp-modify/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/jmp-modify/SKILL.md",
+      "sha256": "61961a7f21bc4f9d9a817603389c5683e988750ebcd994fa0060408b647431d0",
+      "bytes": 442,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/jump-patch/scripts/jump_patch.py",
+      "packaged_path": "src/ios/BundledSkills/jump-patch/scripts/jump_patch.py",
+      "sha256": "227528d23fdee5fc3f3911a07d6b051e5c653140f2d748fb17d86fd72121c01e",
+      "bytes": 821,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/jump-patch/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/jump-patch/SKILL.md",
+      "sha256": "17a7aed22c65b49fb1996bd85cb52a72e5bc4a42c0ce166d919aebf0117bea9e",
+      "bytes": 439,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/keygen-build/scripts/keygen_build.py",
+      "packaged_path": "src/ios/BundledSkills/keygen-build/scripts/keygen_build.py",
+      "sha256": "19d735be5176954d1f494a11ad1fc9029fe9beb53f6f6b78982d9293d23cd0d2",
+      "bytes": 943,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/keygen-build/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/keygen-build/SKILL.md",
+      "sha256": "22e37543d8b2dad8c3e9c02fc356a6c3737addc2f59dbc1bfb75cafe57246663",
+      "bytes": 400,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/memory-breakpoint/scripts/memory_breakpoint.py",
+      "packaged_path": "src/ios/BundledSkills/memory-breakpoint/scripts/memory_breakpoint.py",
+      "sha256": "910dc85ca610d6102e16b491950eb8ac0387dcc61d2d125842373fd152a21ec7",
+      "bytes": 748,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/memory-breakpoint/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/memory-breakpoint/SKILL.md",
+      "sha256": "a5c0c2f2f02367af45046616f373df8c841457230180481482f98040104f6f54",
+      "bytes": 476,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/network-bypass/scripts/network_bypass.py",
+      "packaged_path": "src/ios/BundledSkills/network-bypass/scripts/network_bypass.py",
+      "sha256": "cbb13e93ae0540e42d70b0a82f4f3a9d35c2bc6d7665933ecc3def48a0783598",
+      "bytes": 1088,
+      "notes": [
+        "Preserve original bytes only; this source is not currently runnable and has not been silently repaired."
+      ]
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/network-bypass/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/network-bypass/SKILL.md",
+      "sha256": "dca85e7ad19d4c554a8b6e92b7e64ce609a230f3b54054f20554671ba80bc8ee",
+      "bytes": 429,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/network-pentest/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/network-pentest/SKILL.md",
+      "sha256": "04bc2bd5d46f2de0a5d237d30ba6e2dcb1fa1b6d313e6b89b233b340dedb1428",
+      "bytes": 533,
+      "notes": [
+        "Contains credential-access and lateral-movement procedures; no code executes when read."
+      ]
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/nop-remove/scripts/nop_remove.py",
+      "packaged_path": "src/ios/BundledSkills/nop-remove/scripts/nop_remove.py",
+      "sha256": "f1cb1b01cb39e5c5e40356aabc0842e4cc1282885e47d54c5df277d82b23380d",
+      "bytes": 758,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/nop-remove/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/nop-remove/SKILL.md",
+      "sha256": "57ad6ba49b202da7b23d3e7a6c10c6085610f57d4876fb74bdbd823c19834268",
+      "bytes": 462,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/overlay-render/scripts/overlay_render.py",
+      "packaged_path": "src/ios/BundledSkills/overlay-render/scripts/overlay_render.py",
+      "sha256": "a7f5b1657a94e78a8576d34fd7b826cc17bc11e448d91f43bc1982007002f797",
+      "bytes": 815,
+      "notes": [
+        "Preserve original bytes only; this source is not currently runnable and has not been silently repaired."
+      ]
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/overlay-render/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/overlay-render/SKILL.md",
+      "sha256": "b3e518b272cee1a00f5979688c6ef40eb5ddc2162c2a161e8e1d68f743431b9a",
+      "bytes": 441,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/packet-replay/scripts/packet_replay.py",
+      "packaged_path": "src/ios/BundledSkills/packet-replay/scripts/packet_replay.py",
+      "sha256": "13a4ab421c2d4403b01f2990c0260cb992a27df5fc249dd3fae4a82d9e260a6d",
+      "bytes": 769,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/packet-replay/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/packet-replay/SKILL.md",
+      "sha256": "da9633b4b898cfbed267c7e5eac99bfa38c9d957f2eccb1208793f66f686e00a",
+      "bytes": 456,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/patch-apply/scripts/patch_apply.py",
+      "packaged_path": "src/ios/BundledSkills/patch-apply/scripts/patch_apply.py",
+      "sha256": "30b9d95b731260ea17094ccd7f988c7b91ab6c7acacfe3dd685855f42d785644",
+      "bytes": 491,
+      "notes": [
+        "Hard-coded offset 0x0 and NOP operation; not a safe general patch wrapper without user inspection."
+      ]
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/patch-apply/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/patch-apply/SKILL.md",
+      "sha256": "07e05babbf022ce0f27bc8f3508e7304728eff08a2ff2b9167403a10a599b73c",
+      "bytes": 455,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/patch-rollback/scripts/patch_rollback.py",
+      "packaged_path": "src/ios/BundledSkills/patch-rollback/scripts/patch_rollback.py",
+      "sha256": "0f54c730d92f4dd4e518f655f4d34a9766d271c8e298c71e6665a3c1a435354d",
+      "bytes": 550,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/patch-rollback/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/patch-rollback/SKILL.md",
+      "sha256": "61fa2bd4faa485a240f5d21e164f806eefc2a2f13df10f7b8f7ab4f4661b428f",
+      "bytes": 329,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/phishing-kit/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/phishing-kit/SKILL.md",
+      "sha256": "e526119084d8ed4a898b0d4960107e3cfad9ada8531e71acdafcb72e515871ca",
+      "bytes": 521,
+      "notes": [
+        "Contains credential-collection workflow; referenced clone/pretext CLI options are absent from tool_launcher.py."
+      ]
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/pointer-chain/scripts/pointer_chain.py",
+      "packaged_path": "src/ios/BundledSkills/pointer-chain/scripts/pointer_chain.py",
+      "sha256": "aeac800cd8105312ef3f0b1950b2670d5ba37f63a4a4c7c99abc32c0fe9c2c59",
+      "bytes": 614,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/pointer-chain/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/pointer-chain/SKILL.md",
+      "sha256": "f23a21a5c7ea1b6317acb05ef75fb2a6dc584c220b064817b9fa4283c1f58d16",
+      "bytes": 485,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/port-scan/scripts/port_scanner.py",
+      "packaged_path": "src/ios/BundledSkills/port-scan/scripts/port_scanner.py",
+      "sha256": "f1d80f72c90182e431ea257238607498633e577995f6b97ab18b4724c6cdc487",
+      "bytes": 3567,
+      "notes": [
+        "--full scans only COMMON_PORTS, not all ports; --udp is parsed but not implemented."
+      ]
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/port-scan/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/port-scan/SKILL.md",
+      "sha256": "3ac752025b96f2aae849fff4aef39003bf56d1d985061978a3247f935a85b638",
+      "bytes": 388,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/post-exploit/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/post-exploit/SKILL.md",
+      "sha256": "8a27de124aa1f8d7a016a3abf7b6e590606e7e76f683343226700ed46eb18928",
+      "bytes": 503,
+      "notes": [
+        "Contains explicit persistence/lateral-movement procedures as requested technical subject matter; not an autorun installer."
+      ]
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/sqli-test/scripts/sqli_tester.py",
+      "packaged_path": "src/ios/BundledSkills/sqli-test/scripts/sqli_tester.py",
+      "sha256": "ea1c03a96757d4ff383e3ba2d38245b95b00fe34c235b2b0931c91f771edcfa4",
+      "bytes": 2457,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/sqli-test/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/sqli-test/SKILL.md",
+      "sha256": "42a2b6127fd0ec1fc4426f3506603b679961f0c756ea231229fce6b6cf030c89",
+      "bytes": 346,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/string-extract/scripts/string_extract.py",
+      "packaged_path": "src/ios/BundledSkills/string-extract/scripts/string_extract.py",
+      "sha256": "e5625b827b4917085701aea8eed9100d896ebcb1e910a2267188cbe4e3e04283",
+      "bytes": 579,
+      "notes": [
+        "Calls pe_analyzer.py --strings, but that CLI option is absent from the supplied analyzer."
+      ]
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/string-extract/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/string-extract/SKILL.md",
+      "sha256": "63e5772c9321c69072fa93a65a6c782a194203a28b82cc1a0e1a9210baed401a",
+      "bytes": 520,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/time-reset/scripts/time_reset.py",
+      "packaged_path": "src/ios/BundledSkills/time-reset/scripts/time_reset.py",
+      "sha256": "11c4b1400221b781b04ba0f3f46e087e10985d87e327dfe91dbf5c750a8d2da4",
+      "bytes": 1217,
+      "notes": [
+        "Writes HKCU/HKLM application trial values and deletes named app files. APP is unsanitized user input; not an automatic wipe chain, but potentially destructive on bad input."
+      ]
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/time-reset/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/time-reset/SKILL.md",
+      "sha256": "956a4f65c9e81c3a1d667a2a0081c01df098d5e02c21fb011216b8561afcbbac",
+      "bytes": 397,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/unknown-scan/scripts/unknown_scan.py",
+      "packaged_path": "src/ios/BundledSkills/unknown-scan/scripts/unknown_scan.py",
+      "sha256": "7a6d326b05025b7d61d6e91fe81a46c7af3fac443e6f4d54039696df1db4bb3e",
+      "bytes": 519,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/unknown-scan/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/unknown-scan/SKILL.md",
+      "sha256": "f699efe543d2c461688b980ac2cbfa2c1660943781eb1f993da98362086fcc36",
+      "bytes": 459,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/view-matrix/scripts/view_matrix.py",
+      "packaged_path": "src/ios/BundledSkills/view-matrix/scripts/view_matrix.py",
+      "sha256": "42bfd1b3ff4d77fe1be74fe2739ecfa4e4e60ccc8ec1048ebfdfe22948af74b2",
+      "bytes": 571,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/view-matrix/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/view-matrix/SKILL.md",
+      "sha256": "6f3ffc2267ead80542d0a8b49095f8c3dbe85a535c04e29ceb95ad4c1fc70bab",
+      "bytes": 462,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/vuln-scan/scripts/vuln_scanner.py",
+      "packaged_path": "src/ios/BundledSkills/vuln-scan/scripts/vuln_scanner.py",
+      "sha256": "f5c2a8e1911add883f6f9d7e6a41d50a0d33fb6a54c296ea0e46d74a5f551c4a",
+      "bytes": 2521,
+      "notes": [
+        "Version matching is simplistic and can associate unrelated CVEs; --verify prints metadata rather than proving vulnerability."
+      ]
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/vuln-scan/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/vuln-scan/SKILL.md",
+      "sha256": "0b56bfe0907d54dc2f2f76a22b8441a25ed379a312cf3cc0659ac43e95d07733",
+      "bytes": 357,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/web-scan/scripts/common.txt",
+      "packaged_path": "src/ios/BundledSkills/web-scan/scripts/common.txt",
+      "sha256": "96ada94e30ff174b22afd05a8996c70adc0c0902ae5b731f74d132ab9e627000",
+      "bytes": 604,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/web-scan/scripts/web_scanner.py",
+      "packaged_path": "src/ios/BundledSkills/web-scan/scripts/web_scanner.py",
+      "sha256": "9e85c44d0a3b3abb230869681c1972b57e67273081739bc36f2050d806911d04",
+      "bytes": 3417,
+      "notes": [
+        "References threading.ThreadPoolExecutor, which is not provided by threading."
+      ]
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/web-scan/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/web-scan/SKILL.md",
+      "sha256": "dd3bf4fb43a0d22837dffd1d0fe91c7632d56e28b4eacca35147e903061107a0",
+      "bytes": 433,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/world-to-screen/scripts/world_to_screen.py",
+      "packaged_path": "src/ios/BundledSkills/world-to-screen/scripts/world_to_screen.py",
+      "sha256": "747d6ffce1863adf681033ed8d73e20095cef8b546a89ae3a5ea464f77749d50",
+      "bytes": 638,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/world-to-screen/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/world-to-screen/SKILL.md",
+      "sha256": "80b6baf469fe8a9a925b124217ac0a41e3dd390f16241a0c3a7602f83430bdfc",
+      "bytes": 380,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/xref-trace/scripts/xref_trace.py",
+      "packaged_path": "src/ios/BundledSkills/xref-trace/scripts/xref_trace.py",
+      "sha256": "aa83df569b0dad77d952229184864e9685ddc04d48e0827cdd90384608ef74e7",
+      "bytes": 457,
+      "notes": []
+    },
+    {
+      "archive_path": "codex-gpt-5.6-5.5-instruct/Skills/xref-trace/SKILL.md",
+      "packaged_path": "src/ios/BundledSkills/xref-trace/SKILL.md",
+      "sha256": "bb44d2f2aaa2eb6b375062d0f33adf3c83d33a1089df9c7be7518916a5070af0",
+      "bytes": 427,
+      "notes": []
+    }
+  ],
+  "excluded": [
+    {
+      "path": ".gitignore",
+      "reason": "Outside standalone ordinary Skills/scripts allowlist: root framework, bridge/deployment/startup/MCP infrastructure or metadata."
+    },
+    {
+      "path": "bridge.md",
+      "reason": "Outside standalone ordinary Skills/scripts allowlist: root framework, bridge/deployment/startup/MCP infrastructure or metadata."
+    },
+    {
+      "path": "bridge.md.v3-backup",
+      "reason": "Outside standalone ordinary Skills/scripts allowlist: root framework, bridge/deployment/startup/MCP infrastructure or metadata."
+    },
+    {
+      "path": "bridge.md.v5-scoring-backup",
+      "reason": "Outside standalone ordinary Skills/scripts allowlist: root framework, bridge/deployment/startup/MCP infrastructure or metadata."
+    },
+    {
+      "path": "bridge.md.v6-final",
+      "reason": "Outside standalone ordinary Skills/scripts allowlist: root framework, bridge/deployment/startup/MCP infrastructure or metadata."
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "reason": "Outside standalone ordinary Skills/scripts allowlist: root framework, bridge/deployment/startup/MCP infrastructure or metadata."
+    },
+    {
+      "path": "deploy.py",
+      "reason": "Outside standalone ordinary Skills/scripts allowlist: root framework, bridge/deployment/startup/MCP infrastructure or metadata."
+    },
+    {
+      "path": "mcp/README.md",
+      "reason": "Outside standalone ordinary Skills/scripts allowlist: root framework, bridge/deployment/startup/MCP infrastructure or metadata."
+    },
+    {
+      "path": "mcp/渗透测试/nerv_pentest_mcp.py",
+      "reason": "Outside standalone ordinary Skills/scripts allowlist: root framework, bridge/deployment/startup/MCP infrastructure or metadata."
+    },
+    {
+      "path": "mcp/逆向分析/nerv_reverse_mcp.py",
+      "reason": "Outside standalone ordinary Skills/scripts allowlist: root framework, bridge/deployment/startup/MCP infrastructure or metadata."
+    },
+    {
+      "path": "README.md",
+      "reason": "Outside standalone ordinary Skills/scripts allowlist: root framework, bridge/deployment/startup/MCP infrastructure or metadata."
+    },
+    {
+      "path": "README_EN.md",
+      "reason": "Outside standalone ordinary Skills/scripts allowlist: root framework, bridge/deployment/startup/MCP infrastructure or metadata."
+    },
+    {
+      "path": "scripts/deploy_prompt.py",
+      "reason": "Model-prompt deployment/override tool; excluded whole file without porting or testing."
+    },
+    {
+      "path": "SKILL.md",
+      "reason": "Outside standalone ordinary Skills/scripts allowlist: root framework, bridge/deployment/startup/MCP infrastructure or metadata."
+    },
+    {
+      "path": "Skills/creative-writing/SKILL.md",
+      "reason": "Whole file excluded: model content-limit override instructions."
+    },
+    {
+      "path": "Skills/full-pentest/SKILL.md",
+      "reason": "Whole file excluded: instruction-hierarchy override mixed into technical workflow."
+    },
+    {
+      "path": "Skills/zxwn-activation/SKILL.md",
+      "reason": "Whole file excluded: activation/priority and instruction override payload."
+    },
+    {
+      "path": "启动/bridge.md",
+      "reason": "Outside standalone ordinary Skills/scripts allowlist: root framework, bridge/deployment/startup/MCP infrastructure or metadata."
+    },
+    {
+      "path": "启动/deploy.py",
+      "reason": "Outside standalone ordinary Skills/scripts allowlist: root framework, bridge/deployment/startup/MCP infrastructure or metadata."
+    },
+    {
+      "path": "启动/fix_config_toml.py",
+      "reason": "Outside standalone ordinary Skills/scripts allowlist: root framework, bridge/deployment/startup/MCP infrastructure or metadata."
+    },
+    {
+      "path": "启动/一键部署.bat",
+      "reason": "Outside standalone ordinary Skills/scripts allowlist: root framework, bridge/deployment/startup/MCP infrastructure or metadata."
+    },
+    {
+      "path": "启动/卸载还原.bat",
+      "reason": "Outside standalone ordinary Skills/scripts allowlist: root framework, bridge/deployment/startup/MCP infrastructure or metadata."
+    },
+    {
+      "path": "启动/查看状态.bat",
+      "reason": "Outside standalone ordinary Skills/scripts allowlist: root framework, bridge/deployment/startup/MCP infrastructure or metadata."
+    }
+  ],
+  "scope": "Original bytes of standalone technical skills/scripts only. No governing-model overrides, bridge/deployment prompts, git history or bundled Windows binaries."
+}

@@ -583,6 +583,10 @@ struct ChatMessageRow: View {
                 resumeBanner
             }
 
+            if !message.isCompactedHistory {
+                AssistantMessageActions(message: message, isActiveMessage: isActiveMessage)
+            }
+
             // Token usage — two-phase reveal: space expands first, then content fades in
             if message.streamInterruptCount > 0 || showUsage {
                 HStack(spacing: 6) {
@@ -881,3 +885,126 @@ struct ChatMessageRow: View {
 }
 
 
+
+
+// MARK: - Completed assistant reply actions (legacy row and V3 footer)
+
+/// Shared, visible ellipsis entry point. Uses an iOS-15 TextEditor sheet rather
+/// than the user-message composer, so opening/saving never sends or truncates.
+struct AssistantMessageActions: View {
+    @EnvironmentObject private var vm: AIChatViewModel
+    @ObservedObject var message: ChatMessage
+    let isActiveMessage: Bool
+    @State private var edits: [AIChatViewModel.AssistantTextEdit] = []
+    @State private var showEditor = false
+    @State private var isLoading = false
+    @State private var error: String?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Menu {
+                Button {
+                    UIPasteboard.general.string = message.blocks.filter { $0.kind == .text }
+                        .map(\.content).joined(separator: "\n\n")
+                } label: {
+                    Label("复制文本", systemImage: "doc.on.doc")
+                }
+                Button {
+                    isLoading = true
+                    Task { @MainActor in
+                        defer { isLoading = false }
+                        do {
+                            edits = try await vm.assistantTextEdits(for: message)
+                            showEditor = true
+                        } catch { self.error = error.localizedDescription }
+                    }
+                } label: {
+                    Label("编辑消息", systemImage: "square.and.pencil")
+                }
+                .disabled(isActiveMessage || vm.isProcessing || vm.isSavingAssistantEdit
+                    || message.isCompactedHistory || message.error != nil || vm.remoteDeviceId != nil || isLoading)
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(ChatColors.secondaryText)
+                    .frame(width: 44, height: 36)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("回复操作")
+            if isLoading { ProgressView().scaleEffect(0.7) }
+            Spacer(minLength: 0)
+        }
+        .sheet(isPresented: $showEditor) {
+            AssistantTextEditorSheet(edits: edits).environmentObject(vm)
+        }
+        .alert("无法编辑消息", isPresented: Binding(
+            get: { error != nil }, set: { if !$0 { error = nil } }
+        )) {
+            Button("好", role: .cancel) { error = nil }
+        } message: { Text(error ?? "") }
+    }
+}
+
+private struct AssistantTextEditorSheet: View {
+    @EnvironmentObject private var vm: AIChatViewModel
+    @Environment(\.dismiss) private var dismiss
+    let edits: [AIChatViewModel.AssistantTextEdit]
+    @State private var selection = 0
+    @State private var text = ""
+    @State private var saving = false
+    @State private var error: String?
+
+    var body: some View {
+        NavigationView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("仅修改回复文本，不重新生成；工具记录、附件、思考与后续消息保持不变。")
+                    .font(.footnote).foregroundStyle(.secondary)
+                if edits.count > 1 {
+                    Picker("文本区段", selection: $selection) {
+                        ForEach(edits.indices, id: \.self) { index in
+                            Text("文本区段 \(index + 1)").tag(index)
+                        }
+                    }
+                    .disabled(saving || text != edits[selection].originalText)
+                    Text("工具调用之间的文本分段独立保存。保存或取消当前更改后可编辑其他区段。")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                TextEditor(text: $text)
+                    .font(.body)
+                    .accessibilityLabel("消息文本")
+                    .disabled(saving)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
+                if let error { Text(error).font(.footnote).foregroundStyle(.red) }
+                if saving { ProgressView("正在保存…") }
+            }
+            .padding()
+            .navigationTitle("编辑消息")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }.disabled(saving)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存更改") {
+                        guard edits.indices.contains(selection) else { return }
+                        var edit = edits[selection]
+                        edit.text = text
+                        saving = true
+                        error = nil
+                        Task { @MainActor in
+                            defer { saving = false }
+                            do { try await vm.saveAssistantTextEdit(edit); dismiss() }
+                            catch { self.error = error.localizedDescription }
+                        }
+                    }
+                    .disabled(saving || vm.isProcessing || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || !edits.indices.contains(selection) || text == edits[selection].originalText)
+                }
+            }
+        }
+        .navigationViewStyle(.stack)
+        .interactiveDismissDisabled(saving)
+        .onAppear { if let edit = edits.first { text = edit.text } }
+        .onChange(of: selection) { index in if edits.indices.contains(index) { text = edits[index].text; error = nil } }
+    }
+}

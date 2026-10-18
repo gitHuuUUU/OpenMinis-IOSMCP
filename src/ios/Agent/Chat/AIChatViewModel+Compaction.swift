@@ -309,6 +309,7 @@ extension AIChatViewModel {
 
     /// Compact then send the pending message.
     func compactAndSend() {
+        guard !isSavingAssistantEdit else { return }
         showCompactBeforeSendPrompt = false
         let text = pendingSendText ?? ""
         let atts = pendingSendAttachments
@@ -530,6 +531,7 @@ extension AIChatViewModel {
     /// mutated. The kept tail (live anchor for the next turn) is whatever the
     /// user types next — there is no "auto-keep last N user turns" magic.
     func compactAll() {
+        guard !isSavingAssistantEdit else { return }
         guard !isProcessing else {
             appendSystemInfo("Cannot compact while processing.", icon: "arrow.down.right.and.arrow.up.left")
             return
@@ -818,6 +820,7 @@ extension AIChatViewModel {
     ///   handoff is needed.
     func compactBefore(_ chatMessageId: UUID, includesBoundary: Bool = false,
                         allowDuringProcessing: Bool = false) async {
+        guard !isSavingAssistantEdit else { return }
         guard allowDuringProcessing || !isProcessing else {
             logger.info("[Compact] Cannot compact while processing")
             appendSystemInfo("Cannot compact while processing.", icon: "arrow.down.right.and.arrow.up.left")

@@ -461,7 +461,7 @@ private struct BridgedAssistantFooterV3: View {
         let showError = message.error != nil
         let showResume = bridge.canResume && message.error == nil
         let showUsageRow = message.streamInterruptCount > 0 || bridge.showUsage
-        return showTyping || showError || showResume || showUsageRow
+        return showTyping || showError || showResume || showUsageRow || !message.isCompactedHistory
     }
 
     var body: some View {
@@ -480,6 +480,10 @@ private struct BridgedAssistantFooterV3: View {
             // Resume banner
             if bridge.canResume && message.error == nil {
                 resumeBanner
+            }
+
+            if !message.isCompactedHistory {
+                AssistantMessageActions(message: message, isActiveMessage: bridge.isActiveMessage)
             }
 
             // Token usage
@@ -1803,9 +1807,11 @@ extension CollectionViewMessageListV3 {
             // turn (each tool round: waiting -> producing -> waiting), and the
             // footer's height must follow every one of those edges.
             let showsTypingIndicator: Bool
+            let showsMessageActions: Bool
 
             init(bridge: CellStateBridgeV2, message: ChatMessage) {
                 isActiveMessage = bridge.isActiveMessage
+                showsMessageActions = !message.isCompactedHistory
                 canResume = bridge.canResume
                 showUsage = bridge.showUsage
                 // Zero/non-zero only — see the note in updateBridge about the
