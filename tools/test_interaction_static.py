@@ -20,6 +20,20 @@ class InteractionContracts(unittest.TestCase):
         self.assertNotIn('else { legacyFollowBottom = near }',s)
         self.assertIn('guard !legacyScrollInteracting else { return }',s)
         self.assertIn('if legacyFollowBottom && !legacyScrollInteracting',s)
+    def test_legacy_history_does_not_recycle_giant_turns(self):
+        s=read('src/ios/Views/Chat/AIChatView.swift')
+        part=s.split('private var legacyMessagesArea:',1)[1].split('/// Shared label style',1)[0]
+        self.assertIn('VStack(alignment:.leading,spacing:20)',part)
+        self.assertNotIn('LazyVStack(',part)
+        self.assertIn('trackWindowPosition:false',part)
+        self.assertIn('if vm.isNearBottom != shouldFollow',part)
+    def test_scroll_callbacks_deduplicate_and_cancel(self):
+        s=read('src/ios/Views/Chat/AIChatView.swift')
+        self.assertIn('if near != lastNear || interacting != lastInteracting',s)
+        self.assertIn('pendingSample?.cancel(); pendingSample=nil',s)
+        row=read('src/ios/Views/Chat/ChatMessageViews.swift')
+        self.assertIn('trackWindowPosition ? proxy.frame(in: .global) : .zero',row)
+        self.assertIn('Label("用量详情", systemImage: "chart.bar")',row)
     def test_app_auto_scope_has_reversible_switch(self):
         s=read('src/ios/Workbench.swift')
         for piece in ['workbench.autoApps','func accessibleApps','accessibleApps(session).flatMap','MinisDeviceBridge.openApplication','自动选择并打开已安装应用']:

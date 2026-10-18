@@ -2874,10 +2874,14 @@ struct AIChatView: View {
         GeometryReader { geometry in
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment:.leading,spacing:20) {
+                    // iOS15 recycles an entire multi-screen assistant turn as one
+                    // lazy item. Keep measured history mounted to avoid blank
+                    // gaps/height estimates and repeated Markdown reconstruction.
+                    VStack(alignment:.leading,spacing:20) {
                         ForEach(vm.messages) { message in
                             ChatMessageRow(
                                 message:message,
+                                trackWindowPosition:false,
                                 isActiveMessage:vm.isProcessing && message.id == vm.messages.last(where: { $0.role == .assistant })?.id,
                                 commandStartTime:vm.commandStartTime,
                                 onStop:{ vm.stopCurrentCommand() },
@@ -2905,17 +2909,18 @@ struct AIChatView: View {
                     // Attach to the persistent content container, not a lazy
                     // first/last row that can be unmounted while reading.
                     .background(LegacyTranscriptScrollProbe { near, interacting in
-                        legacyScrollInteracting = interacting
+                        if legacyScrollInteracting != interacting { legacyScrollInteracting = interacting }
                         if interacting { legacyFollowBottom = false }
                         else if near { legacyFollowBottom = true }
-                        vm.isNearBottom = near && !interacting
+                        let shouldFollow = near && !interacting
+                        if vm.isNearBottom != shouldFollow { vm.isNearBottom = shouldFollow }
                     }.frame(width:0,height:0),alignment:.topLeading)
                 }
                 .coordinateSpace(name:"legacyTranscript")
                 .simultaneousGesture(DragGesture(minimumDistance:3).onChanged { _ in
-                    legacyFollowBottom=false
-                    legacyScrollInteracting=true
-                    vm.isNearBottom=false
+                    if legacyFollowBottom { legacyFollowBottom=false }
+                    if !legacyScrollInteracting { legacyScrollInteracting=true }
+                    if vm.isNearBottom { vm.isNearBottom=false }
                 }.onEnded { _ in legacyScrollInteracting=false })
                 .minisScrollDismissesKeyboard(.interactively)
                 .onReceive(vm.forceScrollToBottom) { _ in
@@ -7080,6 +7085,9 @@ private final class LegacyTranscriptScrollProbeView:UIView {
     private weak var scroll:UIScrollView?
     private var observations:[NSKeyValueObservation]=[]
     private var settled:DispatchWorkItem?
+    private var lastNear:Bool?
+    private var lastInteracting:Bool?
+    private var pendingSample:DispatchWorkItem?
     override func didMoveToWindow() { super.didMoveToWindow(); attach() }
     func attach() {
         guard window != nil else { return }
@@ -7099,15 +7107,25 @@ private final class LegacyTranscriptScrollProbeView:UIView {
         settled?.cancel(); settled=nil
         scroll?.panGestureRecognizer.removeTarget(self,action:#selector(panChanged))
         observations.removeAll(); scroll=nil
+        pendingSample?.cancel(); pendingSample=nil
+        lastNear=nil; lastInteracting=nil
     }
-    deinit { settled?.cancel() }
+    deinit { settled?.cancel(); pendingSample?.cancel() }
     @objc private func panChanged() { sample() }
     private func sample() {
         guard let scroll else { return }
         let interacting=scroll.isTracking || scroll.isDragging || scroll.isDecelerating || scroll.panGestureRecognizer.state == .began || scroll.panGestureRecognizer.state == .changed
         let bottom=scroll.contentOffset.y+scroll.bounds.height-scroll.adjustedContentInset.bottom
         let near=scroll.contentSize.height-bottom <= 32
-        DispatchQueue.main.async { [weak self] in self?.changed?(near,interacting) }
+        // Offset, bounds and contentSize can all emit for the same frame.
+        // Publish only semantic transitions, never one @Published write/frame.
+        if near != lastNear || interacting != lastInteracting {
+            lastNear=near; lastInteracting=interacting
+            pendingSample?.cancel()
+            let work=DispatchWorkItem { [weak self] in self?.changed?(near,interacting) }
+            pendingSample=work
+            DispatchQueue.main.async(execute:work)
+        }
         settled?.cancel()
         if interacting {
             let work=DispatchWorkItem { [weak self] in self?.sample() }

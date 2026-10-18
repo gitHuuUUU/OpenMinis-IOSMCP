@@ -197,6 +197,7 @@ private struct PreviewContentSizeKey: PreferenceKey {
 
 struct ChatMessageRow: View {
     @ObservedObject var message: ChatMessage
+    var trackWindowPosition: Bool = true
     /// Only the actively streaming message needs vm access (for typing indicator & stop button).
     let isActiveMessage: Bool
     var commandStartTime: Date?
@@ -540,7 +541,7 @@ struct ChatMessageRow: View {
                     isActiveMessage: isActiveMessage,
                     commandStartTime: commandStartTime,
                     onStop: onStop,
-                    onTapBlank: message.usage != nil ? { windowPoint in
+                    onTapBlank: trackWindowPosition && message.usage != nil ? { windowPoint in
                         // Only respond to taps in the bottom 100pt of the message row
                         let bottomZoneTop = rowFrameInWindow.maxY - 100
                         let inZone = windowPoint.y >= bottomZoneTop
@@ -585,6 +586,12 @@ struct ChatMessageRow: View {
 
             if !message.isCompactedHistory {
                 AssistantMessageActions(message: message, isActiveMessage: isActiveMessage)
+                if !trackWindowPosition, message.usage != nil {
+                    Button { showUsage.toggle(); usageContentVisible=showUsage } label: {
+                        Label("用量详情", systemImage: "chart.bar")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }.buttonStyle(.plain)
+                }
             }
 
             // Token usage — two-phase reveal: space expands first, then content fades in
@@ -624,8 +631,8 @@ struct ChatMessageRow: View {
         // measures the same row bounds the background GeometryReader did,
         // and its initial fire covers the old onAppear seed.
         .minisOnGeometryChange(for: CGRect.self) { proxy in
-            proxy.frame(in: .global)
-        } action: { rowFrameInWindow = $0 }
+            trackWindowPosition ? proxy.frame(in: .global) : .zero
+        } action: { if trackWindowPosition && rowFrameInWindow != $0 { rowFrameInWindow = $0 } }
         .background {
             // Context menu on the background layer so it only fires on
             // blank areas — UITextView link taps in the foreground take priority.
