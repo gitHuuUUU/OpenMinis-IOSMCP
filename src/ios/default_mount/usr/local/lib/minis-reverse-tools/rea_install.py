@@ -30,7 +30,7 @@ REA_SKILL_SOURCE = Path("skills/reverse-engineer-anything")
 REA_SKILL_DEST = SKILLS_ROOT / "rea-reverse-engineer-anything"
 MCP_PROTOCOL_VERSION = "2025-06-18"
 LOG_PATH = Path(os.environ.get("MINIS_REA_LOG_PATH", "/var/log/minis-rea-install.log"))
-MCP_TIMEOUT_SECONDS = 30
+MCP_TIMEOUT_SECONDS = 120
 DOCTOR_TIMEOUT_SECONDS = 120
 NPM_TIMEOUT_SECONDS = 900
 MANAGED_WRAPPER_MARKER = "# minis-managed-rea-wrapper-v1"
@@ -422,7 +422,7 @@ def diagnose() -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("install", "doctor", "verify"), nargs="?", default="install")
+    parser.add_argument("action", choices=("install", "status", "doctor", "verify"), nargs="?", default="install")
     args = parser.parse_args()
     try:
         result = install() if args.action == "install" else diagnose()
