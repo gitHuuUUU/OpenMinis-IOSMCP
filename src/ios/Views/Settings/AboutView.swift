@@ -125,27 +125,6 @@ struct AboutView: View {
                         Image(systemName: "link.circle.fill")
                     }
                 }
-                Link(destination: URL(string: "https://github.com/OpenMinis/OpenMinis/issues")!) {
-                    Label {
-                        HStack {
-                            Text("Report an Issue")
-                                .foregroundStyle(Color(UIColor.label))
-                            Spacer()
-                            Image(systemName: "arrow.up.right.square")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    } icon: {
-                        Image(systemName: "exclamationmark.circle.fill")
-                    }
-                }
-            }
-            // MARK: - Community
-            Section {
-                Text("QQ交流群：1082489804")
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityLabel("QQ交流群：1082489804")
             }
         }
         .navigationTitle("About")

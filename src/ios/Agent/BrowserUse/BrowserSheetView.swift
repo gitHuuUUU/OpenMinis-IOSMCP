@@ -8,6 +8,11 @@ struct BrowserSheetView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var addressText: String = ""
     @State private var showHistory = false
+    @State private var showDownloads = false
+    @State private var shareItem: BrowserShareItem?
+    @State private var pendingDownloadURL: URL?
+    @State private var browserActionError = ""
+    @State private var showBrowserActionError = false
     @State private var isFullscreen = false
     @FocusState private var addressFocused: Bool
 
@@ -33,15 +38,17 @@ struct BrowserSheetView: View {
                             .submitLabel(.go)
                             .focused($addressFocused)
                             .disabled(isAgentBusy)
-                            .onSubmit {
-                                let trimmed = addressText.trimmingCharacters(in: .whitespacesAndNewlines)
-                                guard !trimmed.isEmpty else { return }
-                                pool.touchActivity()
-                                manager?.loadURL(trimmed)
-                            }
+                            .onSubmit { submitAddress() }
+
+                        Button { submitAddress() } label: {
+                            Image(systemName: "arrow.right.circle.fill")
+                                .font(.system(size: 22))
+                        }
+                        .accessibilityLabel("打开网址或搜索")
+                        .disabled(isAgentBusy || addressText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                         if manager?.isLoading ?? false {
-                            Button { manager?.webView.stopLoading() } label: {
+                            Button { manager?.stopLoading() } label: {
                                 Image(systemName: "xmark")
                                     .font(.system(size: 12, weight: .medium))
                                     .foregroundStyle(.secondary)
@@ -55,6 +62,11 @@ struct BrowserSheetView: View {
                     .allowsHitTesting(!isAgentBusy)
                 }
 
+                if let manager, manager.isLoading {
+                    ProgressView(value: manager.estimatedProgress)
+                        .progressViewStyle(.linear)
+                }
+
                 // Live webview + agent overlay
                 ZStack {
                     if let manager {
@@ -63,6 +75,9 @@ struct BrowserSheetView: View {
                             .id(pool.selectedTabId)
                         // [T-ios-webview-error-ui] Safari-style error overlay for
                         // agent/manual navigation failures (blank page otherwise).
+                        if (manager.currentURL.isEmpty || manager.currentURL == "about:blank") && !manager.isLoading && manager.loadError == nil {
+                            browserStartPage
+                        }
                         BrowserLoadErrorOverlay(manager: manager)
                     } else {
                         Color(UIColor.systemBackground)
@@ -169,7 +184,8 @@ struct BrowserSheetView: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     HStack(spacing: 12) {
                         Button {
-                            _ = pool.newTab()
+                            let result = pool.newTab()
+                            if !result.success { reportBrowserError(result.text) }
                         } label: {
                             Image(systemName: "plus")
                         }
@@ -181,6 +197,14 @@ struct BrowserSheetView: View {
                             Image(systemName: "clock.arrow.circlepath")
                         }
                         .disabled(isAgentBusy)
+                        Menu {
+                            Button { showDownloads = true } label: { Label("下载记录", systemImage: "arrow.down.circle") }
+                            Button {
+                                if let value = manager?.currentURL, let url = URL(string: value), !value.isEmpty { shareItem = BrowserShareItem(url: url) }
+                            } label: { Label("分享当前网页", systemImage: "square.and.arrow.up") }
+                            .disabled(manager?.currentURL.isEmpty ?? true)
+                            Button { addressFocused = true } label: { Label("编辑网址", systemImage: "pencil") }
+                        } label: { Image(systemName: "ellipsis.circle") }
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -199,10 +223,32 @@ struct BrowserSheetView: View {
                     if pool.tabs.isEmpty {
                         pool.ensureTabForUI()
                     }
+                    addressFocused = false
+                    pool.touchActivity()
                     manager?.loadURL(url)
                 }
             }
+            .sheet(isPresented: $showDownloads, onDismiss: {
+                if let url = pendingDownloadURL { pendingDownloadURL = nil; shareItem = BrowserShareItem(url: url) }
+            }) {
+                BrowserDownloadPanelSheet(sessionId: pool.downloadSessionId) { filename in
+                    let directory = AIChatViewModel.minisWorkspacePersistentDir(for: pool.downloadSessionId).resolvingSymlinksInPath()
+                    let file = directory.appendingPathComponent(filename).resolvingSymlinksInPath()
+                    guard file.deletingLastPathComponent() == directory, FileManager.default.fileExists(atPath: file.path) else {
+                        reportBrowserError("下载文件不存在，请重新下载。")
+                        return
+                    }
+                    pendingDownloadURL = file
+                    showDownloads = false
+                }
+            }
+            .sheet(item: $shareItem) { BrowserShareSheet(url: $0.url) }
+            .alert("浏览器", isPresented: $showBrowserActionError) {
+                Button("确定", role: .cancel) {}
+            } message: { Text(browserActionError) }
             .onAppear {
+                pool.isPresentedToUser = true
+                pool.touchActivity()
                 // Ensure at least one tab exists when opened manually
                 if pool.tabs.isEmpty {
                     pool.ensureTabForUI()
@@ -210,6 +256,7 @@ struct BrowserSheetView: View {
                 addressText = manager?.currentURL ?? ""
             }
             .onDisappear {
+                pool.isPresentedToUser = false
                 // The sheet stretched each tab's offscreen WKWebView to the
                 // sheet width (~620pt), reflowing the page's CSS viewport away
                 // from the configured size. Restore every tab's frame + force
@@ -230,6 +277,38 @@ struct BrowserSheetView: View {
                 addressText = manager?.currentURL ?? ""
             }
         }
+        .navigationViewStyle(.stack)
+    }
+
+    private func submitAddress() {
+        guard !isAgentBusy, !addressText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        if pool.tabs.isEmpty { pool.ensureTabForUI() }
+        guard let manager else { reportBrowserError("无法创建浏览器标签，可能已达资源上限。"); return }
+        addressFocused = false
+        pool.touchActivity()
+        manager.loadURL(addressText)
+    }
+
+    private func reportBrowserError(_ text: String) {
+        browserActionError = text
+        showBrowserActionError = true
+    }
+
+    private var browserStartPage: some View {
+        VStack(spacing: 18) {
+            Image(systemName: "globe").font(.system(size: 46)).foregroundStyle(.secondary)
+            Text("MinisRe 浏览器").font(.title2.bold())
+            Text("在上方输入网址或关键词，再点箭头打开。")
+                .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            HStack(spacing: 24) {
+                Button("搜索") { addressFocused = true }
+                Button("历史记录") { showHistory = true }
+                Button("下载记录") { showDownloads = true }
+            }
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(UIColor.systemBackground))
     }
 
     private var navigationTitle: String {
@@ -260,35 +339,27 @@ struct BrowserSheetView: View {
 
     private func tabButton(for tab: BrowserTabPool.Tab) -> some View {
         let isSelected = tab.id == pool.selectedTabId
-        return Button {
-            pool.selectedTabId = tab.id
-        } label: {
-            HStack(spacing: 4) {
+        return HStack(spacing: 4) {
+            Button {
+                addressFocused = false
+                pool.selectedTabId = tab.id
+                pool.touchActivity()
+            } label: {
                 Text(tabLabel(for: tab))
                     .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
-                    .lineLimit(1)
-                    .frame(maxWidth: 120)
-
-                if !isAgentBusy {
-                    Button {
-                        _ = pool.closeTab(id: tab.id)
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
+                    .lineLimit(1).frame(maxWidth: 120)
+            }.buttonStyle(.plain)
+            if !isAgentBusy {
+                Button { _ = pool.closeTab(id: tab.id); if pool.tabs.isEmpty { pool.ensureTabForUI() } } label: {
+                    Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.secondary).padding(5)
+                }.buttonStyle(.plain).accessibilityLabel("关闭标签")
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(isSelected ? Color.accentColor.opacity(0.15) : Color(UIColor.systemGray5))
-            .clipShape(Capsule())
-            .overlay(
-                Capsule().stroke(isSelected ? Color.accentColor.opacity(0.4) : Color.clear, lineWidth: 1)
-            )
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 10).padding(.vertical, 5)
+        .background(isSelected ? Color.accentColor.opacity(0.15) : Color(UIColor.systemGray5))
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(isSelected ? Color.accentColor.opacity(0.4) : Color.clear, lineWidth: 1))
     }
 
     private func tabLabel(for tab: BrowserTabPool.Tab) -> String {
@@ -296,7 +367,7 @@ struct BrowserSheetView: View {
         if !title.isEmpty { return String(title.prefix(20)) }
         let url = tab.manager.currentURL
         if !url.isEmpty { return String(url.prefix(20)) }
-        return "Tab \(tab.id)"
+        return "新标签 \(tab.id + 1)"
     }
 }
 
@@ -808,4 +879,16 @@ private struct BrowserLoadErrorOverlay: View {
             WebLoadErrorOverlay(error: err) { manager.retryFailedLoad() }
         }
     }
+}
+
+private struct BrowserShareItem: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+private struct BrowserShareSheet: UIViewControllerRepresentable {
+    let url: URL
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: [url], applicationActivities: nil)
+    }
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }

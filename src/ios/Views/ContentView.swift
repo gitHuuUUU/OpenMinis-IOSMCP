@@ -1344,7 +1344,7 @@ struct ContentView: View {
     /// Soul name shown as the sidebar title. Sourced from SOUL.md, falls
     /// back to "Minis". Refreshed whenever SoulStore posts .soulMdChanged.
     @State private var soulName: String = SoulStore.cachedMetadata.name.isEmpty
-        ? "Minis" : SoulStore.cachedMetadata.name
+        ? "MinisRe" : SoulStore.cachedMetadata.name
     /// Subtitle state shown under the "Minis" sidebar title. nil hides the
     /// row; otherwise it renders as small capsules per type or a single
     /// status string. Refreshed by a 5s timer.
@@ -3201,7 +3201,7 @@ struct ContentView: View {
         // and can't drop a .soulMdChanged notification arriving during reconstruction.
         .onReceive(NotificationCenter.default.publisher(for: .soulMdChanged)) { _ in
             let n = SoulStore.cachedMetadata.name
-            soulName = n.isEmpty ? "Minis" : n
+            soulName = n.isEmpty ? "MinisRe" : n
         }
     }
 
@@ -6264,7 +6264,7 @@ struct ContentView: View {
                 done += 1
                 if msg.isToolResultOnly { continue }
 
-                let role = msg.role == .user ? "User" : "Minis"
+                let role = msg.role == .user ? "User" : "MinisRe"
                 let time = timeFmt.string(from: msg.createdAt)
                 var parts: [String] = []
                 for part in msg.parts {
@@ -8141,7 +8141,6 @@ private struct SettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var deepLink = DeepLinkCoordinator.shared
     @State private var settingsDestination: SettingsDestination?
-    @State private var showFeedbackDialog = false
 
     var body: some View {
         // [IOS-MCP] NavigationView works on iOS 15 as well as 16+ (the
@@ -8428,7 +8427,7 @@ private struct SettingsSheet: View {
                         AboutView()
                     } label: {
                         Label {
-                            Text("About Minis")
+                            Text("About MinisRe")
                         } icon: {
                             Image(systemName: "info")
                                 .font(.system(size: 9))
@@ -8448,32 +8447,9 @@ private struct SettingsSheet: View {
                                 .background(.teal, in: Circle())
                         }
                     }
-                    Button {
-                        showFeedbackDialog = true
-                    } label: {
-                        Label {
-                            Text("Feedback")
-                        } icon: {
-                            Image(systemName: "bubble.left.and.bubble.right.fill")
-                                .font(.system(size: 9))
-                                .foregroundStyle(.white)
-                                .frame(width: 21, height: 21)
-                                .background(.indigo, in: Circle())
-                        }
-                    }
-                    .foregroundStyle(.primary)
-                    .confirmationDialog("Feedback", isPresented: $showFeedbackDialog, titleVisibility: .visible) {
-                        Button("Report a Bug (GitHub)") {
-                            if let url = Self.makeBugReportURL() { UIApplication.shared.open(url) }
-                        }
-                        Button("Feedback (Telegram)") {
-                            if let url = URL(string: "https://t.me/+2NzhOJuzRyI1YmM1") { UIApplication.shared.open(url) }
-                        }
-                        Button("Feedback (Email)") {
-                            if let url = Self.makeFeedbackEmailURL() { UIApplication.shared.open(url) }
-                        }
-                        Button("Cancel", role: .cancel) {}
-                    }
+                    Text("QQ交流群：1082489804")
+                        .textSelection(.enabled)
+                        .accessibilityLabel("QQ交流群：1082489804")
                 }
 
             }
@@ -8656,107 +8632,6 @@ private struct SettingsSheet: View {
         deepLink.pendingSettingsTarget = nil
     }
 
-    /// Compose the feedback mailto URL with a prefilled body that includes
-    /// app version, iOS version, and a machine identifier, plus a prompt
-    /// asking the user to attach a screenshot manually (mailto:// can't
-    /// auto-attach). Using URLComponents so the subject and body go through
-    /// proper URL encoding without hand-rolling addingPercentEncoding calls.
-    fileprivate static func makeFeedbackEmailURL() -> URL? {
-        let bundle = Bundle.main
-        let appVersion = bundle.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
-        let build = bundle.infoDictionary?["CFBundleVersion"] as? String ?? "?"
-        let iosVersion = UIDevice.current.systemVersion
-        let device = machineIdentifier()
-
-        let body = """
-        Please describe your feedback:
-
-
-        ---
-        App Version: \(appVersion) (\(build))
-        iOS Version: \(iosVersion)
-        Device: \(device)
-
-        Screenshot (optional): Please attach a screenshot if relevant.
-        """
-
-        var components = URLComponents()
-        components.scheme = "mailto"
-        components.path = "dev@openminis.app"
-        components.queryItems = [
-            URLQueryItem(name: "subject", value: "Minis Feedback"),
-            URLQueryItem(name: "body", value: body),
-        ]
-        return components.url
-    }
-
-    /// Build the GitHub Issue URL with a bilingual bug-report template
-    /// pre-filled with platform / OS / app / device info. SwiftUI `Link`
-    /// hands the URL to UIApplication.shared.open, which routes to Safari.
-    fileprivate static func makeBugReportURL() -> URL? {
-        let bundle = Bundle.main
-        let appVersion = bundle.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
-        let build = bundle.infoDictionary?["CFBundleVersion"] as? String ?? "?"
-        let iosVersion = UIDevice.current.systemVersion
-        let device = machineIdentifier()
-
-        let body = """
-        ## 📝 Problem Summary
-
-        <!-- Briefly describe the issue you encountered -->
-
-
-        ## 📱 Basic Information
-
-        | Field | Value |
-        |-------|-------|
-        | Platform | iOS |
-        | OS Version | iOS \(iosVersion) |
-        | Minis Version | \(appVersion) (build \(build)) |
-        | Device Model | \(device) |
-
-        ## 🔁 Steps to Reproduce
-
-        1.
-        2.
-        3.
-
-        ## ❌ Error Details
-
-        ```
-        paste error here
-        ```
-
-        ## ✅ Expected Behavior
-
-
-
-        ## 🗂️ Additional Information
-
-        """
-
-        var components = URLComponents(string: "https://github.com/OpenMinis/OpenMinis/issues/new")
-        components?.queryItems = [
-            URLQueryItem(name: "template", value: "bug_report.md"),
-            URLQueryItem(name: "title", value: "[Bug] "),
-            URLQueryItem(name: "body", value: body),
-        ]
-        return components?.url
-    }
-
-    /// Returns the hardware model identifier, e.g. "iPhone16,2".
-    /// `UIDevice.current.model` returns the generic "iPhone" / "iPad" and
-    /// isn't useful in a bug report, so we fall back to utsname.
-    private static func machineIdentifier() -> String {
-        var sys = utsname()
-        uname(&sys)
-        let id = withUnsafePointer(to: &sys.machine) {
-            $0.withMemoryRebound(to: CChar.self, capacity: Int(_SYS_NAMELEN)) {
-                String(cString: $0)
-            }
-        }
-        return id.isEmpty ? UIDevice.current.model : id
-    }
 }
 
 #Preview {

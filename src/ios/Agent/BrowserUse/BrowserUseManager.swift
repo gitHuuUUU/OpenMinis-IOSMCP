@@ -27,7 +27,13 @@ final class BrowserUseManager: NSObject, ObservableObject {
 
     // MARK: - Internal
 
-    private(set) var webView: WKWebView
+    @Published private(set) var webView: WKWebView {
+        didSet { bindWebViewState() }
+    }
+    @Published private(set) var estimatedProgress: Double = 0
+    private var webStateObservations: [NSKeyValueObservation] = []
+    private var manualLoadTimeout: DispatchWorkItem?
+
     private var navigationContinuation: CheckedContinuation<Void, Error>?
     @Published private(set) var currentProfile: UserAgentProfile = .mobileSafari
 
@@ -135,6 +141,7 @@ final class BrowserUseManager: NSObject, ObservableObject {
         webView.navigationDelegate = self
         webView.uiDelegate = self
         registerPrintHandler(on: webView)
+        bindWebViewState()
     }
 
     /// Init with a pre-built configuration (used for window.open popups that share the opener's session).
@@ -151,6 +158,7 @@ final class BrowserUseManager: NSObject, ObservableObject {
         webView.navigationDelegate = self
         webView.uiDelegate = self
         registerPrintHandler(on: webView)
+        bindWebViewState()
     }
 
     private static func resolveViewport(profile: UserAgentProfile,
@@ -1955,46 +1963,96 @@ final class BrowserUseManager: NSObject, ObservableObject {
 
     func goBack() {
         guard webView.canGoBack else { return }
+        manualLoadTimeout?.cancel()
+        loadError = nil
+        lastRequestedURL = webView.backForwardList.backItem?.url
         webView.goBack()
     }
 
     func goForward() {
         guard webView.canGoForward else { return }
+        manualLoadTimeout?.cancel()
+        loadError = nil
+        lastRequestedURL = webView.backForwardList.forwardItem?.url
         webView.goForward()
     }
 
     func reload() {
-        webView.reload()
+        loadError = nil
+        if let url = webView.url ?? lastRequestedURL { startManualLoad(url) }
     }
 
     func stopLoading() {
+        manualLoadTimeout?.cancel()
         webView.stopLoading()
         isLoading = false
+        if let cont = navigationContinuation {
+            navigationContinuation = nil
+            cont.resume(throwing: CancellationError())
+        }
     }
 
     func loadURL(_ urlString: String) {
-        var normalized = urlString
-        if !normalized.contains("://") {
-            normalized = "https://\(normalized)"
+        guard let url = BrowserAddressResolver.resolve(urlString) else {
+            loadError = WebLoadError(error: URLError(.badURL), failedURL: nil)
+            return
         }
-        guard let url = URL(string: normalized) else { return }
-        let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: Self.navigationTimeout)
-        lastRequestedURL = url          // [T-ios-webview-error-ui]
-        loadError = nil
-        webView.load(request)
-        isLoading = true
+        startManualLoad(url)
     }
 
-    /// [T-ios-webview-error-ui] Retry the last requested URL after a failure.
-    func retryFailedLoad() {
+    private func startManualLoad(_ url: URL) {
+        manualLoadTimeout?.cancel()
+        lastRequestedURL = url
+        currentURL = url.absoluteString
         loadError = nil
-        if let url = lastRequestedURL {
-            let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: Self.navigationTimeout)
-            webView.load(request)
-            isLoading = true
-        } else {
-            webView.reload()
+        isLoading = true
+        if ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
+            CookieBackupStore.shared.noteVisit(url: url)
         }
+        let request = URLRequest(url: url, cachePolicy: .useProtocolCachePolicy,
+                                 timeoutInterval: Self.navigationTimeout)
+        webView.load(request)
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.isLoading else { return }
+            self.webView.stopLoading()
+            self.isLoading = false
+            self.loadError = WebLoadError(error: URLError(.timedOut), failedURL: url)
+        }
+        manualLoadTimeout = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.navigationTimeout, execute: work)
+    }
+
+    /// Retry preserves the failing destination, including a redirect target.
+    func retryFailedLoad() {
+        if let url = lastRequestedURL { startManualLoad(url) }
+        else { reload() }
+    }
+
+    private func bindWebViewState() {
+        webStateObservations.removeAll()
+        let observed = webView
+        // Actual WebKit state, not a sheet that only observes its tab array.
+        // Coalesce through the main actor, and reject callbacks from old views.
+        let update: () -> Void = { [weak self, weak observed] in
+            Task { @MainActor [weak self, weak observed] in
+                guard let self, let observed, self.webView === observed else { return }
+                if let url = observed.url?.absoluteString, self.currentURL != url { self.currentURL = url }
+                let title = observed.title ?? ""
+                if self.pageTitle != title { self.pageTitle = title }
+                if self.canGoBack != observed.canGoBack { self.canGoBack = observed.canGoBack }
+                if self.canGoForward != observed.canGoForward { self.canGoForward = observed.canGoForward }
+                if self.estimatedProgress != observed.estimatedProgress { self.estimatedProgress = observed.estimatedProgress }
+                if self.isLoading != observed.isLoading { self.isLoading = observed.isLoading }
+            }
+        }
+        webStateObservations = [
+            observed.observe(\.url, options: [.new]) { _, _ in update() },
+            observed.observe(\.title, options: [.new]) { _, _ in update() },
+            observed.observe(\.canGoBack, options: [.new]) { _, _ in update() },
+            observed.observe(\.canGoForward, options: [.new]) { _, _ in update() },
+            observed.observe(\.isLoading, options: [.new]) { _, _ in update() },
+            observed.observe(\.estimatedProgress, options: [.new]) { _, _ in update() }
+        ]
     }
 
     // MARK: - JS Evaluation Helper
@@ -2329,8 +2387,18 @@ final class BrowserUseManager: NSObject, ObservableObject {
 // MARK: - WKNavigationDelegate
 
 extension BrowserUseManager: WKNavigationDelegate {
+    nonisolated func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        Task { @MainActor in
+            guard self.webView === webView else { return }
+            self.isLoading = true
+            self.loadError = nil
+            if let url = webView.url { self.lastRequestedURL = url }
+        }
+    }
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         Task { @MainActor in
+            guard self.webView === webView else { return }
+            self.manualLoadTimeout?.cancel()
             self.isLoading = false
             self.loadError = nil  // [T-ios-webview-error-ui]
             self.currentURL = webView.url?.absoluteString ?? self.currentURL
@@ -2350,9 +2418,18 @@ extension BrowserUseManager: WKNavigationDelegate {
 
     nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         Task { @MainActor in
+            guard self.webView === webView else { return }
+            if (error as NSError).code == NSURLErrorCancelled {
+                if !webView.isLoading { self.isLoading = false }
+                return
+            }
+            self.manualLoadTimeout?.cancel()
             self.isLoading = false
             // [T-ios-webview-error-ui] Show a Safari-style overlay in the
             // browser sheet instead of a blank page. Still thrown to the agent.
+            if let failedURL = (error as NSError).userInfo[NSURLErrorFailingURLErrorKey] as? URL {
+                self.lastRequestedURL = failedURL
+            }
             self.loadError = WebLoadError(error: error, failedURL: self.lastRequestedURL)
             logger.error("Navigation failed: \(error.localizedDescription)")
 
@@ -2365,8 +2442,17 @@ extension BrowserUseManager: WKNavigationDelegate {
 
     nonisolated func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         Task { @MainActor in
+            guard self.webView === webView else { return }
+            if (error as NSError).code == NSURLErrorCancelled {
+                if !webView.isLoading { self.isLoading = false }
+                return
+            }
+            self.manualLoadTimeout?.cancel()
             self.isLoading = false
             // [T-ios-webview-error-ui] see didFail above.
+            if let failedURL = (error as NSError).userInfo[NSURLErrorFailingURLErrorKey] as? URL {
+                self.lastRequestedURL = failedURL
+            }
             self.loadError = WebLoadError(error: error, failedURL: self.lastRequestedURL)
             logger.error("Provisional navigation failed: \(error.localizedDescription)")
 
@@ -2527,7 +2613,8 @@ extension BrowserUseManager: WKDownloadDelegate {
 
             // Unique filename: name.ext, name-1.ext, name-2.ext, …
             // WKDownload requires that the destination file does not exist.
-            var name = suggestedFilename.isEmpty ? "download" : suggestedFilename
+            var name = (suggestedFilename as NSString).lastPathComponent
+            if name.isEmpty || name == "." || name == ".." { name = "download" }
             let base = (name as NSString).deletingPathExtension
             let ext = (name as NSString).pathExtension
             var dest = dir.appendingPathComponent(name)
@@ -3051,3 +3138,36 @@ extension String {
         return "\(prefix(head))…\(suffix(tail))"
     }
 }
+
+// MARK: - Manual browser address resolution (Foundation regression seam)
+enum BrowserAddressResolver {
+    static func resolve(_ input: String) -> URL? {
+        let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+        if text == "about:blank" { return URL(string: text) }
+        if text.contains("://") || text.lowercased().hasPrefix("javascript:") || text.lowercased().hasPrefix("data:") {
+            guard let components = URLComponents(string: text),
+                  let scheme = components.scheme?.lowercased(),
+                  ["http", "https", "minis"].contains(scheme),
+                  let host = components.host, !host.isEmpty,
+                  !host.contains(where: { $0.isWhitespace }),
+                  components.port.map({ (1...65535).contains($0) }) ?? true
+            else { return nil }
+            return components.url
+        }
+        let hostPart = String(text.split(separator: "/", maxSplits: 1).first ?? "")
+        let local = hostPart == "localhost" || hostPart.hasPrefix("localhost:") || hostPart.hasPrefix("[") ||
+            hostPart.range(of: #"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$"#, options: .regularExpression) != nil
+        let hasWhitespace = text.contains(where: { $0.isWhitespace })
+        let domain = hostPart.contains(".") && !hostPart.hasPrefix(".") && !hostPart.contains("@")
+        if !hasWhitespace && (local || domain) {
+            return resolve((local ? "http://" : "https://") + text)
+        }
+        // Unsupported explicit schemes must not execute or become a fake URL.
+        if hostPart.contains(":") { return nil }
+        var query = URLComponents(string: "https://www.bing.com/search")!
+        query.queryItems = [URLQueryItem(name: "q", value: text)]
+        return query.url
+    }
+}
+// MARK: - End manual browser address resolution

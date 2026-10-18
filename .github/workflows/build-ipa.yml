@@ -69,6 +69,9 @@ jobs:
       - name: Production WDA HTTP fixture regression
         run: python3 tools/test_wda_bridge.py
 
+      - name: Browser interactions and production address resolver
+        run: python3 tools/test_browser_interaction.py --require-swift
+
       - name: Swift syntax preflight
         run: find src/ios \( -path '*/MinisTests' -o -path '*/MinisUITests' \) -prune -o -name '*.swift' -print0 | xargs -0 xcrun swiftc -frontend -parse
 

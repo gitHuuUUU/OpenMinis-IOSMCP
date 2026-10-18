@@ -434,7 +434,7 @@ enum ScheduledJobRunner {
         JobInsuranceNotification.schedule(
             jobId: job.id, at: date.addingTimeInterval(5),
             title: AppLocalized("Minis scheduled task"),
-            body: String(format: AppLocalized("\"%@\" is due. Open Minis to see whether it ran."), name),
+            body: String(format: AppLocalized("\"%@\" is due. Open MinisRe to see whether it ran."), name),
             userInfo: job.target.parentSessionId.map { ["sessionId": $0] }
                 ?? job.target.sessionIdForNavigation.map { ["sessionId": $0] } ?? [:])
     }

@@ -46,7 +46,7 @@ struct SoulSettingsView: View {
 
             Section(AppLocalized("Identity")) {
                 MinisLabeledContent(AppLocalized("Name")) {
-                    TextField("Minis", text: $name)
+                    TextField("MinisRe", text: $name)
                         .multilineTextAlignment(.trailing)
                         .textInputAutocapitalization(.words)
                         .submitLabel(.done)
@@ -226,7 +226,7 @@ struct SoulSettingsView: View {
                 Text(AppLocalized("Any image works. It's cropped to a square and shown with rounded corners."))
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(name.isEmpty ? "Minis" : name)
+                Text(name.isEmpty ? "MinisRe" : name)
                     .font(.title3.weight(.semibold))
                 if !style.trimmingCharacters(in: .whitespaces).isEmpty {
                     Text(style)

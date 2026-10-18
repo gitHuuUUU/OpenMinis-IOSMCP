@@ -81,6 +81,7 @@ final class BrowserTabPoolRegistry {
         for (id, weak) in pools where id != requesterId {
             guard let pool = weak.pool else { continue }
             for tab in pool.tabs {
+                if pool.isPresentedToUser && tab.id == pool.selectedTabId { continue }
                 let idle = now.timeIntervalSince(tab.lastActivityDate)
                 if !tab.inUse {
                     if idleVictim == nil || idle > idleVictim!.idle {
@@ -382,6 +383,10 @@ final class BrowserTabPool: ObservableObject {
     /// Timer that periodically evicts idle tabs.
     private var idleTimer: Timer?
     private var loadingObservation: AnyCancellable?
+    private var activeStateObservation: AnyCancellable?
+    var isPresentedToUser = false
+    var downloadSessionId: String { sessionId ?? "manual-browser" }
+
 
     /// Whether the active tab's webview is currently loading a page.
     @Published var isBrowserLoading: Bool = false
@@ -449,12 +454,18 @@ final class BrowserTabPool: ObservableObject {
     /// Re-subscribe to the active manager's `isLoading` so `isBrowserLoading` stays in sync.
     private func rebindLoadingObservation() {
         loadingObservation?.cancel()
+        activeStateObservation?.cancel()
         guard let mgr = activeManager else {
             isBrowserLoading = false
             return
         }
         isBrowserLoading = mgr.isLoading
+        activeStateObservation = mgr.objectWillChange
+            .throttle(for: .milliseconds(100), scheduler: DispatchQueue.main, latest: true)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
         loadingObservation = mgr.$isLoading
+            .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] loading in
                 self?.isBrowserLoading = loading
@@ -1404,6 +1415,7 @@ final class BrowserTabPool: ObservableObject {
         var evicted = 0
         tabs.removeAll { tab in
             guard !tab.inUse else { return false }
+            if isPresentedToUser && tab.id == selectedTabId { return false }
             let idle = now.timeIntervalSince(tab.lastActivityDate)
             if idle >= Self.idleTimeout {
                 // Save URL for restoration
@@ -1478,6 +1490,7 @@ final class BrowserTabPool: ObservableObject {
         var evicted = 0
         tabs.removeAll { tab in
             guard !tab.inUse else { return false }
+            if isPresentedToUser && tab.id == selectedTabId { return false }
             let url = tab.manager.currentURL
             if !url.isEmpty {
                 savedURLs[tab.id] = url
@@ -1516,7 +1529,7 @@ final class BrowserTabPool: ObservableObject {
         }
         // Downloads land in this session's /var/minis/workspace/ so the agent
         // can read and operate on them in follow-up turns.
-        manager.sessionIdProvider = { [weak self] in self?.sessionId }
+        manager.sessionIdProvider = { [weak self] in self?.downloadSessionId }
         // [BrowserToolDiag] Let the manager name its own tab when its WebContent
         // process dies. Resolved by identity at call time rather than captured:
         // wireManager runs before the Tab is appended, and ids don't move once

@@ -2693,9 +2693,9 @@ struct ToolLiveSheet: View {
         case .readImageTool: return "Minis is reading Image"
         case .memoryTool: return "Minis is using Memory"
         case .delegateTool: return "Minis is using an Agent"
-        case .info: return "Minis"
-        case .text: return "Minis"
-        case .thinking: return "Minis"
+        case .info: return "MinisRe"
+        case .text: return "MinisRe"
+        case .thinking: return "MinisRe"
         }
     }
 
