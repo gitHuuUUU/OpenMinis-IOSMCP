@@ -29,6 +29,13 @@ struct ExpertProfile: Codable, Equatable {
         workspaceID == nil || workspaceID == sessionID
     }
 
+    /// Keep existing bindings (including temporarily unavailable skills), deduplicate,
+    /// and enable injection so a previously disabled toggle cannot make binding inert.
+    mutating func bindAllSkills(_ ids: [String]) {
+        boundSkillIDs = Array(Set((boundSkillIDs + ids).filter { !$0.isEmpty })).sorted()
+        injectSkills = true
+    }
+
     mutating func normalize() {
         displayName = String(displayName.prefix(80))
         if !Self.categories.contains(category) { category = "开发" }

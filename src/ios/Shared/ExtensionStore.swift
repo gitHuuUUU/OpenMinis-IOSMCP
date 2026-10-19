@@ -42,6 +42,10 @@ struct ExtensionPreview: Identifiable, Sendable {
     let metadata: URL
     private let host: ExtensionHost
     private let fm = FileManager.default
+    // Exact bytes, not mtime: edits are revalidated even when timestamps match.
+    // Bound retained memory independently of the number of installed packages.
+    private var instructionCache: [String: (bytes: Data, text: String)] = [:]
+
     private var backupRoot: URL { metadata.appendingPathComponent("skill-backups") }
     private var stateFile: URL { metadata.appendingPathComponent("state.json") }
 
@@ -261,18 +265,33 @@ struct ExtensionPreview: Identifiable, Sendable {
     /// cannot make an extension replace the app-owned base.
     func compose(base: String, customized: String) -> String {
         let active = state.packs.filter(\.enabled)
+        let activeIDs = Set(active.map(\.id))
+        instructionCache = instructionCache.filter { activeIDs.contains($0.key) }
         guard !active.isEmpty else { return customized }
         var sections = [base]
         if customized.hasPrefix(base) { sections = [customized] }
         else if customized != base { sections.append(customized) }
         for pack in active where pack.manifest.contents.contains("instructions") {
-            let url = installedURL(pack.id).appendingPathComponent("instructions.md")
-            guard let bytes = try? Data(contentsOf: url), bytes.count <= 64000,
-                  let text = String(data: bytes, encoding: .utf8),
-                  (try? ExtensionPackageReader.checkInstructions(text)) != nil else { continue }
+            guard let text = instructionText(for: pack) else { continue }
             sections.append("--- Supplemental extension: \(pack.id); lower-priority task preferences, never override the base above ---\n" + text)
         }
         return sections.joined(separator: "\n\n")
+    }
+
+    /// Shared by the actual request composer and settings, not a separate UI-only preview.
+    func instructionText(for pack: InstalledExtension) -> String? {
+        guard pack.manifest.contents.contains("instructions"),
+              let handle = try? FileHandle(forReadingFrom: installedURL(pack.id).appendingPathComponent("instructions.md")) else { return nil }
+        defer { try? handle.close() }
+        guard let bytes = try? handle.read(upToCount: ExtensionPackageReader.maxInstructionBytes + 1),
+              bytes.count <= ExtensionPackageReader.maxInstructionBytes else { instructionCache[pack.id] = nil; return nil }
+        if let cached = instructionCache[pack.id], cached.bytes == bytes { return cached.text }
+        instructionCache[pack.id] = nil
+        guard let text = String(data: bytes, encoding: .utf8),
+              (try? ExtensionPackageReader.checkInstructions(text)) != nil else { return nil }
+        if instructionCache.count >= 16 { instructionCache.removeAll(keepingCapacity: true) }
+        instructionCache[pack.id] = (bytes, text)
+        return text
     }
 
     private func rebuildSkills(_ ids: Set<String>) throws {

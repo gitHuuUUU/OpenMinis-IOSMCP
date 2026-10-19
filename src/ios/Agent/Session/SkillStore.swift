@@ -1098,6 +1098,22 @@ Do not create extraneous files: README.md, INSTALLATION_GUIDE.md, CHANGELOG.md, 
         return try? String(contentsOf: skillFile, encoding: .utf8)
     }
 
+    /// Bounded context-only read. Full file/tool reads remain unchanged.
+    /// Four bytes per character plus lookahead preserve complete UTF-8 prefixes.
+    func readSkillExcerpt(_ skillId: String, maxCharacters: Int) -> (text: String, truncated: Bool)? {
+        guard maxCharacters > 0 else { return nil }
+        let file = skillsDir.appendingPathComponent(skillId).appendingPathComponent("SKILL.md")
+        guard let handle = try? FileHandle(forReadingFrom: file) else { return nil }
+        defer { try? handle.close() }
+        let count = min(maxCharacters, 8000)
+        guard let data = try? handle.read(upToCount: count * 4 + 4) else { return nil }
+        // Decoding a bounded buffer can cut its last Unicode scalar; the chosen
+        // prefix ends before that boundary whenever lookahead was exhausted.
+        let decoded = String(decoding: data, as: UTF8.self)
+        let text = String(decoded.prefix(count))
+        return (text, decoded.count > count || data.count == count * 4 + 4)
+    }
+
     /// Collect relative file paths from a directory, excluding "SKILL.md".
     /// Enumerate regular files under `dir` and return their paths relative to `dir`.
     /// "SKILL.md" is excluded (it is always added separately by the caller).

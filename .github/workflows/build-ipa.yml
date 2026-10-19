@@ -62,6 +62,7 @@ jobs:
         run: |
           python3 tools/test_photo_picker_static.py
           python3 tools/test_interaction_static.py
+          python3 tools/test_skill_excerpt.py --require-swift
 
       - name: Execute production assistant text edit regression
         run: |

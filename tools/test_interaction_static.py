@@ -8,6 +8,49 @@ ROOT=Path(__file__).resolve().parents[1]
 def read(path): return (ROOT/path).read_text(encoding='utf-8-sig')
 
 class InteractionContracts(unittest.TestCase):
+    def test_busy_attachment_presentation_is_chat_root_owned(self):
+        s=read('src/ios/Views/Chat/AIChatView.swift')
+        button=s.split('private var attachmentMenuButton: some View {',1)[1].split('/// Bottom toolbar',1)[0]
+        self.assertNotIn('.sheet(',button)
+        self.assertNotIn('.disabled(',button)
+        self.assertIn('showAttachmentMenu = true',button)
+        self.assertIn('|| showAttachmentMenu || showDeviceApps || showWorkbenchArtifacts',s)
+        self.assertIn('vm.errorMessage = "文件导入失败："',s)
+    def test_queue_default_direct_and_attachment_only(self):
+        s=read('src/ios/Views/Chat/AIChatView.swift')
+        self.assertIn('performEnqueue(direct: Bool = false)',s)
+        self.assertIn('vm.enqueuePrompt(deferUntilIdle: !direct)',s)
+        self.assertIn('onDirect: { performEnqueue(direct: true) }',s)
+        gate=s.split('private var canEnqueue: Bool {',1)[1].split('/// Whether',1)[0]
+        self.assertIn('!vm.hasLoadingAttachments',gate)
+        self.assertIn('vm.attachments.contains { $0.loadState == .ready }',gate)
+        self.assertIn('Text("☞")',s)
+    def test_direct_drain_preserves_waiting_queue(self):
+        s=read('src/ios/Agent/Chat/AIChatViewModel.swift')
+        drain=s.split('private func injectQueuedPromptsAsNewTurn(',1)[1].split('// Mark corresponding',1)[0]
+        self.assertIn('urgentOnly ? promptQueue.filter { !$0.deferUntilIdle } : promptQueue',drain)
+        self.assertIn('promptQueue.removeAll { consumed.contains($0.id) }',drain)
+        self.assertNotIn('promptQueue.removeAll()',drain)
+        self.assertIn('urgentOnly: true',s)
+        misc=read('src/ios/Agent/Chat/AIChatViewModel+Misc.swift')
+        self.assertIn('if usingComposer && hasLoadingAttachments { return }',misc)
+        self.assertIn('if usingComposer { attachments = [] }',misc)
+
+    def test_composer_library_icon_and_draft_only(self):
+        s=read('src/ios/Views/Chat/AIChatView.swift')
+        button=s.split('private var composerLibraryButton: some View {',1)[1].split('/// `/` button',1)[0]
+        self.assertIn('Image(systemName: "person.2")',button)
+        self.assertNotIn('Text(',button)
+        self.assertIn('showComposerLibrary = true',button)
+        sheet=s.split('.sheet(isPresented: $showComposerLibrary)',1)[1].split('.sheet(isPresented: $showTokenUsage)',1)[0]
+        self.assertIn('vm.inputText +=',sheet)
+        self.assertNotIn('performSend',sheet)
+        self.assertIn('|| showComposerLibrary',s)
+    def test_composer_library_scope_and_existing_stores(self):
+        s=read('src/ios/Views/Settings/ExpertLibraryView.swift').split('struct ComposerLibraryPicker:',1)[1]
+        for part in ['PromptLibraryStore.shared','SubAgentStore.shared','isAvailable(in: sessionId)','insert(item.body)','agent=\\(name)','ExpertLibraryView(sessionId: sessionId)']:
+            self.assertIn(part,s)
+
     def test_live_scroll_observation_not_lazy_sentinel(self):
         s=read('src/ios/Views/Chat/AIChatView.swift')
         self.assertNotIn('LegacyTranscriptBottomKey',s)

@@ -23,7 +23,7 @@ struct ExtensionManagementView: View {
                         catch { errorText = error.localizedDescription; showError = true }
                     }
                 }.disabled(store.busy || remoteURL.isEmpty)
-                Text("MD（最多 64000 字节）自动生成包信息，预览确认后作为追加指令；不是自动执行技能。ZIP 需含 manifest.json，含脚本的普通资料包不能直接导入。ZIP 与解压内容均限 50 MB、1000 项，仍不允许可执行文件。")
+                Text("MD（最多 64000 字节）自动生成包信息，预览确认后作为追加指令；不是自动执行技能。ZIP 需含 manifest.json，含脚本的普通资料包不能直接导入。ZIP 与解压内容均限 50 MB、\(ExtensionPackageReader.maxFiles) 项（含目录），仍不允许可执行文件。")
                     .font(.footnote).foregroundColor(.secondary)
             }
             Section(header: Text("已安装 · 拖动调整加载顺序（后者优先）")) {
@@ -138,6 +138,21 @@ private struct ExtensionDetailView: View {
                     Text(pack.manifest.description)
                     Toggle("启用扩展", isOn: Binding(get: { self.pack?.enabled ?? false }, set: { value in perform { try store.setEnabled(name, value) } }))
                     Text("禁用后不再追加指令，恢复被替换技能，并禁用本包已确认的 provider。正在进行的请求不会被强制中断。")
+                        .font(.footnote).foregroundColor(.secondary)
+                }
+                Section(header: Text("对话加载状态")) {
+                    Text(pack.enabled ? "已启用：下次发送时加载，当前进行中的请求不变。" : "已禁用：不会加入新请求。")
+                    if pack.manifest.contents.contains("instructions") {
+                        if let text = store.instructionText(for: pack) {
+                            Text("追加指令：\(text.count) 字符" + (pack.enabled ? " · 已接入对话上下文" : " · 暂不加载"))
+                            DisclosureGroup("查看追加内容") { Text(text).font(.caption).textSelection(.enabled) }
+                        } else { Text("指令文件无法读取或校验未通过，当前不会加载；请重新导入。").foregroundColor(.red) }
+                    }
+                    if !pack.skills.isEmpty {
+                        Text("技能：\(pack.skills.count) 项；启用时注册到技能库，由 AI 按任务读取，也可在专家页绑定。")
+                        ForEach(pack.skills, id: \.self) { id in Text(id).font(.caption) }
+                    }
+                    Text("导入是安装指令与资源，不会凭空安装外部工具。Provider 仍需逐条确认并选择模型使用。")
                         .font(.footnote).foregroundColor(.secondary)
                 }
                 Section(header: Text("Provider 二次确认")) {

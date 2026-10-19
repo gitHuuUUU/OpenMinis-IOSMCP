@@ -71,7 +71,11 @@ def fixtures(out):
     write('undeclared', {**base, 'assets/icon.txt': 'x'})
     write('insecure-provider', {**base, 'providers.json': json.dumps([dict(label='No', providerType='openAI', endpoint='http://example.com', api_key='x')])})
     write('credential-endpoint', {**base, 'providers.json': json.dumps([dict(label='No', providerType='openAI', endpoint='https://user:secret@example.com', api_key='x')])})
-    write('too-many', {**base, **{f'assets/{i}.txt': '' for i in range(1001)}})
+    # Count all ZIP entries, including explicit directory entries.
+    count_base = {**base, 'manifest.json': json.dumps({**manifest, 'contents': [*manifest['contents'], 'assets']}), 'assets/': ''}
+    write('file-count-1001', {**count_base, **{f'assets/{i}.txt': '' for i in range(1001-len(count_base))}}, True)
+    write('file-count-5000', {**count_base, **{f'assets/{i}.txt': '' for i in range(5000-len(count_base))}}, True)
+    write('too-many', {**count_base, **{f'assets/{i}.txt': '' for i in range(5001-len(count_base))}})
     path = write('crc-corrupt', base)
     data = bytearray(path.read_bytes()); p = data.index(b'PK\x01\x02'); data[p+16] ^= 1; path.write_bytes(data)
     path = write('expanded-too-large', base)

@@ -131,7 +131,27 @@ private struct ExpertEditorView: View {
                     NavigationLink("工具白名单（\(profile.allowedTools.count)，空=继承）") { StringSetPicker(title:"工具白名单",choices:toolNames,selected:$profile.allowedTools) }
                     NavigationLink("工具黑名单（\(profile.deniedTools.count)，优先）") { StringSetPicker(title:"工具黑名单",choices:toolNames,selected:$profile.deniedTools) }
                     NavigationLink("绑定技能（\(profile.boundSkillIDs.count)）") {
-                        List(skills.skills) { skill in Toggle(skill.name,isOn:Binding(get:{profile.boundSkillIDs.contains(skill.id)},set:{on in if on {profile.boundSkillIDs.append(skill.id)} else {profile.boundSkillIDs.removeAll {$0==skill.id}}})) }.navigationTitle("绑定技能")
+                        List {
+                            Section {
+                                Button("一键绑定全部（\(skills.skills.count)）") {
+                                    profile.bindAllSkills(skills.skills.map(\.id))
+                                }.disabled(skills.skills.isEmpty)
+                                Button("清空绑定", role: .destructive) { profile.boundSkillIDs = [] }
+                                    .disabled(profile.boundSkillIDs.isEmpty)
+                                Toggle("在专家对话中加载绑定技能", isOn: $profile.injectSkills)
+                                Text("已选 \(profile.boundSkillIDs.count) 项。返回后点“保存”生效；仅对调用此专家的子会话生效，不会全量塞入每次主对话。正文按预算加载，其余通过 skills 工具按需读取。")
+                                    .font(.footnote).foregroundColor(.secondary)
+                            }
+                            Section("技能") {
+                                ForEach(skills.skills) { skill in
+                                    Toggle(skill.name, isOn: Binding(get: { profile.boundSkillIDs.contains(skill.id) }, set: { on in
+                                        if on {
+                                            if !profile.boundSkillIDs.contains(skill.id) { profile.boundSkillIDs.append(skill.id) }
+                                        } else { profile.boundSkillIDs.removeAll { $0 == skill.id } }
+                                    }))
+                                }
+                            }
+                        }.navigationTitle("绑定技能")
                     }
                 }
                 Section("上下文注入") {
@@ -272,4 +292,77 @@ struct ContextTokenStatisticsView: View {
         }.navigationTitle("Token 统计").onAppear {snapshot=viewModel.contextEfficiencyStats}
     }
     private func row(_ label:String,_ value:Int)->some View { HStack {Text(label);Spacer();Text(value.formatted()).monospacedDigit()} }
+}
+
+
+/// Lightweight draft picker. Expert requests use the existing named subagent tool,
+/// rather than replacing the main conversation's identity or provider settings.
+struct ComposerLibraryPicker: View {
+    let sessionId: String?
+    let insert: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var prompts = PromptLibraryStore.shared
+    @ObservedObject private var experts = SubAgentStore.shared
+    @ObservedObject private var profiles = ExpertProfileStore.shared
+    @State private var tab = 0
+    @State private var query = ""
+
+    private var availableExperts: [SubAgentDefinition] {
+        experts.subAgents.filter { definition in
+            profiles.profile(for: definition.id).isAvailable(in: sessionId)
+                && (query.isEmpty || (definition.displayName + definition.name + definition.description).localizedCaseInsensitiveContains(query))
+        }
+    }
+    private var availablePrompts: [PromptFragment] {
+        prompts.state.fragments.filter { query.isEmpty || ($0.title + $0.body).localizedCaseInsensitiveContains(query) }
+    }
+    var body: some View {
+        NavigationView {
+            List {
+                Picker("选择类型", selection: $tab) {
+                    Text("提示词").tag(0)
+                    Text("专家").tag(1)
+                }.pickerStyle(.segmented)
+                if tab == 0 {
+                    Section {
+                        Text("点选插入草稿，不会自动发送或改变全局开关；已启用的片段也会随系统上下文加载。")
+                            .font(.footnote).foregroundColor(.secondary)
+                        ForEach(availablePrompts) { item in
+                            Button { insert(item.body) } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(item.title)
+                                    Text(item.body).font(.caption).foregroundColor(.secondary).lineLimit(2)
+                                }
+                            }.disabled(item.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+                        if availablePrompts.isEmpty { Text("没有匹配的提示词").foregroundColor(.secondary) }
+                    }
+                    NavigationLink("管理提示词") { PromptLibraryView() }
+                } else {
+                    Section {
+                        Text("点选在草稿中加入调用指定专家的请求；补充任务后点发送。这里不是立即启动或切换主对话模型。")
+                            .font(.footnote).foregroundColor(.secondary)
+                        ForEach(availableExperts) { expert in
+                            Button {
+                                let name = String(data: (try? JSONEncoder().encode(expert.name)) ?? Data(), encoding: .utf8) ?? "\"general\""
+                                insert("请使用 subagent_task 调用专家（agent=\(name)）处理以下任务：")
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    let profile = profiles.profile(for: expert.id)
+                                    Text(profile.displayName.isEmpty ? expert.displayName : profile.displayName)
+                                    Text(expert.description).font(.caption).foregroundColor(.secondary).lineLimit(2)
+                                }
+                            }
+                        }
+                        if availableExperts.isEmpty { Text("当前工作区没有匹配的专家").foregroundColor(.secondary) }
+                    }
+                    NavigationLink("管理专家") { ExpertLibraryView(sessionId: sessionId) }
+                }
+            }
+            .searchable(text: $query, prompt: "搜索")
+            .navigationTitle("选择")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } }
+        }.navigationViewStyle(.stack)
+    }
 }

@@ -397,6 +397,7 @@ struct AIChatView: View {
     @State private var showSessionMCPs = false
     @State private var showSessionMemory = false
     @State private var showEnhancedCacheAlert = false
+    @State private var showComposerLibrary = false
     @State private var showTokenUsage = false
     // [T-ios-json-open-provider-import-prompt] A shared/opened JSON file that
     // looks like a Provider export (providerType + credentialType + models)
@@ -487,7 +488,8 @@ struct AIChatView: View {
     /// True when any sheet or fullScreenCover is presented (suppress auto-focus to avoid keyboard bugs).
     private var hasOverlayPresented: Bool {
         showFileBrowser || showBrowserSheet || showTerminal || showCamera
-            || showPhotoPicker || showDocumentPicker || showModelPicker
+            || showPhotoPicker || showDocumentPicker || showModelPicker || showComposerLibrary
+            || showAttachmentMenu || showDeviceApps || showWorkbenchArtifacts
     }
 
     /// Tracks whether this ChatView is the currently visible screen.
@@ -1069,6 +1071,37 @@ struct AIChatView: View {
                 }
             }
         }
+            .sheet(isPresented:$showAttachmentMenu,onDismiss: {
+                guard let choice=pendingAttachmentChoice else { return }
+                pendingAttachmentChoice=nil
+                // Present only after SwiftUI confirms the first sheet dismissed.
+                switch choice {
+                case "apps": showDeviceApps=true
+                case "photos": showPhotoPicker=true
+                case "camera": showCamera=true
+                case "artifacts": showWorkbenchArtifacts=true
+                default: showDocumentPicker=true
+                }
+            }) {
+                AttachmentWorkbenchSheet { choice in
+                    pendingAttachmentChoice=choice
+                    showAttachmentMenu=false
+                }
+            }
+            .sheet(isPresented: $showDeviceApps) {
+                DeviceAppPicker(session: vm.sessionId ?? vm.draftId ?? "vm-\(vm.vmInstanceId)") { url in vm.addFileAttachment(from: url) }
+            }
+            .sheet(isPresented: $showWorkbenchArtifacts) {
+                WorkbenchArtifactsView { url in vm.addFileAttachment(from: url) }
+            }
+        .sheet(isPresented: $showComposerLibrary) {
+            ComposerLibraryPicker(sessionId: vm.sessionId) { text in
+                // Selection only edits the draft; never sends a task without Send.
+                vm.inputText += (vm.inputText.isEmpty ? "" : "\n\n") + text
+                vm.inputCaret = (vm.inputText as NSString).length
+                showComposerLibrary = false
+            }
+        }
         .sheet(isPresented: $showTokenUsage) {
             TokenUsageSheet(vm: cached.vm)
         }
@@ -1261,6 +1294,7 @@ struct AIChatView: View {
                 }
             case .failure(let error):
                 minisLogger.error("File import failed: \(error.localizedDescription)")
+                vm.errorMessage = "文件导入失败：" + error.localizedDescription
             }
         }
         // [T-minisurl-wrong-active-session] A draft opened from the UI has
@@ -3356,30 +3390,13 @@ struct AIChatView: View {
             .clipShape(Circle())
             .overlay(Circle().stroke(ChatColors.inputIconBorder, lineWidth: 0.5))
 
-        Button { showAttachmentMenu = true } label: { icon }
-            .sheet(isPresented:$showAttachmentMenu,onDismiss: {
-                guard let choice=pendingAttachmentChoice else { return }
-                pendingAttachmentChoice=nil
-                // Present only after SwiftUI confirms the first sheet dismissed.
-                switch choice {
-                case "apps": showDeviceApps=true
-                case "photos": showPhotoPicker=true
-                case "camera": showCamera=true
-                case "artifacts": showWorkbenchArtifacts=true
-                default: showDocumentPicker=true
-                }
-            }) {
-                AttachmentWorkbenchSheet { choice in
-                    pendingAttachmentChoice=choice
-                    showAttachmentMenu=false
-                }
-            }
-            .sheet(isPresented: $showDeviceApps) {
-                DeviceAppPicker(session: vm.sessionId ?? vm.draftId ?? "vm-\(vm.vmInstanceId)") { url in vm.addFileAttachment(from: url) }
-            }
-            .sheet(isPresented: $showWorkbenchArtifacts) {
-                WorkbenchArtifactsView { url in vm.addFileAttachment(from: url) }
-            }
+        Button {
+            inputFocused = false
+            vm.dismissSlashMenu()
+            vm.showMentionMenu = false
+            showAttachmentMenu = true
+        } label: { icon }
+
     }
 
     /// Bottom toolbar under the text field (+ / edit-exit / mic / send).
@@ -3389,6 +3406,7 @@ struct AIChatView: View {
         let row = HStack(spacing: 12) {
             attachmentMenuButton
             slashMenuButton
+            composerLibraryButton
             if vm.editingMessageIndex != nil { editExitButton }
             Spacer()
             // Mutually exclusive with editExitButton: while editing a past
@@ -3405,10 +3423,10 @@ struct AIChatView: View {
     }
 
     /// [T-ios-de-voice-toolbar] Fixed controls in `inputBottomRow`: two 34pt
-    /// leading buttons, the 34pt mic and the 34pt send button, plus the four
-    /// 12pt HStack gaps between them. Everything left over is what the
+    /// original leading buttons plus the library icon, the 34pt mic and the
+    /// 34pt send button, plus five 12pt HStack gaps between them. Everything left over is what the
     /// read-aloud capsule may use.
-    private static let readAloudRowFixedWidth: CGFloat = 34 * 4 + 12 * 4
+    private static let readAloudRowFixedWidth: CGFloat = 34 * 5 + 12 * 5
 
     /// Free width below which the toggle drops its text and becomes icon-only.
     ///
@@ -3532,6 +3550,24 @@ struct AIChatView: View {
         .accessibilityHint(Text("Toggles reading replies aloud", comment: "VoiceOver hint for the read-replies toggle"))
     }
 
+    /// Icon-only entry; the accessibility label is not visible toolbar text.
+    private var composerLibraryButton: some View {
+        Button {
+            inputFocused = false
+            vm.dismissSlashMenu()
+            vm.showMentionMenu = false
+            showComposerLibrary = true
+        } label: {
+            Image(systemName: "person.2")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(ChatColors.secondaryText)
+                .frame(width: 34, height: 34)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("选择提示词或专家")
+    }
+
     /// `/` button that opens the slash command menu.
     private var slashMenuButton: some View {
         Button {
@@ -3623,7 +3659,8 @@ struct AIChatView: View {
                        canSend: canSend,
                        canEnqueue: canEnqueue,
                        onSend: { performSend() },
-                       onEnqueue: { performEnqueue() })
+                       onEnqueue: { performEnqueue() },
+                       onDirect: { performEnqueue(direct: true) })
     }
 
     /// Either the multi-line text field or the audio waveform, depending on
@@ -4914,7 +4951,9 @@ struct AIChatView: View {
     }
 
     private var canEnqueue: Bool {
-        vm.isProcessing && !vm.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        vm.isProcessing && !vm.hasLoadingAttachments && (
+            !vm.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || vm.attachments.contains { $0.loadState == .ready })
     }
 
     /// Whether the composer actually holds something worth moving to another
@@ -4926,7 +4965,8 @@ struct AIChatView: View {
     }
 
 
-    private func performEnqueue() {
+    private func performEnqueue(direct: Bool = false) {
+        guard canEnqueue else { return }
         // Dismiss the software keyboard on enqueue. With a hardware keyboard,
         // keep focus so the user can continue typing the next candidate.
         if GCKeyboard.coalesced == nil {
@@ -4940,7 +4980,7 @@ struct AIChatView: View {
         }
         speechManager.recognizedText = ""
         lastRecognizedLength = 0
-        vm.enqueuePrompt()
+        vm.enqueuePrompt(deferUntilIdle: !direct)
         // [inline-voice] Enqueue consumed the text — clear the voice transcript
         // too, otherwise it lingers in the panel (the "residual after swipe-send"
         // bug). performSend already does this; the enqueue path (taken while the
@@ -6967,6 +7007,7 @@ private struct ChatSendButton: View {
     let canEnqueue: Bool
     let onSend: () -> Void
     let onEnqueue: () -> Void
+    let onDirect: () -> Void
 
     @ObservedObject private var jobs = AgentJobRegistry.shared
 
@@ -6994,14 +7035,22 @@ private struct ChatSendButton: View {
         // sub agent runs has nothing to queue behind — the parent is idle and
         // can take it right now.
         if vm.isProcessing && canEnqueue {
-            Button(action: onEnqueue) {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 34))
-                    .foregroundStyle(ChatColors.sendButton)
-            }
-            .keyboardShortcut(.return, modifiers: .command)
-            .accessibilityLabel(Text("Add to queue", comment: "VoiceOver label for the send button while a reply is generating"))
-            .accessibilityHint(Text("Queues this message to send after the current reply finishes", comment: "VoiceOver hint for the queue button"))
+            HStack(spacing: 8) {
+                Button(action: onEnqueue) {
+                    Image(systemName: "text.badge.plus")
+                        .font(.system(size: 22))
+                        .frame(width: 34, height: 34)
+                }
+                .keyboardShortcut(.return, modifiers: .command)
+                .accessibilityLabel("排队发送")
+                .accessibilityHint("等待当前回复完成后发送，默认方式")
+                Button(action: onDirect) {
+                    Text("☞").font(.system(size: 30))
+                        .frame(width: 34, height: 34)
+                }
+                .accessibilityLabel("直接发送")
+                .accessibilityHint("在当前工具安全结束后优先处理，不取消正在执行的工具")
+            }.foregroundStyle(ChatColors.sendButton)
         } else if isBusy && !canSend {
             // Stop. When only a sub agent is running, cancelling stops it
             // rather than a (non-existent) reply — vm.cancel() covers both,

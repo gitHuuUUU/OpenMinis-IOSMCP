@@ -5424,11 +5424,13 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     private func injectQueuedPromptsAsNewTurn(
         msgIdx: inout Int,
         committedBlockCount: inout Int,
-        turnUsage: TokenUsage
+        turnUsage: TokenUsage,
+        urgentOnly: Bool = false
     ) async -> Bool {
-        guard !promptQueue.isEmpty else { return false }
-        let queued = promptQueue
-        promptQueue.removeAll()
+        let queued = urgentOnly ? promptQueue.filter { !$0.deferUntilIdle } : promptQueue
+        guard !queued.isEmpty else { return false }
+        let consumed = Set(queued.map(\.id))
+        promptQueue.removeAll { consumed.contains($0.id) }
         // Mark corresponding chat messages as no longer queued (remove dashed border + X)
         let queuedIds = Set(queued.map(\.id))
         for msg in messages where msg.isQueued {
@@ -7845,7 +7847,8 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
                 if await injectQueuedPromptsAsNewTurn(
                     msgIdx: &msgIdx,
                     committedBlockCount: &committedBlockCount,
-                    turnUsage: turnUsage
+                    turnUsage: turnUsage,
+                    urgentOnly: true
                 ) {
                     // [T-ios-inloop-compact-freeze] Retarget the stable anchor
                     // alongside msgIdx (fresh assistant message for the new turn).

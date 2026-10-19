@@ -38,7 +38,7 @@ struct ExtensionPackage: Sendable {
 /// no links, ZIP64, split archives or encrypted entries. Validates before writing.
 enum ExtensionPackageReader {
     static let maxBytes = 50 * 1024 * 1024
-    static let maxFiles = 1000
+    static let maxFiles = 5000
     static let allowedExtensions: Set<String> = ["md", "json", "txt", "png", "jpg", "jpeg", "gif", "webp"]
     static let maxInstructionBytes = 64000
     static var legacyChineseEncoding: String.Encoding {

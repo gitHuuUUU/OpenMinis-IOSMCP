@@ -22,14 +22,28 @@ import Combine
         } catch { self.error = error.localizedDescription; return false }
     }
     func boundSkillFragment(profile: ExpertProfile) -> String {
+        let skillStore = SkillStore.shared
+        let indexed = Dictionary(skillStore.skills.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         var remaining = 24000
         var sections: [String] = []
+        var deferredIDs: [String] = []
         for id in profile.boundSkillIDs {
-            guard remaining > 0, let skill = SkillStore.shared.skills.first(where: { $0.id == id }),
-                  let body = SkillStore.shared.readSkillContent(id) else { continue }
-            let text = String(body.prefix(min(8000, remaining)))
-            sections.append("--- Bound skill: \(skill.name) (\(id)) ---\n\(text)" + (text.count < body.count ? "\n[Excerpt; use skills tool to read remaining content.]" : ""))
+            guard remaining > 0 else { deferredIDs.append(id); continue }
+            guard let skill = indexed[id],
+                  let excerpt = skillStore.readSkillExcerpt(id, maxCharacters: min(8000, remaining)) else { deferredIDs.append(id); continue }
+            let text = excerpt.text
+            sections.append("--- Bound skill: \(skill.name) (\(id)) ---\n\(text)" + (excerpt.truncated ? "\n[Excerpt; use skills tool to read remaining content.]" : ""))
             remaining -= text.count
+        }
+        if !deferredIDs.isEmpty {
+            var index = ""
+            for id in deferredIDs {
+                let entry = (index.isEmpty ? "" : ", ") + id
+                let room = 8000 - index.count
+                guard room > 0 else { break }
+                index += entry.prefix(room)
+            }
+            sections.append("--- Additional bound skills: \(deferredIDs.count) ---\nIDs (bounded index): \(index)\nNot loaded in full due to context budget or missing local content. Use the skills tool to list/search and read the relevant SKILL.md before applying it; report unavailable skills rather than assuming they ran.")
         }
         return sections.joined(separator: "\n\n")
     }

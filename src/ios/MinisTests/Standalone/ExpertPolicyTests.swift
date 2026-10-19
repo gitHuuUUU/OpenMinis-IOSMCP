@@ -21,6 +21,14 @@ import Foundation
         p.normalize()
         check(!p.injectBaseline && p.injectFullRules,"rules mutually exclusive")
         check(p.allowedTools == ["file_read"],"normalize tool duplicates")
+        p.boundSkillIDs = ["existing", "existing"]
+        p.injectSkills = false
+        p.bindAllSkills(["a", "b", "a", ""])
+        check(p.boundSkillIDs == ["a", "b", "existing"] && p.injectSkills, "bind all deduplicates and enables injection")
+        p.bindAllSkills(["a", "b"])
+        check(p.boundSkillIDs == ["a", "b", "existing"], "bind all is idempotent and preserves existing bindings")
+        p.bindAllSkills((0..<5000).map { "skill-\($0)" })
+        check(p.boundSkillIDs.count == 5003, "bind all does not truncate large libraries")
         let roundtrip=try JSONDecoder().decode(ExpertProfile.self,from:JSONEncoder().encode(p))
         check(roundtrip == p,"all settings persist")
         p.defaultMode="bad";p.category="bad";p.normalize()

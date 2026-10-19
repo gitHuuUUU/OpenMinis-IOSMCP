@@ -80,10 +80,11 @@ extension AIChatViewModel {
         let usingComposer = overrideText == nil
         let text = (overrideText ?? inputText).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || !attachments.isEmpty, isProcessing else { return }
+        if usingComposer && hasLoadingAttachments { return }
         if !silent {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
         }
-        let pendingAttachments = attachments
+        let pendingAttachments = usingComposer ? attachments.filter { $0.loadState == .ready } : []
         // [T-paste-live-bubble-card] Same birth-time card plan as send(): the
         // queued bubble keeps the [Pasted#N] literal in its text and is born
         // with the chip-style cards; the drain writes the files to the
@@ -104,7 +105,7 @@ extension AIChatViewModel {
         // prompt carried its text in `overrideText` and must leave the user's
         // draft exactly as they left it.
         if usingComposer { inputText = "" }
-        attachments = []
+        if usingComposer { attachments = [] }
         logger.info("Enqueued prompt (\(text.count)ch, \(pendingAttachments.count) attachments), queue size=\(self.promptQueue.count)")
         // [T-ios-queued-candidate-not-onscreen] Log the queued candidate text
         // (prefix 100) + a queue/messages snapshot so we can later correlate a
