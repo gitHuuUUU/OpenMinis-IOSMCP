@@ -1106,7 +1106,9 @@ Do not create extraneous files: README.md, INSTALLATION_GUIDE.md, CHANGELOG.md, 
         guard let handle = try? FileHandle(forReadingFrom: file) else { return nil }
         defer { try? handle.close() }
         let count = min(maxCharacters, 8000)
-        guard let data = try? handle.read(upToCount: count * 4 + 4) else { return nil }
+        let data: Data
+        do { data = try handle.read(upToCount: count * 4 + 4) ?? Data() }
+        catch { return nil }
         // Decoding a bounded buffer can cut its last Unicode scalar; the chosen
         // prefix ends before that boundary whenever lookahead was exhausted.
         let decoded = String(decoding: data, as: UTF8.self)
