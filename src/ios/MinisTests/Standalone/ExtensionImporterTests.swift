@@ -29,9 +29,11 @@ final class ExtensionHTTPFixture: URLProtocol {
     var auditEvents: [String] = []
     var failSecret = false
     var enabled: [String: Bool] = [:]
+    var replaceCount = 0
     init(_ root: URL) throws { skillRoot = root; try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true) }
     func skillEnabled(_ id: String) -> Bool { enabled[id] ?? true }
     func replaceSkill(_ id: String, source: URL?, enabled: Bool) throws {
+        replaceCount += 1
         let target = skillRoot.appendingPathComponent(id)
         if FileManager.default.fileExists(atPath: target.path) { try FileManager.default.removeItem(at: target) }
         if let source { try FileManager.default.copyItem(at: source, to: target) }
@@ -126,8 +128,10 @@ final class ExtensionHTTPFixture: URLProtocol {
         let failed = try await store.prepare(url: zip, currentVersion: "1.0")
         let before = store.state.packs.map(\.id)
         host.failSecret = true
+        let replacesBeforeFailure = host.replaceCount
         do { try store.install(failed, collision: .rename("failed")); preconditionFailure("Must fail closed on unavailable Keychain") }
         catch { check(store.state.packs.map(\.id) == before, "Failed import rolls back state"); store.discard(failed) }
+        check(host.replaceCount == replacesBeforeFailure, "Keychain failure must not touch live skills")
         host.failSecret = false
         let files = FileManager.default.enumerator(at: root.appendingPathComponent("work/.minis"), includingPropertiesForKeys: [.isRegularFileKey])!
         var noPlaintext = true

@@ -124,6 +124,8 @@ struct ExtensionPreview: Identifiable, Sendable {
         guard !busy else { throw ExtensionPackageReader.fail("已有操作正在进行") }
         if case .cancel = collision { discard(preview); return }
         var pack = preview.package
+        guard ExtensionPackageReader.validateName(pack.manifest.name),
+              pack.skillNames.allSatisfy(ExtensionPackageReader.validateName) else { throw ExtensionPackageReader.fail("扩展包或技能路径非法") }
         var name = pack.manifest.name
         if case .rename(let candidate) = collision {
             guard ExtensionPackageReader.validateName(candidate), !state.packs.contains(where: { $0.id == candidate }),
@@ -135,7 +137,7 @@ struct ExtensionPreview: Identifiable, Sendable {
         let previous = state.packs.first(where: { $0.id == name })
         let destination = installedURL(name)
         let rollback = metadata.appendingPathComponent("rollback-\(UUID())")
-        var movedOld = false, wroteNew = false
+        var movedOld = false, wroteNew = false, attemptedRebuild = false
         var retired: [String] = []
         do {
             // Preserve the original skill exactly once, across overlapping packages.
@@ -157,6 +159,7 @@ struct ExtensionPreview: Identifiable, Sendable {
             try fm.moveItem(at: preview.staging, to: destination); wroteNew = true
             state.packs.removeAll { $0.id == name }
             state.packs.append(InstalledExtension(manifest: pack.manifest, enabled: true, providers: pack.providers, skills: pack.skillNames))
+            attemptedRebuild = true
             try rebuildSkills(Set(pack.skillNames + (previous?.skills ?? [])))
             retired = retireUnusedOriginals()
             try persist()
@@ -164,7 +167,9 @@ struct ExtensionPreview: Identifiable, Sendable {
             if wroteNew { try? fm.removeItem(at: destination) }
             if movedOld { try? fm.moveItem(at: rollback, to: destination) }
             state = old
-            try? rebuildSkills(Set(pack.skillNames + (previous?.skills ?? [])))
+            // A failed backup or Keychain write must not touch live skills at all.
+            if attemptedRebuild { try? rebuildSkills(Set(pack.skillNames + (previous?.skills ?? []))) }
+            _ = retireUnusedOriginals()
             for id in pack.secrets.keys { host.removeSecret(id) }
             host.audit("import-failed", name: name, success: false)
             throw error
