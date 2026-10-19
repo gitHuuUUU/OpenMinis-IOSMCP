@@ -79,7 +79,8 @@ enum ExtensionPackageReader {
         let manifest: ExtensionManifest
         do { manifest = try JSONDecoder().decode(ExtensionManifest.self, from: manifestData) }
         catch { throw fail("manifest.json 字段不完整或格式损坏") }
-        guard validateName(manifest.name), supports(manifest.version, current: manifest.version),
+        guard validateName(manifest.name), manifest.version.range(of: "^[0-9]+\\.[0-9]+\\.[0-9]+$", options: .regularExpression) != nil,
+              supports(manifest.version, current: manifest.version),
               !manifest.description.isEmpty, manifest.description.count <= 2000,
               !manifest.author.isEmpty, manifest.author.count <= 200,
               Set(manifest.contents).count == manifest.contents.count,
@@ -174,7 +175,8 @@ enum ExtensionPackageReader {
                 guard expanded == 0 else { throw fail("目录含有数据") }
                 continue
             }
-            guard mode != 0x4000, allowedExtensions.contains((name as NSString).pathExtension.lowercased()) else { throw fail("文件扩展名不允许：\(name)") }
+            guard mode != 0x4000, ((u32(p+38) >> 16) & 0o111) == 0,
+                  allowedExtensions.contains((name as NSString).pathExtension.lowercased()) else { throw fail("文件扩展名或可执行权限不允许：\(name)") }
             total += expanded
             guard total <= maxBytes else { throw fail("解压总大小超过 50 MB") }
             let raw = data.subdata(in: offset..<offset+compressed)

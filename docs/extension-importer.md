@@ -67,7 +67,7 @@ python3 tools/test_extensions.py --require-swift
 ```
 
 调用真实 `ExtensionPackageReader`、`ExtensionStore`、`ExtensionDownload` 源文件；文件系统是真实临时目录，宿主技能接口/provider/Keychain 为测试替身，不宣称等价 iPhone Keychain 真机验证。
-29 种 ZIP fixture 覆盖正常 deflate/stored、路径、manifest、CRC、数量、解压超限、链接、伪装程序、目录无 SKILL、指令拒绝、provider 等；生命周期覆盖预览不生效、安装、确认、禁用启用、冲突恢复、排序、重命名、取消、覆盖后确认失效、重启持久化、Keychain 失败回滚、审计及密钥不落盘。
+32 种 ZIP fixture 覆盖正常 deflate/stored、大小写技能名、路径、manifest、CRC、数量、解压超限、链接、伪装程序/可执行权限、目录无 SKILL、指令拒绝、provider 等；生命周期覆盖预览不生效、安装、确认、禁用启用、冲突恢复、排序、重命名、取消、覆盖后确认失效、重启持久化、Keychain 失败回滚、审计及密钥不落盘。
 远程 HTTP 的具体请求与超限处理另外由 URLProtocol 测试；iPhone 网络与文件选择器、真机安装、真实 provider 调用需要设备复测。
 
 ## 6. 交付验收项

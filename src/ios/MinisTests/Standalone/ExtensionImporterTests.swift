@@ -131,7 +131,8 @@ final class ExtensionHTTPFixture: URLProtocol {
         host.failSecret = false
         let files = FileManager.default.enumerator(at: root.appendingPathComponent("work/.minis"), includingPropertiesForKeys: [.isRegularFileKey])!
         var noPlaintext = true
-        for case let url as URL in files {
+        let persistedFiles = files.allObjects.compactMap { $0 as? URL }
+        for url in persistedFiles {
             if (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true,
                let bytes = try? Data(contentsOf: url), String(decoding: bytes, as: UTF8.self).contains("fixture-secret") { noPlaintext = false }
         }
