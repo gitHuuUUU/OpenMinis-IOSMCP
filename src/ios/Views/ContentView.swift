@@ -8249,6 +8249,11 @@ private struct SettingsSheet: View {
                         }
                     }
                     NavigationLink {
+                        ExtensionManagementView()
+                    } label: {
+                        Label("扩展包导入器", systemImage: "shippingbox")
+                    }
+                    NavigationLink {
                         SoulSettingsView()
                     } label: {
                         Label {

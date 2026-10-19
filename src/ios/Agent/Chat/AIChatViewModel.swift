@@ -2512,9 +2512,9 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
         if let profile = helperConfig?.expertProfile {
             let childBase = profile.injectFullRules ? baseSystemPrompt
                 : helperIdentitySection + (profile.injectBaseline ? "\n\n" + ExpertProfile.baseline : "")
-            return childBase
+            return ExtensionStore.shared.compose(base: baseSystemPrompt, customized: childBase)
         }
-        return PromptLibraryStore.shared.compose(base: baseSystemPrompt)
+        return ExtensionStore.shared.compose(base: baseSystemPrompt, customized: PromptLibraryStore.shared.compose(base: baseSystemPrompt))
     }
 
     /// A skill, MCP listing, or memory note can also be present in a selected

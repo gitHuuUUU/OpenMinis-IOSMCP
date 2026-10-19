@@ -1,5 +1,13 @@
 # OpenMinis
 
+## MinisRe extension importer (iOS)
+
+Settings → 扩展包导入器 supports ZIP preview/import, enable/disable/uninstall,
+ordering and individually confirmed providers. Packages live at
+`~/.minis/extensions/<name>/` inside the **iOS app sandbox**, with private state
+and original-skill backups at `~/.minis/extension-state/`.
+See [format, security rules and tests](docs/extension-importer.md).
+
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Platforms](https://img.shields.io/badge/Platforms-iOS%20%7C%20Android-lightgrey.svg)](#beta-programme)
 

@@ -563,6 +563,11 @@
 		DB73D01A4A24432B88B64E89 /* ExpertProfileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BB791C8D31D4139B47B8471 /* ExpertProfileStore.swift */; };
 		378826C9912E4CA38B0CEABD /* ExpertLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EACB9CC1250D45F3ACAAD86E /* ExpertLibraryView.swift */; };
 		5E42CA4D55E34F979003E0DD /* WorkspaceSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEC9C0A48BC846C6A969ABAF /* WorkspaceSearchView.swift */; };
+		65607406BBC74DE9945E4EC4 /* ExtensionPackage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F13CB3AD6EA94E1C81A3E1F8 /* ExtensionPackage.swift */; };
+		ADDB89F3DCD54F31BD4C8CFE /* ExtensionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD0E1B3128894143838C0B9D /* ExtensionStore.swift */; };
+		BCFC360D0FCA4C448EB19238 /* ExtensionDownload.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAA2B0C70CF04E2EBBA22F3C /* ExtensionDownload.swift */; };
+		B233B2DFA3A6457A8221D7C7 /* MinisExtensionHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02D1BB04D8434802AB7C3506 /* MinisExtensionHost.swift */; };
+		414DBE425DAD49F1812700A5 /* ExtensionManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25B106B1D8FC415CAC753DF1 /* ExtensionManagementView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1289,6 +1294,11 @@
 		0BB791C8D31D4139B47B8471 /* ExpertProfileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Providers/ExpertProfileStore.swift"; sourceTree = "<group>"; };
 		EACB9CC1250D45F3ACAAD86E /* ExpertLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/Settings/ExpertLibraryView.swift"; sourceTree = "<group>"; };
 		EEC9C0A48BC846C6A969ABAF /* WorkspaceSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/Settings/WorkspaceSearchView.swift"; sourceTree = "<group>"; };
+		F13CB3AD6EA94E1C81A3E1F8 /* ExtensionPackage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/ExtensionPackage.swift"; sourceTree = "<group>"; };
+		BD0E1B3128894143838C0B9D /* ExtensionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/ExtensionStore.swift"; sourceTree = "<group>"; };
+		EAA2B0C70CF04E2EBBA22F3C /* ExtensionDownload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/ExtensionDownload.swift"; sourceTree = "<group>"; };
+		02D1BB04D8434802AB7C3506 /* MinisExtensionHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Providers/MinisExtensionHost.swift"; sourceTree = "<group>"; };
+		25B106B1D8FC415CAC753DF1 /* ExtensionManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/Settings/ExtensionManagementView.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -1544,6 +1554,11 @@
 				EEC9C0A48BC846C6A969ABAF /* WorkspaceSearchView.swift */,
 				EACB9CC1250D45F3ACAAD86E /* ExpertLibraryView.swift */,
 				0BB791C8D31D4139B47B8471 /* ExpertProfileStore.swift */,
+				25B106B1D8FC415CAC753DF1 /* ExtensionManagementView.swift */,
+				02D1BB04D8434802AB7C3506 /* MinisExtensionHost.swift */,
+				EAA2B0C70CF04E2EBBA22F3C /* ExtensionDownload.swift */,
+				BD0E1B3128894143838C0B9D /* ExtensionStore.swift */,
+				F13CB3AD6EA94E1C81A3E1F8 /* ExtensionPackage.swift */,
 				1F8B9666BB88448DB0D321F0 /* ExpertPolicy.swift */,
 				E5QA0102 /* AppDelegate.swift */,
 				E5E000018 /* Minis.entitlements */,
@@ -2859,6 +2874,11 @@
 				5E42CA4D55E34F979003E0DD /* WorkspaceSearchView.swift in Sources */,
 				378826C9912E4CA38B0CEABD /* ExpertLibraryView.swift in Sources */,
 				DB73D01A4A24432B88B64E89 /* ExpertProfileStore.swift in Sources */,
+				414DBE425DAD49F1812700A5 /* ExtensionManagementView.swift in Sources */,
+				B233B2DFA3A6457A8221D7C7 /* MinisExtensionHost.swift in Sources */,
+				BCFC360D0FCA4C448EB19238 /* ExtensionDownload.swift in Sources */,
+				ADDB89F3DCD54F31BD4C8CFE /* ExtensionStore.swift in Sources */,
+				65607406BBC74DE9945E4EC4 /* ExtensionPackage.swift in Sources */,
 				9BC4FA4A7028445C9CF63D6D /* ExpertPolicy.swift in Sources */,
 				E5FPBH02 /* FileProviderBootHealth.swift in Sources */,
 				E5QA0001 /* QuickActionRouter.swift in Sources */,

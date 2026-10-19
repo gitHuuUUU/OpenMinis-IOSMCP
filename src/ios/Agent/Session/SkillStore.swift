@@ -1446,6 +1446,34 @@ Do not create extraneous files: README.md, INSTALLATION_GUIDE.md, CHANGELOG.md, 
         loadSkills()
     }
 
+    /// Extension overlays use the normal DB/discovery/rootfs machinery rather
+    /// than a second hidden skill list. The manager owns original-file backups.
+    func replaceFromExtension(id: String, source: URL?, enabled: Bool) throws {
+        guard ExtensionPackageReader.validateName(id) else { throw ExtensionPackageReader.fail("技能 ID 无效") }
+        if source == nil { deleteSkill(id); return }
+        guard let source else { return }
+        let content = try String(contentsOf: source.appendingPathComponent("SKILL.md"), encoding: .utf8)
+        let target = skillsDir.appendingPathComponent(id)
+        if fm.fileExists(atPath: target.path) { try fm.removeItem(at: target) }
+        try fm.createDirectory(at: skillsDir, withIntermediateDirectories: true)
+        try fm.copyItem(at: source, to: target)
+        if !skills.contains(where: { $0.id == id }) { _ = reconcileOrphanSkill(id: id) }
+        try updateSkillContent(id, newContent: content)
+        let guest = rootfsSkillsDir.appendingPathComponent(id)
+        if fm.fileExists(atPath: guest.path) { try fm.removeItem(at: guest) }
+        try fm.createDirectory(at: rootfsSkillsDir, withIntermediateDirectories: true)
+        try fm.copyItem(at: source, to: guest)
+        if let enumerator = fm.enumerator(at: target, includingPropertiesForKeys: [.isDirectoryKey]) {
+            for case let file as URL in enumerator {
+                let relative = String(file.path.dropFirst(target.path.count + 1))
+                let linux = "/var/minis/skills/\(id)/\(relative)"
+                ensureParentDirsInMetaDB(for: linux)
+                ensureFakefsMetadata(for: linux, isDirectory: (try? file.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false)
+            }
+        }
+        setEnabled(id, enabled: enabled)
+    }
+
     /// Rescan disk vs the previous in-memory snapshot, then markDirty
     /// for every skill whose on-disk state diverged (new SKILL.md
     /// appeared, contents changed, or the directory disappeared

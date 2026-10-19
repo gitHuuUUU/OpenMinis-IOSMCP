@@ -43,6 +43,9 @@ jobs:
           XCODE_VERSION="$(xcodebuild -version)"
           [[ "$XCODE_VERSION" =~ Xcode[[:space:]](2[6-9]|[3-9][0-9]) ]] || { echo "iOS26 SDK is required for guarded APIs"; exit 1; }
 
+      - name: Extension importer production runtime tests
+        run: python3 tools/test_extensions.py --require-swift
+
       - name: Workbench source contract checks
         run: python3 tools/test_workbench_static.py
 
