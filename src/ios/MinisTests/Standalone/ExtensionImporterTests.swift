@@ -157,6 +157,26 @@ final class ExtensionHTTPFixture: URLProtocol {
             catch { check(true, "Rejected download \(mode)") }
             if mode == "head-large" || mode == "unknown" { check(ExtensionHTTPFixture.gets == 0, "Reject before body download") }
         }
+        for filename in ["普通说明.md", "legacy.md", "unicode.md"] {
+            let data = try Data(contentsOf: root.appendingPathComponent(filename))
+            let package = try ExtensionPackageReader.markdown(data, filename: filename, currentVersion: "1.0")
+            check(package.manifest.contents == ["instructions"] && package.providers.isEmpty && package.skillNames.isEmpty, "Loose MD is only an instruction supplement")
+            check(String(data: package.files["instructions.md"]!, encoding: .utf8) == "请用中文简明总结结果。", "MD encoding normalized to UTF-8")
+            check(package.manifest.name == (try! ExtensionPackageReader.markdown(data, filename: filename, currentVersion: "1.0")).manifest.name, "MD repeated import has stable collision identity")
+        }
+        for bytes in [Data(), Data(repeating: 65, count: 64001), Data([0, 0]), Data("不得拒绝".utf8)] {
+            do { _ = try ExtensionPackageReader.markdown(bytes, filename: "bad.md", currentVersion: "1.0"); preconditionFailure("Invalid MD accepted") }
+            catch { check(true, "MD empty/limit/binary/scanner rejection") }
+        }
+        let md = try await store.prepare(url: root.appendingPathComponent("普通说明.md"), currentVersion: "1.0")
+        let mdName = md.package.manifest.name
+        check(!store.state.packs.contains { $0.id == mdName }, "MD preview is inert")
+        try store.install(md, collision: .overwrite)
+        check(store.compose(base: "BASE", customized: "BASE").contains("请用中文简明总结结果。"), "MD wired through actual prompt composition")
+        try store.setEnabled(mdName, false)
+        check(!store.compose(base: "BASE", customized: "BASE").contains("请用中文简明总结结果。"), "Disable MD")
+        try store.uninstall(mdName)
+        check(!FileManager.default.fileExists(atPath: store.installedURL(mdName).path), "Uninstall MD")
         print("Extension importer: \(checks) production Swift checks PASSED (filesystem + mocked host/Keychain, not iPhone verification)")
     }
 }

@@ -74,9 +74,17 @@ struct ExtensionPreview: Identifiable, Sendable {
                 if url.scheme == "https" {
                     throw ExtensionPackageReader.fail("请使用 HTTPS 下载入口")
                 }
+                let markdown = url.pathExtension.lowercased() == "md"
+                guard markdown || url.pathExtension.lowercased() == "zip" else { throw ExtensionPackageReader.fail("只接受 .zip 扩展包或 .md 追加指令文件") }
+                let limit = markdown ? ExtensionPackageReader.maxInstructionBytes : ExtensionPackageReader.maxBytes
                 let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? Int.max
-                guard size <= ExtensionPackageReader.maxBytes else { throw ExtensionPackageReader.fail("ZIP 超过 50 MB，未读取或上传") }
-                return try Self.stage(Data(contentsOf: url), currentVersion: currentVersion)
+                guard size <= limit else { throw ExtensionPackageReader.fail(markdown ? "MD 超过 64000 字节，未读取" : "ZIP 超过 50 MB，未读取") }
+                let handle = try FileHandle(forReadingFrom: url)
+                defer { try? handle.close() }
+                let bytes = try handle.read(upToCount: limit + 1) ?? Data()
+                guard bytes.count <= limit else { throw ExtensionPackageReader.fail("读取时文件大小已超过上限，已中止") }
+                if markdown { return try Self.stagePackage(ExtensionPackageReader.markdown(bytes, filename: url.lastPathComponent, currentVersion: currentVersion)) }
+                return try Self.stage(bytes, currentVersion: currentVersion)
             }.value
             host.audit("preview", name: preview.package.manifest.name, success: true)
             return preview
@@ -100,6 +108,10 @@ struct ExtensionPreview: Identifiable, Sendable {
 
     private nonisolated static func stage(_ data: Data, currentVersion: String) throws -> ExtensionPreview {
         let package = try ExtensionPackageReader.read(data, currentVersion: currentVersion)
+        return try stagePackage(package)
+    }
+
+    private nonisolated static func stagePackage(_ package: ExtensionPackage) throws -> ExtensionPreview {
         let staging = FileManager.default.temporaryDirectory.appendingPathComponent("minis-extension-\(UUID())")
         do {
             try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)

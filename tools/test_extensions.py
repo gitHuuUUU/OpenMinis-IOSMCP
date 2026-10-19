@@ -33,6 +33,22 @@ def fixtures(out):
 
     write('valid', base, True)
     write('stored', base, True, zipfile.ZIP_STORED)
+    write('wrapped', {'outer-package/'+k:v for k,v in base.items()}, True)
+    class GBKInfo(zipfile.ZipInfo):
+        def _encodeFilenameFlags(self):
+            return self.filename.encode('gbk'), self.flag_bits & ~0x800
+    gbk_manifest = json.loads(base['manifest.json'])
+    gbk_manifest['contents'].append('assets')
+    gbk_files = {**base, 'manifest.json': json.dumps(gbk_manifest), 'assets/中文文件.txt': 'normal static asset'}
+    for name, files, valid in [('gbk-name', gbk_files, True), ('gbk-traversal', {**gbk_files,'assets/中文/../../../../outside.txt':'no'},False)]:
+        with zipfile.ZipFile(out/(name+'.zip'),'w') as z:
+            for path, body in files.items():
+                info=GBKInfo(path);info.compress_type=zipfile.ZIP_DEFLATED;z.writestr(info,body)
+        cases.append(dict(file=name+'.zip',valid=valid))
+    malformed=out/'invalid-utf8-flag.zip'
+    malformed.write_bytes((out/'gbk-name.zip').read_bytes())
+    data=bytearray(malformed.read_bytes());pos=data.rfind(b'PK\x01\x02');flags=struct.unpack_from('<H',data,pos+8)[0];struct.pack_into('<H',data,pos+8,flags|0x800);malformed.write_bytes(data)
+    cases.append(dict(file=malformed.name,valid=False))
     write('missing-manifest', {'instructions.md': 'Hello'})
     write('broken-manifest', {**base, 'manifest.json': '{}'})
     write('zip-slip', {**base, '../outside.txt': 'no'})
@@ -71,6 +87,9 @@ def fixtures(out):
     path = write('directory-missing-skill', {**base, 'skills/empty/': b''})
     write('second', {**base, 'manifest.json': json.dumps({**manifest, 'name': 'second'}), 'instructions.md': 'Use readable reports.', 'skills/example/SKILL.md': 'Second skill contents'}, True)
     (out / 'cases.json').write_text(json.dumps(cases), encoding='utf8')
+    (out/'普通说明.md').write_text('请用中文简明总结结果。',encoding='utf8')
+    (out/'legacy.md').write_bytes('请用中文简明总结结果。'.encode('gbk'))
+    (out/'unicode.md').write_text('请用中文简明总结结果。',encoding='utf16')
     return cases
 
 

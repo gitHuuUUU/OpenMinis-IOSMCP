@@ -1,5 +1,7 @@
 import Foundation
 import zlib
+import CoreFoundation
+import CryptoKit
 
 enum ExtensionImportError: LocalizedError {
     case invalid(String)
@@ -38,10 +40,40 @@ enum ExtensionPackageReader {
     static let maxBytes = 50 * 1024 * 1024
     static let maxFiles = 1000
     static let allowedExtensions: Set<String> = ["md", "json", "txt", "png", "jpg", "jpeg", "gif", "webp"]
+    static let maxInstructionBytes = 64000
+    static var legacyChineseEncoding: String.Encoding {
+        String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue)))
+    }
     static func fail(_ text: String) -> ExtensionImportError { .invalid(text) }
 
     static func validateName(_ name: String) -> Bool {
         name.range(of: "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$", options: .regularExpression) != nil
+    }
+
+    /// A loose Markdown document is an instruction supplement, never a script
+    /// or an implicit SKILL. It uses the same scanner/lifecycle as a ZIP pack.
+    static func markdown(_ data: Data, filename: String, currentVersion: String) throws -> ExtensionPackage {
+        guard data.count <= maxInstructionBytes else { throw fail("MD 文件超过 64000 字节，请拆分后导入") }
+        let text: String?
+        if data.starts(with: [0xff, 0xfe]) || data.starts(with: [0xfe, 0xff]) {
+            text = String(data: data, encoding: .utf16)
+        } else { text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: legacyChineseEncoding) }
+        guard let decoded = text?.replacingOccurrences(of: "\u{feff}", with: ""),
+              !decoded.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !decoded.unicodeScalars.contains(where: { CharacterSet.controlCharacters.subtracting(.whitespacesAndNewlines).contains($0) }),
+              let normalized = decoded.data(using: .utf8), normalized.count <= maxInstructionBytes else {
+            throw fail("MD 为空、不是有效文本，或转为 UTF-8 后超过 64000 字节（支持 UTF-8、带 BOM 的 UTF-16、GBK/GB18030）")
+        }
+        guard !decoded.hasPrefix("#!") else { throw fail("MD 内容看起来是脚本，不能作为追加指令导入") }
+        try checkInstructions(decoded)
+        let title = String(URL(fileURLWithPath: filename).lastPathComponent.prefix(120))
+        let digest = SHA256.hash(data: Data(title.lowercased().utf8)).prefix(6).map { String(format: "%02x", $0) }.joined()
+        let slug = title.lowercased().unicodeScalars.map { CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789_-").contains($0) ? String($0) : "-" }.joined()
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        let name = "md-" + (slug.isEmpty ? "document" : String(slug.prefix(36))) + "-" + digest
+        let manifest = ExtensionManifest(name: name, version: "1.0.0", description: "从 \(title) 导入的追加指令（不是脚本或自动执行技能）", author: "本地 Markdown 导入", minis_version: ">=\(currentVersion)", contents: ["instructions"])
+        guard supports(manifest.minis_version, current: currentVersion) else { throw fail("无法识别当前应用版本") }
+        return ExtensionPackage(manifest: manifest, files: ["manifest.json": try JSONEncoder().encode(manifest), "instructions.md": normalized], providers: [], secrets: [:], skillNames: [])
     }
 
     static func checkInstructions(_ text: String) throws {
@@ -75,6 +107,14 @@ enum ExtensionPackageReader {
     static func read(_ data: Data, currentVersion: String) throws -> ExtensionPackage {
         guard data.count <= maxBytes else { throw fail("ZIP 超过 50 MB") }
         var files = try unzip(data)
+        // Common ZIPs wrap a valid package in one outer folder. Never invent a
+        // manifest for arbitrary collections or silently discard their scripts.
+        if files["manifest.json"] == nil {
+            let roots = Set(files.keys.map { String($0.split(separator: "/")[0]) })
+            if roots.count == 1, let root = roots.first, files[root + "/manifest.json"] != nil {
+                files = Dictionary(uniqueKeysWithValues: files.map { (String($0.key.dropFirst(root.count + 1)), $0.value) })
+            }
+        }
         guard let manifestData = files["manifest.json"], manifestData.count <= 65536 else { throw fail("缺少根目录 manifest.json 或清单过大") }
         let manifest: ExtensionManifest
         do { manifest = try JSONDecoder().decode(ExtensionManifest.self, from: manifestData) }
@@ -138,8 +178,11 @@ enum ExtensionPackageReader {
         for p in stride(from: data.count - 22, through: max(0, data.count - 65557), by: -1) {
             if u32(p) == 0x06054b50 && p + 22 + u16(p+20) == data.count { end = p; break }
         }
-        guard let e = end, u16(e+4) == 0, u16(e+6) == 0,
-              u16(e+8) == u16(e+10), (1...maxFiles).contains(u16(e+10)) else { throw fail("ZIP 无效、分卷或文件数超过 1000") }
+        guard let e = end else { throw fail("找不到 ZIP 结束目录：可能不是 ZIP 格式，或文件尚未下载完整；RAR/7z 不能仅改后缀导入") }
+        guard u16(e+4) == 0, u16(e+6) == 0 else { throw fail("不支持分卷 ZIP，请先合并为单个标准 ZIP") }
+        guard u16(e+8) == u16(e+10) else { throw fail("ZIP 目录计数不一致，文件可能损坏或属于分卷") }
+        guard u16(e+10) > 0 else { throw fail("ZIP 中没有文件") }
+        guard u16(e+10) <= maxFiles else { throw fail("ZIP 共 \(u16(e+10)) 项（含目录），超过 \(maxFiles) 项上限") }
         let count = u16(e+10), size = u32(e+12), start = u32(e+16)
         guard start <= e, size == e - start else { throw fail("ZIP 中央目录损坏（不支持 ZIP64）") }
         var position = start, total = 0, result: [String: Data] = [:], seen = Set<String>()
@@ -151,9 +194,14 @@ enum ExtensionPackageReader {
             let flags = u16(p+8), method = u16(p+10), compressed = u32(p+20), expanded = u32(p+24)
             let length = u16(p+28), extra = u16(p+30), comment = u16(p+32), local = u32(p+42)
             position = p + 46 + length + extra + comment
-            guard position <= e, u16(p+34) == 0, flags & 0x41 == 0, [0, 8].contains(method),
-                  compressed <= maxBytes, expanded <= maxBytes,
-                  let name = String(data: data.subdata(in: p+46..<p+46+length), encoding: .utf8), !name.isEmpty else { throw fail("ZIP 条目不支持、加密或损坏") }
+            guard position <= e else { throw fail("ZIP 文件名/扩展字段超出中央目录，文件损坏") }
+            guard u16(p+34) == 0 else { throw fail("ZIP 条目引用了其它分卷") }
+            guard flags & 0x41 == 0 else { throw fail("ZIP 含加密条目，请先解密再导入") }
+            guard [0, 8].contains(method) else { throw fail("不支持 ZIP 压缩算法 \(method)，请使用 Store 或 Deflate 重新压缩") }
+            guard compressed <= maxBytes, expanded <= maxBytes else { throw fail("ZIP 单个条目压缩或展开大小超过 50 MB") }
+            let rawName = data.subdata(in: p+46..<p+46+length)
+            let decodedName = String(data: rawName, encoding: .utf8) ?? (flags & 0x800 == 0 ? String(data: rawName, encoding: legacyChineseEncoding) : nil)
+            guard let name = decodedName, !name.isEmpty else { throw fail("ZIP 文件名编码无效：支持 UTF-8 和未标记 UTF-8 的 GBK/GB18030 文件名") }
             let parts = name.split(separator: "/", omittingEmptySubsequences: false)
             let mode = (u32(p+38) >> 16) & 0xf000
             guard !name.hasPrefix("/"), !name.contains("\\"), !name.contains(":"),
@@ -166,7 +214,7 @@ enum ExtensionPackageReader {
             let localNameLength = u16(local+26), localExtraLength = u16(local+28)
             let offset = local + 30 + localNameLength + localExtraLength
             guard offset <= start, compressed <= start - offset,
-                  data.subdata(in: local+30..<local+30+localNameLength) == Data(name.utf8) else { throw fail("ZIP 条目越界或文件名不一致") }
+                  data.subdata(in: local+30..<local+30+localNameLength) == rawName else { throw fail("ZIP 条目越界或文件名不一致") }
             let range = local..<offset+compressed
             guard !ranges.contains(where: { $0.overlaps(range) }) else { throw fail("ZIP 条目重叠") }
             ranges.append(range)
