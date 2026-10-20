@@ -322,8 +322,15 @@ enum WorkbenchError: LocalizedError {
             let handle = try FileHandle(forReadingFrom: url); defer { try? handle.close() }
             let data = try handle.read(upToCount: 262144) ?? Data()
             return String(data: data, encoding: .utf8) ?? "二进制文件（前 \(data.count) 字节）：\(data.base64EncodedString())"
+        case "wda_status":
+            let result = await wdaStatus()
+            return try String(data: JSONSerialization.data(withJSONObject: ["reachable": result.reachable, "detail": result.detail, "url": UserDefaults.standard.string(forKey: "workbench.wdaURL") ?? ""], options: [.prettyPrinted, .sortedKeys]), encoding: .utf8) ?? "{}"
+        case "prepare_wda":
+            return try prepareWDAInstall()
         case "ui_status":
             if !bid.isEmpty, !accessibleApps(session).contains(where:{$0.bundleID==bid}) { throw WorkbenchError.unavailable("目标应用不在可访问列表") }
+            let status = await wdaStatus()
+            guard status.reachable else { throw WorkbenchError.unavailable("WDA 尚未运行：\(status.detail)。可先执行 prepare_wda 生成安装准备说明；应用启动和目录读取仍可用，UI 操作需真实 WDA。") }
             let base=try wdaBase()
             let sid=try await ensureWDASession(base:base,bundleID:bid,verifyCached:true)
             return "WDA 已建立会话：\(sid)。应用启动和目录读取使用原生桥；UI 操作将使用此会话。"
