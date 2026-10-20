@@ -254,6 +254,42 @@ enum WorkbenchError: LocalizedError {
         }) else { throw WorkbenchError.unavailable("先在当前对话添加目标应用，或开启扩展文件访问") }
         return url
     }
+    /// Probe the real WebDriverAgent endpoint. A configured URL alone is never
+    /// treated as installed or ready.
+    func wdaStatus() async -> (reachable: Bool, detail: String) {
+        guard let base = try? wdaBase() else { return (false, "WDA 地址无效") }
+        do {
+            let object = try await wdaJSON(base, "status")
+            let value = object["value"] as? [String: Any] ?? [:]
+            let ready = value["ready"] as? Bool ?? false
+            let message = value["message"] as? String ?? (ready ? "WDA 已就绪" : "WDA 已连接但未就绪")
+            return (ready, message)
+        } catch {
+            return (false, error.localizedDescription)
+        }
+    }
+
+    /// Generate an auditable setup artifact and instructions for a developer-
+    /// signed WDA runner. A normal iOS app cannot install or launch an XCTest
+    /// runner on-device by itself; this deliberately never reports a fake install.
+    func prepareWDAInstall() throws -> String {
+        let file = root.appendingPathComponent("wda-install.json")
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        let payload: [String: Any] = [
+            "component": "WebDriverAgent",
+            "status": "requires_host_sign_and_launch",
+            "url": UserDefaults.standard.string(forKey: "workbench.wdaURL") ?? "http://127.0.0.1:8100",
+            "requirements": ["macOS + Xcode", "paired iPhone", "Apple Developer signing or an already-running WDA backend"],
+            "steps": ["Build WebDriverAgentRunner for the paired iPhone", "Sign with a development profile", "Launch the runner and expose its HTTP port", "Set this URL in Minis, then run device_app ui_status"],
+            "note": "TrollStore/self-signing Minis does not grant XCTest runner installation rights. UI actions remain disabled until /status reports ready.",
+            "generatedAt": ISO8601DateFormatter().string(from: Date())
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys])
+        try data.write(to: file, options: .atomic)
+        UserDefaults.standard.set("prepared", forKey: "workbench.wdaInstallState")
+        return "WDA 安装准备已生成：\(file.path)\n当前仍需在配对 Mac/Xcode 或已有 WDA 主机上签名并启动 WebDriverAgentRunner；应用不会伪造已安装状态。"
+    }
+
     func tool(_ args: [String: Any], session: String) async throws -> String {
         let action = args["action"] as? String ?? "inspect"
         let bid = args["bundle_id"] as? String ?? selected(session).first?.bundleID ?? ""
@@ -337,6 +373,8 @@ enum WorkbenchError: LocalizedError {
         UserDefaults.standard.set(sid,forKey:"workbench.wdaSession"); return sid
     }
     func wda(_ action: String, args: [String: Any]) async throws -> String {
+        let status = await wdaStatus()
+        guard status.reachable else { throw WorkbenchError.unavailable("WDA 未就绪：\(status.detail)。先执行 prepare_wda 或启动已签名的 WebDriverAgentRunner。") }
         let base=try wdaBase()
         let sid=try await ensureWDASession(base:base,bundleID:args["bundle_id"] as? String ?? "")
         if let bid=args["bundle_id"] as? String,!bid.isEmpty {
@@ -770,7 +808,9 @@ struct DevelopmentWorkbenchView: View {
                 TextField("WebDriverAgent URL",text:$wdaURL).textInputAutocapitalization(.never).autocorrectionDisabled()
                 TextField("已运行的 WDA Session ID",text:$wdaSession).textInputAutocapitalization(.never).autocorrectionDisabled()
                 Button("检测并自动建立 UI 会话") { Task { do { status=try await model.tool(["action":"ui_status"],session:"workbench") } catch { status=error.localizedDescription } } }
-                Text("应用启动、目录分析使用本机桥；触摸、输入、界面树和截图必须连接实际运行的 WDA。未部署时不会报告 UI 控制就绪。").font(.caption).foregroundColor(.secondary)
+                Button("检查 WDA 真实运行状态") { Task { do { status=try await model.tool(["action":"wda_status"],session:"workbench") } catch { status=error.localizedDescription } } }
+                Button("准备 WDA 安装与签名说明") { do { status=try model.prepareWDAInstall() } catch { status=error.localizedDescription } }
+                Text("应用可自动检测并调用真实 WDA；无法在普通 iOS 应用内部直接安装 XCTest runner。免越狱使用需配对 Mac + Xcode + 开发签名（或已有 WDA 主机），启动后填入 URL；未返回 ready 前不会报告 UI 控制就绪。").font(.caption).foregroundColor(.secondary)
             }
             if !status.isEmpty { Section { Text(status).font(.caption) } }
             Section(header:Text("实际检测结果：\(model.results.filter(\.ok).count)/\(model.results.count) 通过")) {

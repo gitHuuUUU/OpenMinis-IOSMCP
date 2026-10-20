@@ -292,10 +292,10 @@ extension AIChatViewModel {
         ))
         tools.append(AgentToolDefinition(
             name: "device_app",
-            description: "List, inspect and open installed iOS applications by bundle ID. When automatic app access is enabled, no manual + attachment is required. Read/list/write native iOS files under allowed app installation/data roots (not Linux guest paths). ui_status discovers or creates a session on an actually running WebDriverAgent; get_ui/tap/type/swipe/screenshot use that backend and can activate bundle_id automatically. Always inspect real capabilities; opening an app does not establish UI control.",
+            description: "List, inspect and open installed iOS applications by bundle ID. When automatic app access is enabled, no manual + attachment is required. Read/list/write native iOS files under allowed app installation/data roots (not Linux guest paths). wda_status probes the real /status endpoint; prepare_wda creates an auditable host-signing setup artifact; ui_status discovers or creates a session only on an actually running WebDriverAgent; get_ui/tap/type/swipe/screenshot use that backend and can activate bundle_id automatically. Always inspect real capabilities; opening an app does not establish UI control.",
             parameters: [
                 "tool_title": AgentToolParam(type: .string, description: "Short description in the user language"),
-                "action": AgentToolParam(type: .string, description: "Operation", enumValues: ["list", "inspect", "open", "list_files", "read_file", "write_file", "ui_status", "get_ui", "tap", "type", "swipe", "screenshot"]),
+                "action": AgentToolParam(type: .string, description: "Operation", enumValues: ["list", "inspect", "open", "list_files", "read_file", "write_file", "ui_status", "wda_status", "prepare_wda", "get_ui", "tap", "type", "swipe", "screenshot"]),
                 "bundle_id": AgentToolParam(type: .string, description: "Selected application bundle identifier"),
                 "path": AgentToolParam(type: .string, description: "Absolute native iOS path"),
                 "text": AgentToolParam(type: .string, description: "Text to type or write, only for those actions"),

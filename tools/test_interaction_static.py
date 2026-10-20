@@ -81,6 +81,12 @@ class InteractionContracts(unittest.TestCase):
         s=read('src/ios/Workbench.swift')
         for piece in ['workbench.autoApps','func accessibleApps','accessibleApps(session).flatMap','MinisDeviceBridge.openApplication','自动选择并打开已安装应用']:
             self.assertIn(piece,s)
+    def test_wda_install_is_real_status_and_not_fake_in_app_install(self):
+        s=read('src/ios/Workbench.swift')
+        for piece in ['func wdaStatus()', 'prepareWDAInstall()', 'requires_host_sign_and_launch', 'guard status.reachable', 'wda_status', 'prepare_wda', '不会伪造已安装状态']:
+            self.assertIn(piece,s)
+        self.assertIn('wda_status", "prepare_wda", "get_ui"',read('src/ios/Agent/Chat/AIChatViewModel+ToolDefinitions.swift'))
+
     def test_wda_is_real_not_permission_flag(self):
         s=read('src/ios/Workbench.swift')
         for piece in ['verifyCached:true','wdaJSON(base,"sessions")','wdaJSON(base,"session",','wda/apps/activate','wda/dragfromtoforduration','suffix = "wda/tap"','无法连接 WDA']:
