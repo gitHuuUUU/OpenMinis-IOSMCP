@@ -9,7 +9,11 @@ import threading
 
 ROOT=Path(__file__).resolve().parents[1]
 source=(ROOT/'src/ios/Workbench.swift').read_text(encoding='utf-8')
-methods='    func wdaBase() throws -> URL {'+source.split('    func wdaBase() throws -> URL {',1)[1].split('    func run(',1)[0]
+# Keep the production WDA status gate in the fixture as well as the HTTP
+# transport helpers.  Previously extraction started at wdaBase(), which
+# silently omitted wdaStatus() and made the CI fixture fail to compile even
+# though the app source was valid.
+methods='    func wdaStatus() async -> (reachable: Bool, detail: String) {'+source.split('    func wdaStatus() async -> (reachable: Bool, detail: String) {',1)[1].split('    func run(',1)[0]
 calls=[]
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self,*_): pass
@@ -17,7 +21,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         raw=json.dumps({'value':value}).encode(); self.send_response(status); self.send_header('Content-Type','application/json'); self.end_headers(); self.wfile.write(raw)
     def do_GET(self):
         calls.append(('GET',self.path))
-        if self.path=='/sessions': self.reply({'error':'unknown command'},404)
+        if self.path=='/status': self.reply({'ready':True,'message':'fixture ready'})
+        elif self.path=='/sessions': self.reply({'error':'unknown command'},404)
         elif self.path=='/session/mock-session': self.reply({'sessionId':'mock-session'})
         elif self.path.endswith('/source'): self.reply('<App name="fixture"/>')
         elif self.path.endswith('/screenshot'): self.reply(base64.b64encode(b'fixture-image').decode())

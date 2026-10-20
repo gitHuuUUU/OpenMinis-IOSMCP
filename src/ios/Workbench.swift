@@ -82,6 +82,12 @@ enum WorkbenchError: LocalizedError {
     @Published var installError = ""
     @Published var installSucceeded = false
     private var reverseRuntimeBusy = false
+    // WDA is queried for every UI action. Keep a very short readiness cache so
+    // a burst of taps/types does not add one network round-trip per action;
+    // the cache is deliberately short and is invalidated when the configured
+    // endpoint changes, so a crashed runner is rediscovered quickly.
+    private var wdaStatusCache: (url: String, reachable: Bool, detail: String, at: Date)?
+    private var wdaAutoStartAttemptAt: Date?
     private var diagnosticTask: Task<Void, Never>?
     private var componentProbeTask: Task<Void, Never>?
     private var componentProbeStarted = false
@@ -93,6 +99,10 @@ enum WorkbenchError: LocalizedError {
     private static let componentNames = ["Codex","Theos","CoreTools","ReverseTools","Python","Frida","REA"]
     private static let verifiedComponentsKey = "workbench.verifiedComponents"
     init() {
+        UserDefaults.standard.register(defaults: [
+            "workbench.wdaURL": "http://127.0.0.1:8100",
+            "workbench.wdaSession": ""
+        ])
         let cached = Set(UserDefaults.standard.stringArray(forKey: Self.verifiedComponentsKey) ?? [])
         for name in Self.componentNames where cached.contains(name) {
             componentStatus[name] = "上次验证已安装 · 待运行复检"
@@ -255,18 +265,68 @@ enum WorkbenchError: LocalizedError {
         return url
     }
     /// Probe the real WebDriverAgent endpoint. A configured URL alone is never
-    /// treated as installed or ready.
+    /// treated as installed or ready. On a jailbroken device, automatically
+    /// try the common local runner ports and wake an already-installed runner;
+    /// success is still gated on a real `/status` response.
     func wdaStatus() async -> (reachable: Bool, detail: String) {
-        guard let base = try? wdaBase() else { return (false, "WDA 地址无效") }
-        do {
-            let object = try await wdaJSON(base, "status")
-            let value = object["value"] as? [String: Any] ?? [:]
-            let ready = value["ready"] as? Bool ?? false
-            let message = value["message"] as? String ?? (ready ? "WDA 已就绪" : "WDA 已连接但未就绪")
-            return (ready, message)
-        } catch {
-            return (false, error.localizedDescription)
+        await wdaStatus(force: false)
+    }
+
+    private func wdaStatus(force: Bool) async -> (reachable: Bool, detail: String) {
+        let configured = UserDefaults.standard.string(forKey: "workbench.wdaURL") ?? "http://127.0.0.1:8100"
+        if !force, let cache = wdaStatusCache,
+           cache.url == configured, Date().timeIntervalSince(cache.at) < 2.0 {
+            return (cache.reachable, cache.detail)
         }
+        let candidates = wdaCandidateURLs(configured: configured)
+        var lastDetail = "未发现可用的 WDA /status"
+        for raw in candidates {
+            guard let base = URL(string: raw), ["http", "https"].contains(base.scheme ?? "") else { continue }
+            do {
+                let object = try await wdaJSON(base, "status", nil, timeout: 1.5)
+                let value = object["value"] as? [String: Any] ?? [:]
+                let ready = value["ready"] as? Bool ?? false
+                let message = value["message"] as? String ?? (ready ? "WDA 已就绪" : "WDA 已连接但未就绪")
+                if ready {
+                    if raw != configured { UserDefaults.standard.set(raw, forKey: "workbench.wdaURL") }
+                    wdaStatusCache = (raw, true, message, Date())
+                    return (true, message + "（(raw)）")
+                }
+                lastDetail = message
+            } catch { lastDetail = error.localizedDescription }
+        }
+        // A jailbreak install may have the runner registered but suspended.
+        // Wake only once per 10 seconds; never report success until the probe
+        // below observes ready=true.
+        if JailbreakFullAccessManager.shared.isJailbroken,
+           wdaAutoStartAttemptAt.map({ Date().timeIntervalSince($0) > 10 }) ?? true {
+            wdaAutoStartAttemptAt = Date()
+            for bundleID in ["com.facebook.WebDriverAgentRunner.xctrunner", "com.facebook.WebDriverAgentRunner"] {
+                _ = MinisDeviceBridge.openApplication(bundleID)
+            }
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            for raw in candidates {
+                guard let base = URL(string: raw) else { continue }
+                if let object = try? await wdaJSON(base, "status", nil, timeout: 1.5),
+                   let value = object["value"] as? [String: Any], value["ready"] as? Bool == true {
+                    UserDefaults.standard.set(raw, forKey: "workbench.wdaURL")
+                    wdaStatusCache = (raw, true, "WDA 已就绪（越狱服务自动唤醒）", Date())
+                    return (true, "WDA 已就绪（越狱服务自动唤醒）")
+                }
+            }
+        }
+        wdaStatusCache = (configured, false, lastDetail, Date())
+        return (false, lastDetail + (JailbreakFullAccessManager.shared.isJailbroken ? "；已自动扫描本机 WDA 端口并尝试唤醒服务" : "；已自动扫描默认端口"))
+    }
+
+    private func wdaCandidateURLs(configured: String) -> [String] {
+        var result = [configured]
+        if JailbreakFullAccessManager.shared.isJailbroken {
+            result += (8100...8103).map { "http://127.0.0.1:\($0)" }
+            result += ["http://127.0.0.1:9001", "http://localhost:8100"]
+        }
+        var seen = Set<String>()
+        return result.filter { seen.insert($0).inserted }
     }
 
     /// Generate an auditable setup artifact and instructions for a developer-
@@ -323,7 +383,7 @@ enum WorkbenchError: LocalizedError {
             let data = try handle.read(upToCount: 262144) ?? Data()
             return String(data: data, encoding: .utf8) ?? "二进制文件（前 \(data.count) 字节）：\(data.base64EncodedString())"
         case "wda_status":
-            let result = await wdaStatus()
+            let result = await wdaStatus(force: true)
             return try String(data: JSONSerialization.data(withJSONObject: ["reachable": result.reachable, "detail": result.detail, "url": UserDefaults.standard.string(forKey: "workbench.wdaURL") ?? ""], options: [.prettyPrinted, .sortedKeys]), encoding: .utf8) ?? "{}"
         case "prepare_wda":
             return try prepareWDAInstall()
@@ -346,8 +406,8 @@ enum WorkbenchError: LocalizedError {
         guard let base = URL(string: raw), ["http","https"].contains(base.scheme ?? "") else { throw WorkbenchError.unavailable("WebDriverAgent 地址无效") }
         return base
     }
-    func wdaJSON(_ base:URL,_ path:String,_ body:[String:Any]?=nil) async throws -> [String:Any] {
-        var request=URLRequest(url:base.appendingPathComponent(path)); request.timeoutInterval=15
+    func wdaJSON(_ base:URL,_ path:String,_ body:[String:Any]?=nil, timeout: TimeInterval = 15) async throws -> [String:Any] {
+        var request=URLRequest(url:base.appendingPathComponent(path)); request.timeoutInterval=timeout
         if let body { request.httpMethod="POST"; request.setValue("application/json",forHTTPHeaderField:"Content-Type"); request.httpBody=try JSONSerialization.data(withJSONObject:body) }
         let data:Data; let response:URLResponse
         do { (data,response)=try await URLSession.shared.data(for:request) }
