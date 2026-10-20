@@ -10,7 +10,42 @@ enum RuntimeEfficiency {
     static var underPressure:Bool {
         thermal && (ProcessInfo.processInfo.thermalState == .serious || ProcessInfo.processInfo.thermalState == .critical || ProcessInfo.processInfo.isLowPowerModeEnabled)
     }
-    static var toolConcurrency:Int { underPressure ? 1 : (thermal ? 4 : 10) }
+    /// Keep the fast defaults aggressive while retaining a hard thermal/low-
+    /// power brake.  The old fixed value of four made normal-temperature
+    /// fan-out needlessly serial on newer devices.  This is deliberately a
+    /// computed value so a temperature transition takes effect on the next
+    /// batch without restarting the app.
+    static var toolConcurrency:Int {
+        if underPressure { return 1 }
+        if thermal { return fast ? 6 : 4 }
+        return fast ? 10 : 8
+    }
+
+    /// Child sessions have a separate cap because a parent session already
+    /// owns a SessionConcurrencyManager slot.  Raising this only in fast mode
+    /// improves fan-out latency without allowing an unbounded task storm.
+    static var childConcurrency:Int {
+        if underPressure { return 1 }
+        if thermal { return fast ? 4 : 3 }
+        return fast ? 6 : 4
+    }
+
+    /// Polling is only a fallback for child sessions that do not emit a
+    /// completion notification.  Shorter intervals make the fast path feel
+    /// immediate; pressure mode keeps the old interval to avoid wakeups.
+    static var childPollNanoseconds: UInt64 {
+        if underPressure { return 500_000_000 }
+        if thermal { return fast ? 250_000_000 : 400_000_000 }
+        return fast ? 150_000_000 : 250_000_000
+    }
+
+    /// Per-turn fan-out guard.  It tracks the same safety envelope as the
+    /// running-child cap so queued work remains bounded on older phones.
+    static var childTurnLimit:Int {
+        if underPressure { return 2 }
+        if thermal { return fast ? 4 : 3 }
+        return fast ? 5 : 4
+    }
     static var decorativeAnimations:Bool { !thermal && !underPressure }
     static var prompt:String {
         fast ? "\n\nExecution preference: minimize latency. Batch related file reads and independent checks; reuse confirmed tool paths, warm MCP sessions and existing SDKs. Use the connected Windows computer for CPU-heavy builds/analysis when appropriate; transfer only needed files. Give concise progress and results. Do not repeatedly run full diagnostics. Preserve required validation and report actual failures; do not trade correctness for speed or assume a remote connection is available." : ""
@@ -28,7 +63,7 @@ struct RuntimeEfficiencyView:View {
             }
             Section(header:Text("温控与省电")) {
                 Toggle("自适应温控（建议开启）",isOn:$thermal)
-                Text("减少逐字淡入和资源采样；正常温度最多 4 项工具并发，高温或低电量模式降为 1 项，新任务排队而不丢弃。流式显示适度合并，结束时完整刷新。编译/逆向优先使用已连接电脑。").font(.caption)
+                Text("减少逐字淡入和资源采样；快速模式在正常温度最多 \(RuntimeEfficiency.toolConcurrency) 项工具、\(RuntimeEfficiency.childConcurrency) 个子代理并发，高温或低电量模式降为 1 项，新任务排队而不丢弃。流式显示适度合并，结束时完整刷新。编译/逆向优先使用已连接电脑。").font(.caption)
                 Text("持续 CPU 工作、充电、第三方高刷插件和环境温度仍会影响发热；本设置不关闭前台任务或后台音频，也不保证手机完全不热。").font(.caption).foregroundColor(.secondary)
             }
         }.navigationTitle("提速与温控")

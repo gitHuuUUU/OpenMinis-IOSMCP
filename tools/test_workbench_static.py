@@ -134,6 +134,18 @@ class WorkbenchContracts(unittest.TestCase):
         self.assertEqual(len(manifest['included']),126)
         self.assertFalse((ROOT/'src/ios/BundledSkills/local-redteam-jailbreak-detail-pack').exists())
 class EfficiencyContracts(unittest.TestCase):
+    def test_adaptive_fast_concurrency_and_child_polling(self):
+        workbench = read('src/ios/Workbench.swift')
+        self.assertIn('static var childConcurrency:Int', workbench)
+        self.assertIn('static var childPollNanoseconds: UInt64', workbench)
+        self.assertIn('if underPressure { return 1 }', workbench)
+        self.assertIn('static var childTurnLimit:Int', workbench)
+        helper = read('src/ios/Agent/Jobs/HelperRunner.swift')
+        self.assertIn('RuntimeEfficiency.childPollNanoseconds', helper)
+        self.assertIn('RuntimeEfficiency.childTurnLimit', helper)
+        registry = read('src/ios/Agent/Jobs/AgentJobRegistry.swift')
+        self.assertIn('RuntimeEfficiency.childConcurrency', registry)
+
     def test_thermal_preserves_tool_results(self):
         code=read('src/ios/Agent/Chat/AIChatViewModel.swift')
         self.assertIn('min(Self.maxConcurrentTools, RuntimeEfficiency.toolConcurrency)',code)

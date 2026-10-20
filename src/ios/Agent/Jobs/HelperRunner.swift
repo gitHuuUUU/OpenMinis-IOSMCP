@@ -306,7 +306,7 @@ extension AIChatViewModel {
             + "Stop investigating now and spend what is left on finishing: if the task asked you to write a file or produce an artifact, do it in the next round, then write your final answer. "
             + "Remember the final message must contain the complete deliverable itself, not a pointer to it."
     }
-    static let helperMaxPerAssistantTurn = 3
+    static var helperMaxPerAssistantTurn: Int { RuntimeEfficiency.childTurnLimit }
     /// [T-sub-agents-queue] Marker put into a queued delegation's args so the
     /// re-entry knows the per-turn allowance has already been served.
     static let queuedReentryKey = "__from_queue"
@@ -572,7 +572,7 @@ extension AIChatViewModel {
                                                             status: info?.toolStatus ?? "",
                                                             elapsed: Date().timeIntervalSince(startedAt)))
             }
-            try? await Task.sleep(nanoseconds: 500_000_000)
+            try? await Task.sleep(nanoseconds: RuntimeEfficiency.childPollNanoseconds)
         }
         if Task.isCancelled, child.isProcessing {
             child.cancel()

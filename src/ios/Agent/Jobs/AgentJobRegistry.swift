@@ -274,7 +274,7 @@ final class AgentJobRegistry: ObservableObject {
     /// Helpers do not take `SessionConcurrencyManager` slots — a parent that
     /// is awaiting its helper holds one, so routing helpers through the same
     /// pool of 5 could deadlock every parent behind its own children.
-    static let maxConcurrentChildJobs = 3
+    static var maxConcurrentChildJobs: Int { RuntimeEfficiency.childConcurrency }
 
     /// [T-sub-agents-queue] Delegations that arrived while all slots were busy.
     ///
