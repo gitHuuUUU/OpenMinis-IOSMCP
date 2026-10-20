@@ -10,10 +10,14 @@ import threading
 ROOT=Path(__file__).resolve().parents[1]
 source=(ROOT/'src/ios/Workbench.swift').read_text(encoding='utf-8')
 # Keep the production WDA status gate in the fixture as well as the HTTP
-# transport helpers.  Previously extraction started at wdaBase(), which
-# silently omitted wdaStatus() and made the CI fixture fail to compile even
-# though the app source was valid.
-methods='    func wdaStatus() async -> (reachable: Bool, detail: String) {'+source.split('    func wdaStatus() async -> (reachable: Bool, detail: String) {',1)[1].split('    func run(',1)[0]
+# transport helpers.  Extract only the WDA methods: including `tool()` would
+# pull in the complete device-workbench model and make this focused fixture
+# depend on unrelated app types.
+status_start='    func wdaStatus() async -> (reachable: Bool, detail: String) {'
+status_methods=status_start+source.split(status_start,1)[1].split('    /// Generate an auditable setup artifact',1)[0]
+transport_start='    func wdaBase() throws -> URL {'
+transport_methods=transport_start+source.split(transport_start,1)[1].split('    func run(',1)[0]
+methods=status_methods+transport_methods
 calls=[]
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self,*_): pass
@@ -54,6 +58,8 @@ enum MinisDeviceBridge { static func openApplication(_ bundleID:String)->Bool { 
 @MainActor final class DeviceWorkbench {
  let fm=FileManager.default
  var root:URL { fm.temporaryDirectory.appendingPathComponent("minis-wda-fixture") }
+ var wdaStatusCache: (url:String, reachable:Bool, detail:String, at:Date)?
+ var wdaAutoStartAttemptAt: Date?
 '''
 post='''
 }
