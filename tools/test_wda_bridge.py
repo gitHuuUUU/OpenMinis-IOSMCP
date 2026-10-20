@@ -48,6 +48,9 @@ server=http.server.ThreadingHTTPServer(('127.0.0.1',0),Handler)
 threading.Thread(target=server.serve_forever,daemon=True).start()
 pre='''import Foundation
 enum WorkbenchError:Error { case unavailable(String) }
+final class FakeJailbreakFullAccessManager { static let shared=FakeJailbreakFullAccessManager(); var isJailbroken=false }
+enum JailbreakFullAccessManager { static let shared=FakeJailbreakFullAccessManager() }
+enum MinisDeviceBridge { static func openApplication(_ bundleID:String)->Bool { false } }
 @MainActor final class DeviceWorkbench {
  let fm=FileManager.default
  var root:URL { fm.temporaryDirectory.appendingPathComponent("minis-wda-fixture") }
