@@ -1,5 +1,5 @@
 """Exercise the production Objective-C reader with real stored RAR4 bytes on macOS."""
-import pathlib, shutil, struct, subprocess, tempfile, zlib
+import binascii, pathlib, shutil, struct, subprocess, tempfile, zlib
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 def header(kind, flags, payload=b"", extra=b""):
@@ -24,19 +24,32 @@ def main():
         (d/"traversal.rar").write_bytes(rar([("../escape.md", b"no")]))
         (d/"duplicate.rar").write_bytes(rar([("x.md", b"one"), ("X.md", b"two")]))
         (d/"broken.rar").write_bytes(b"not an archive")
+        fixtures = ROOT/"deps/ish/deps/libarchive/libarchive/test"
+        for mode in ["stored", "compressed"]:
+            lines = (fixtures/("test_read_format_rar5_" + mode + ".rar.uu")).read_bytes().splitlines()
+            start = next(i for i,line in enumerate(lines) if line.startswith(b"begin ")) + 1
+            data = bytearray()
+            for line in lines[start:]:
+                if line == b"end": break
+                data.extend(binascii.a2b_uu(line))
+            (d/("rar5-"+mode+".rar")).write_bytes(data)
         (d/"main.m").write_text(r'''#import <Foundation/Foundation.h>
 #import "WorkbenchBridge.h"
 int main(int argc, char **argv) { @autoreleasepool {
     NSString *root = [NSString stringWithUTF8String:argv[1]];
-    for (NSString *name in @[@"valid", @"traversal", @"duplicate", @"broken"]) {
+    for (NSString *name in @[@"valid", @"traversal", @"duplicate", @"broken", @"rar5-stored", @"rar5-compressed"]) {
         NSError *error = nil;
         NSData *data = [NSData dataWithContentsOfFile:[root stringByAppendingPathComponent:[name stringByAppendingString:@".rar"]]];
         NSDictionary *files = [MinisDeviceBridge readRAR:data error:&error];
         if ([name isEqualToString:@"valid"]) {
             if (error || ![files[@"instructions.md"] isEqualToData:[@"Use concise summaries." dataUsingEncoding:NSUTF8StringEncoding]]) return 1;
+        } else if ([name hasPrefix:@"rar5-"]) {
+            if (error || !files.count) return 3;
+            if ([name isEqualToString:@"rar5-stored"] && ![files[@"helloworld.txt"] isEqualToData:[@"hello libarchive test suite!\n" dataUsingEncoding:NSUTF8StringEncoding]]) return 4;
+            if ([name isEqualToString:@"rar5-compressed"] && [files[@"test.bin"] length] != 1200) return 5;
         } else if (files || !error) return 2;
     }
-    puts("Native RAR4 reader: success, traversal, duplicate, corrupt fixtures PASSED (not iPhone)");
+    puts("Native RAR4/5 reader: success, compressed, traversal, duplicate, corrupt fixtures PASSED (not iPhone)");
 } return 0; }
 ''', encoding="utf8")
         subprocess.run(["xcrun", "clang", "-fobjc-arc", "-I"+prefix+"/include", "-I"+str(ROOT/"src/ios"), str(ROOT/"src/ios/WorkbenchBridge.m"), str(d/"main.m"), "-L"+prefix+"/lib", "-larchive", "-framework", "Foundation", "-o", str(d/"rar-tests")], check=True)

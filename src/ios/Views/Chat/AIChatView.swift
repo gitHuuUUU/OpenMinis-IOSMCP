@@ -2965,7 +2965,9 @@ struct AIChatView: View {
                     .background(LegacyTranscriptScrollProbe { near, interacting in
                         if legacyScrollInteracting != interacting {
                             legacyScrollInteracting = interacting
-                            vm.setStreamingUIUpdatesSuspended(interacting)
+                            if interacting || (!vm.isTransitionSuspended && UIApplication.shared.applicationState == .active) {
+                                vm.setStreamingUIUpdatesSuspended(interacting)
+                            }
                         }
                         if interacting { legacyFollowBottom = false }
                         else if near { legacyFollowBottom = true }
@@ -2988,7 +2990,11 @@ struct AIChatView: View {
                     legacyFollowBottom=false
                     if let first=legacyVisibleMessages.first { proxy.scrollTo(first.id,anchor:.top) }
                 }
-                .onDisappear { vm.setStreamingUIUpdatesSuspended(false) }
+                .onDisappear {
+                    if !vm.isTransitionSuspended && UIApplication.shared.applicationState == .active {
+                        vm.setStreamingUIUpdatesSuspended(false)
+                    }
+                }
                 .onChange(of:vm.messages.count) { _ in
                     if legacyHistoryStart == nil { legacyHistoryStart = legacyVisibleMessages.first?.id }
                     if legacyFollowBottom && !legacyScrollInteracting { proxy.scrollTo("legacy-bottom",anchor:.bottom) } }
