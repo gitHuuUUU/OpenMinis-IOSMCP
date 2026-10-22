@@ -79,7 +79,7 @@ struct ExtensionPreview: Identifiable, Sendable {
                     throw ExtensionPackageReader.fail("请使用 HTTPS 下载入口")
                 }
                 let markdown = url.pathExtension.lowercased() == "md"
-                guard markdown || url.pathExtension.lowercased() == "zip" else { throw ExtensionPackageReader.fail("只接受 .zip 扩展包或 .md 追加指令文件") }
+                guard markdown || ["zip", "rar"].contains(url.pathExtension.lowercased()) else { throw ExtensionPackageReader.fail("只接受 .zip / .rar 扩展包或 .md 追加指令文件") }
                 let limit = markdown ? ExtensionPackageReader.maxInstructionBytes : ExtensionPackageReader.maxBytes
                 let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? Int.max
                 guard size <= limit else { throw ExtensionPackageReader.fail(markdown ? "MD 超过 64000 字节，未读取" : "ZIP 超过 50 MB，未读取") }
@@ -88,6 +88,14 @@ struct ExtensionPreview: Identifiable, Sendable {
                 let bytes = try handle.read(upToCount: limit + 1) ?? Data()
                 guard bytes.count <= limit else { throw ExtensionPackageReader.fail("读取时文件大小已超过上限，已中止") }
                 if markdown { return try Self.stagePackage(ExtensionPackageReader.markdown(bytes, filename: url.lastPathComponent, currentVersion: currentVersion)) }
+                if url.pathExtension.lowercased() == "rar" {
+                    #if os(iOS)
+                    let files = try MinisDeviceBridge.readRAR(bytes)
+                    return try Self.stagePackage(ExtensionPackageReader.readCompatibleFiles(files, filename: url.lastPathComponent, currentVersion: currentVersion))
+                    #else
+                    throw ExtensionPackageReader.fail("RAR 原生解码需要 iOS 构建")
+                    #endif
+                }
                 return try Self.stagePackage(ExtensionPackageReader.readCompatible(bytes, filename: url.lastPathComponent, currentVersion: currentVersion))
             }.value
             host.audit("preview", name: preview.package.manifest.name, success: true)

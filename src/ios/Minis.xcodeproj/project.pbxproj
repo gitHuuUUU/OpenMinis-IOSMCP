@@ -3691,6 +3691,10 @@
 					"-lish_emu",
 					"-lish",
 					"-lfakefs",
+                    "-lminisarchive",
+                    "-lz",
+                    "-liconv",
+                    "-lbz2",
 				);
 				OTHER_SWIFT_FLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.app;
@@ -3747,6 +3751,10 @@
 					"-lish_emu",
 					"-lish",
 					"-lfakefs",
+                    "-lminisarchive",
+                    "-lz",
+                    "-liconv",
+                    "-lbz2",
 				);
 				OTHER_SWIFT_FLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.app;

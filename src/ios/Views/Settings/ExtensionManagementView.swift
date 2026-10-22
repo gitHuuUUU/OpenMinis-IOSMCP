@@ -12,7 +12,7 @@ struct ExtensionManagementView: View {
     var body: some View {
         List {
             Section {
-                Button { picker = true } label: { Label("导入 ZIP / MD 扩展", systemImage: "square.and.arrow.down") }
+                Button { picker = true } label: { Label("导入 ZIP / RAR / MD 扩展", systemImage: "square.and.arrow.down") }
                     .disabled(store.busy)
                 if store.busy { ProgressView("正在校验与准备预览…") }
                 TextField("或输入 HTTPS ZIP 下载链接", text: $remoteURL).autocapitalization(.none).keyboardType(.URL)
@@ -23,7 +23,7 @@ struct ExtensionManagementView: View {
                         catch { errorText = error.localizedDescription; showError = true }
                     }
                 }.disabled(store.busy || remoteURL.isEmpty)
-                Text("MD（最多 64000 字节）自动生成包信息，预览确认后作为追加指令；不是自动执行技能。ZIP 支持标准 manifest 包、普通 SKILL.md 技能包及纯 Markdown 文档包；会先生成预览，含脚本的资料包仍不能作为纯指令导入。ZIP 与解压内容均限 50 MB、\(ExtensionPackageReader.maxFiles) 项（含目录），仍不允许可执行文件。")
+                Text("MD（最多 64000 字节）自动生成包信息，预览确认后作为追加指令；不是自动执行技能。ZIP / RAR 支持标准 manifest 包、普通 SKILL.md 技能包及纯 Markdown 文档包；会先生成预览，含脚本的资料包仍不能作为纯指令导入。ZIP 与解压内容均限 50 MB、\(ExtensionPackageReader.maxFiles) 项（含目录），仍不允许可执行文件。")
                     .font(.footnote).foregroundColor(.secondary)
             }
             Section(header: Text("已安装 · 拖动调整加载顺序（后者优先）")) {
@@ -43,7 +43,7 @@ struct ExtensionManagementView: View {
         }
         .navigationTitle("扩展包")
         .toolbar { EditButton() }
-        .fileImporter(isPresented: $picker, allowedContentTypes: [.zip, UTType(filenameExtension: "md") ?? .plainText], allowsMultipleSelection: false) { result in
+        .fileImporter(isPresented: $picker, allowedContentTypes: [.zip, UTType(filenameExtension: "rar") ?? .data, UTType(filenameExtension: "md") ?? .plainText], allowsMultipleSelection: false) { result in
             switch result {
             case .success(let urls):
                 guard let url = urls.first else { return }

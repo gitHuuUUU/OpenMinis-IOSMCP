@@ -113,7 +113,22 @@ enum ExtensionPackageReader {
     /// Compatibility normalization is preview-only, not silent installation.
     static func readCompatible(_ data: Data, filename: String, currentVersion: String) throws -> ExtensionPackage {
         guard data.count <= maxBytes else { throw fail("ZIP 超过 50 MB") }
-        let original = try unzip(data)
+        return try readCompatibleFiles(unzip(data), filename: filename, currentVersion: currentVersion)
+    }
+
+    static func readCompatibleFiles(_ original: [String: Data], filename: String, currentVersion: String) throws -> ExtensionPackage {
+        // Apply the same bounded, declarative resource contract to every decoder.
+        guard original.count <= maxFiles else { throw fail("文件数量超过上限") }
+        var total = 0
+        for (path, body) in original {
+            total += body.count
+            let parts = path.split(separator: "/", omittingEmptySubsequences: false)
+            guard total <= maxBytes, !path.hasPrefix("/"), !path.contains("\\"), !path.contains(":"),
+                  !parts.contains(".."), !parts.contains("."), !parts.contains(""),
+                  allowedExtensions.contains((path as NSString).pathExtension.lowercased()) else { throw fail("资源路径、类型或大小非法：" + path) }
+            let signatures: [[UInt8]] = [[0x4d,0x5a], [0x7f,0x45,0x4c,0x46], [0xcf,0xfa,0xed,0xfe], [0xfe,0xed,0xfa,0xcf], [0xca,0xfe,0xba,0xbe], [0x23,0x21]]
+            guard !signatures.contains(where: { body.starts(with: $0) }) else { throw fail("拒绝可执行文件：" + path) }
+        }
         if original.keys.contains(where: { $0 == "manifest.json" || $0.hasSuffix("/manifest.json") }) {
             return try validateFiles(original, currentVersion: currentVersion)
         }

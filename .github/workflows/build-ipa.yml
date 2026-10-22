@@ -125,6 +125,11 @@ jobs:
       - name: Build iSH kernel + fakefsify
         run: ./deps/build_ish.sh
 
+      - name: Build native RAR extension reader
+        run: |
+          python3 tools/test_rar_native.py
+          bash deps/build_extension_archive.sh
+
       - name: Prepare Alpine rootfs (prebuilt with IOS-MCP tooling)
         env:
           ALPINE_VER: ${{ env.ALPINE_VERSION }}
