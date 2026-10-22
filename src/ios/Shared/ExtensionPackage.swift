@@ -106,7 +106,50 @@ enum ExtensionPackageReader {
 
     static func read(_ data: Data, currentVersion: String) throws -> ExtensionPackage {
         guard data.count <= maxBytes else { throw fail("ZIP 超过 50 MB") }
-        var files = try unzip(data)
+        return try validateFiles(unzip(data), currentVersion: currentVersion)
+    }
+
+    /// Accept ordinary skill exports as well as manifest-based extensions.
+    /// Compatibility normalization is preview-only, not silent installation.
+    static func readCompatible(_ data: Data, filename: String, currentVersion: String) throws -> ExtensionPackage {
+        guard data.count <= maxBytes else { throw fail("ZIP 超过 50 MB") }
+        let original = try unzip(data)
+        if original.keys.contains(where: { $0 == "manifest.json" || $0.hasSuffix("/manifest.json") }) {
+            return try validateFiles(original, currentVersion: currentVersion)
+        }
+        let skillPaths = original.keys.filter { $0 == "SKILL.md" || $0.hasSuffix("/SKILL.md") }.sorted()
+        var files: [String: Data] = [:]
+        var contents: [String] = []
+        for skillPath in skillPaths {
+            let prefix = skillPath == "SKILL.md" ? "" : String(skillPath.dropLast("SKILL.md".count))
+            let label = URL(fileURLWithPath: prefix.isEmpty ? filename : String(prefix.dropLast())).lastPathComponent
+            let digest = SHA256.hash(data: Data(prefix.utf8)).prefix(4).map { String(format: "%02x", $0) }.joined()
+            let name = validateName(label) ? label : "skill-" + digest
+            for (path, body) in original where path.hasPrefix(prefix) {
+                let relative = String(path.dropFirst(prefix.count))
+                files["skills/" + name + "/" + relative] = body
+            }
+        }
+        if !skillPaths.isEmpty { contents.append("skills") }
+        // A documents-only export can serve as supplementary instructions.
+        if skillPaths.isEmpty {
+            let documents = original.keys.filter { $0.lowercased().hasSuffix(".md") }.sorted()
+            guard !documents.isEmpty else { throw fail("包内没有 manifest.json、SKILL.md 或 Markdown 文档") }
+            let body = try documents.map { path -> String in
+                guard let text = String(data: original[path]!, encoding: .utf8) else { throw fail("文档不是 UTF-8：" + path) }
+                return text
+            }.joined(separator: "\n\n")
+            files["instructions.md"] = Data(body.utf8)
+            contents.append("instructions")
+        }
+        let digest = SHA256.hash(data: Data(filename.utf8)).prefix(6).map { String(format: "%02x", $0) }.joined()
+        let manifest = ExtensionManifest(name: "import-" + digest, version: "1.0.0", description: "兼容导入：" + filename, author: "本地导入", minis_version: "*", contents: contents)
+        files["manifest.json"] = try JSONEncoder().encode(manifest)
+        return try validateFiles(files, currentVersion: currentVersion)
+    }
+
+    private static func validateFiles(_ input: [String: Data], currentVersion: String) throws -> ExtensionPackage {
+        var files = input
         // Common ZIPs wrap a valid package in one outer folder. Never invent a
         // manifest for arbitrary collections or silently discard their scripts.
         if files["manifest.json"] == nil {
@@ -223,7 +266,7 @@ enum ExtensionPackageReader {
                 guard expanded == 0 else { throw fail("目录含有数据") }
                 continue
             }
-            guard mode != 0x4000, ((u32(p+38) >> 16) & 0o111) == 0,
+            guard mode != 0x4000,
                   allowedExtensions.contains((name as NSString).pathExtension.lowercased()) else { throw fail("文件扩展名或可执行权限不允许：\(name)") }
             total += expanded
             guard total <= maxBytes else { throw fail("解压总大小超过 50 MB") }

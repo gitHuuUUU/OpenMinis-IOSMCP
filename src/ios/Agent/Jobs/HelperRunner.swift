@@ -524,7 +524,7 @@ extension AIChatViewModel {
         // the tool returns `running` so the parent can answer the user now,
         // and the helper's result arrives later as its own message.
         var finalStatus = "completed"
-        var tick = 0
+        var lastProgressUpdate = Date.distantPast
         var wrapUpAskedAt: Date? = nil
         var wrapUpToolStopped = false
         while child.isProcessing {
@@ -562,8 +562,9 @@ extension AIChatViewModel {
                                              title: displayTitle, startedAt: startedAt,
                                              msgIdx: msgIdx, blockIdx: blockIdx, converted: true)
             }
-            tick += 1
-            if tick % 2 == 0 {
+            // Faster completion detection must not double progress rendering.
+            if Date().timeIntervalSince(lastProgressUpdate) >= 1 {
+                lastProgressUpdate = Date()
                 syncHelperModel(job: job, child: child, toolUseId: toolUseId)
                 let info = SessionActivityTracker.shared.sessionToolInfo[childId]
                 writeParentBlock(msgIdx: msgIdx, blockIdx: blockIdx,

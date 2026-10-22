@@ -4711,7 +4711,8 @@ extension CollectionViewMessageListV3 {
         }
 
         func scrollToBottomNow(animated: Bool = false) {
-            guard let cv = viewController?.collectionView else { return }
+            guard let cv = viewController?.collectionView,
+                  !cv.isTracking, !cv.isDragging, !cv.isDecelerating else { return }
             // Sub-viewport overflow path: re-evaluate compensation, then pin.
             if applySubViewportCompensation(caller: "scrollToBottom") {
                 syncScrollFlags()

@@ -146,9 +146,26 @@ class EfficiencyContracts(unittest.TestCase):
         registry = read('src/ios/Agent/Jobs/AgentJobRegistry.swift')
         self.assertIn('RuntimeEfficiency.childConcurrency', registry)
 
+    def test_legacy_history_paging_and_scroll_ownership(self):
+        code = read('src/ios/Views/Chat/AIChatView.swift')
+        self.assertIn('legacyHistoryLimit = 40', code)
+        self.assertIn('ForEach(legacyVisibleMessages)', code)
+        self.assertIn('legacyHistoryStart', code)
+        self.assertIn('vm.setStreamingUIUpdatesSuspended(interacting)', code)
+        self.assertNotIn('DragGesture(minimumDistance:3)', code)
+        collection = read('src/ios/Agent/MessageList/CollectionViewMessageListV3.swift')
+        self.assertIn('!cv.isTracking, !cv.isDragging, !cv.isDecelerating', collection)
+
+    def test_child_progress_does_not_track_faster_poll_rate(self):
+        code = read('src/ios/Agent/Jobs/HelperRunner.swift')
+        self.assertIn('Date().timeIntervalSince(lastProgressUpdate) >= 1', code)
+        vm = read('src/ios/Agent/Chat/AIChatViewModel.swift')
+        self.assertIn('self.helperConfig == nil ? 10 : 2', vm)
+        self.assertIn('ProcessInfo.processInfo.thermalState == .nominal ? 6 : 4', read('src/ios/Workbench.swift'))
+
     def test_thermal_preserves_tool_results(self):
         code=read('src/ios/Agent/Chat/AIChatViewModel.swift')
-        self.assertIn('min(Self.maxConcurrentTools, RuntimeEfficiency.toolConcurrency)',code)
+        self.assertIn('min(Self.maxConcurrentTools, RuntimeEfficiency.toolConcurrency,',code)
         self.assertIn('for await pair in group',code)
         self.assertIn('for idx in 0..<toolEntries.count',code)
     def test_full_text_final_flush_retained(self):

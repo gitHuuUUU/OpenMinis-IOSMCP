@@ -182,6 +182,8 @@ struct AIChatView: View {
     /// [T-ios-crash-objectdestroy-composer-uaf] Relay for the composer's key
     /// callbacks. See `ComposerActionChannel`.
     @State private var composerActions = ComposerActionChannel()
+    @State private var legacyHistoryLimit = 40
+    @State private var legacyHistoryStart: UUID?
     @State private var legacyFollowBottom = true
     @State private var legacyScrollInteracting = false
 
@@ -2904,15 +2906,33 @@ struct AIChatView: View {
         }
     }
 
+    private var legacyVisibleMessages: ArraySlice<ChatMessage> {
+        if let id = legacyHistoryStart, let index = vm.messages.firstIndex(where: { $0.id == id }) {
+            return vm.messages[index...]
+        }
+        return vm.messages.suffix(legacyHistoryLimit)
+    }
+
     private var legacyMessagesArea: some View {
         GeometryReader { geometry in
             ScrollViewReader { proxy in
                 ScrollView {
-                    // iOS15 recycles an entire multi-screen assistant turn as one
-                    // lazy item. Keep measured history mounted to avoid blank
-                    // gaps/height estimates and repeated Markdown reconstruction.
+                    // Keep measured rows stable on iOS 15, but do not mount the
+                    // entire persisted transcript on entry. Older records are
+                    // explicitly paged in without deleting history or context.
                     VStack(alignment:.leading,spacing:20) {
-                        ForEach(vm.messages) { message in
+                        if vm.messages.count > legacyVisibleMessages.count {
+                            Button("加载更早的 40 条记录") {
+                                let anchor = legacyVisibleMessages.first?.id
+                                legacyFollowBottom = false
+                                legacyHistoryLimit = legacyVisibleMessages.count + 40
+                                legacyHistoryStart = vm.messages.suffix(legacyHistoryLimit).first?.id
+                                DispatchQueue.main.async {
+                                    if let anchor { proxy.scrollTo(anchor, anchor: .top) }
+                                }
+                            }.frame(maxWidth: .infinity)
+                        }
+                        ForEach(legacyVisibleMessages) { message in
                             ChatMessageRow(
                                 message:message,
                                 trackWindowPosition:false,
@@ -2943,19 +2963,18 @@ struct AIChatView: View {
                     // Attach to the persistent content container, not a lazy
                     // first/last row that can be unmounted while reading.
                     .background(LegacyTranscriptScrollProbe { near, interacting in
-                        if legacyScrollInteracting != interacting { legacyScrollInteracting = interacting }
+                        if legacyScrollInteracting != interacting {
+                            legacyScrollInteracting = interacting
+                            vm.setStreamingUIUpdatesSuspended(interacting)
+                        }
                         if interacting { legacyFollowBottom = false }
                         else if near { legacyFollowBottom = true }
                         let shouldFollow = near && !interacting
                         if vm.isNearBottom != shouldFollow { vm.isNearBottom = shouldFollow }
                     }.frame(width:0,height:0),alignment:.topLeading)
                 }
+                .onAppear { legacyHistoryStart = legacyVisibleMessages.first?.id }
                 .coordinateSpace(name:"legacyTranscript")
-                .simultaneousGesture(DragGesture(minimumDistance:3).onChanged { _ in
-                    if legacyFollowBottom { legacyFollowBottom=false }
-                    if !legacyScrollInteracting { legacyScrollInteracting=true }
-                    if vm.isNearBottom { vm.isNearBottom=false }
-                }.onEnded { _ in legacyScrollInteracting=false })
                 .minisScrollDismissesKeyboard(.interactively)
                 .onReceive(vm.forceScrollToBottom) { _ in
                     guard !legacyScrollInteracting else { return }
@@ -2965,8 +2984,14 @@ struct AIChatView: View {
                 .onReceive(vm.scrollToBottomSignal) { _ in
                     if legacyFollowBottom && !legacyScrollInteracting { proxy.scrollTo("legacy-bottom",anchor:.bottom) }
                 }
-                .onReceive(vm.forceScrollToTop) { _ in legacyFollowBottom=false; if let first=vm.messages.first { proxy.scrollTo(first.id,anchor:.top) } }
-                .onChange(of:vm.messages.count) { _ in if legacyFollowBottom && !legacyScrollInteracting { proxy.scrollTo("legacy-bottom",anchor:.bottom) } }
+                .onReceive(vm.forceScrollToTop) { _ in
+                    legacyFollowBottom=false
+                    if let first=legacyVisibleMessages.first { proxy.scrollTo(first.id,anchor:.top) }
+                }
+                .onDisappear { vm.setStreamingUIUpdatesSuspended(false) }
+                .onChange(of:vm.messages.count) { _ in
+                    if legacyHistoryStart == nil { legacyHistoryStart = legacyVisibleMessages.first?.id }
+                    if legacyFollowBottom && !legacyScrollInteracting { proxy.scrollTo("legacy-bottom",anchor:.bottom) } }
             }
         }
     }

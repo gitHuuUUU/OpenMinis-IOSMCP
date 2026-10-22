@@ -17,7 +17,7 @@ enum RuntimeEfficiency {
     /// batch without restarting the app.
     static var toolConcurrency:Int {
         if underPressure { return 1 }
-        if thermal { return fast ? 6 : 4 }
+        if thermal { return fast && ProcessInfo.processInfo.thermalState == .nominal ? 6 : 4 }
         return fast ? 10 : 8
     }
 
@@ -26,7 +26,7 @@ enum RuntimeEfficiency {
     /// improves fan-out latency without allowing an unbounded task storm.
     static var childConcurrency:Int {
         if underPressure { return 1 }
-        if thermal { return fast ? 4 : 3 }
+        if thermal { return fast && ProcessInfo.processInfo.thermalState == .nominal ? 4 : 2 }
         return fast ? 6 : 4
     }
 

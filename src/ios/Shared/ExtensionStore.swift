@@ -88,7 +88,7 @@ struct ExtensionPreview: Identifiable, Sendable {
                 let bytes = try handle.read(upToCount: limit + 1) ?? Data()
                 guard bytes.count <= limit else { throw ExtensionPackageReader.fail("读取时文件大小已超过上限，已中止") }
                 if markdown { return try Self.stagePackage(ExtensionPackageReader.markdown(bytes, filename: url.lastPathComponent, currentVersion: currentVersion)) }
-                return try Self.stage(bytes, currentVersion: currentVersion)
+                return try Self.stagePackage(ExtensionPackageReader.readCompatible(bytes, filename: url.lastPathComponent, currentVersion: currentVersion))
             }.value
             host.audit("preview", name: preview.package.manifest.name, success: true)
             return preview

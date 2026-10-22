@@ -64,6 +64,11 @@ final class ExtensionHTTPFixture: URLProtocol {
                 check(test.valid, "Must reject " + test.file)
             } catch { check(!test.valid, "Unexpected rejection \(test.file): \(error)") }
         }
+        let loose = try ExtensionPackageReader.readCompatible(Data(contentsOf: root.appendingPathComponent("missing-manifest.zip")), filename: "notes.zip", currentVersion: "1.0")
+        check(loose.manifest.contents == ["instructions"], "Documents-only ZIP generates an instruction preview")
+        check(loose.files["instructions.md"] != nil, "Document ZIP has effective instructions")
+        let strict = try ExtensionPackageReader.readCompatible(Data(contentsOf: root.appendingPathComponent("valid.zip")), filename: "valid.zip", currentVersion: "1.0")
+        check(strict.manifest.name == "demo", "Manifest package retains identity and validation")
         let host = try FixtureHost(root.appendingPathComponent("work/skills"))
         let original = host.skillRoot.appendingPathComponent("example")
         try FileManager.default.createDirectory(at: original, withIntermediateDirectories: true)

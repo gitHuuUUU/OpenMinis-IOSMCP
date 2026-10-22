@@ -7675,7 +7675,7 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
                 var harvested = 0
                 for (idx, tu) in toolEntries.enumerated() {
                     // Rate-limit: hold here until we're below the in-flight cap.
-                    while added - harvested >= min(Self.maxConcurrentTools, RuntimeEfficiency.toolConcurrency) {
+                    while added - harvested >= min(Self.maxConcurrentTools, RuntimeEfficiency.toolConcurrency, self.helperConfig == nil ? 10 : 2) {
                         if let pair = await group.next() {
                             outcomesByIndex[pair.0] = pair.1
                             harvested += 1
