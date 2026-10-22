@@ -881,12 +881,20 @@ struct DevelopmentWorkbenchView: View {
     var body: some View {
         List {
             Section(header:Text("开发环境与诊断")) {
+                NavigationLink { MinisReDashboardView() } label: {
+                    Label("MinisRe 工作台总览", systemImage: "sparkles.rectangle.stack.fill")
+                }
                 NavigationLink("SDK 与多平台构建工作台") { MultiPlatformWorkbenchView() }
                 NavigationLink("内置终端") { ISHTerminalView(showCloseButton: true) }
                 NavigationLink("Tools · 基础与逆向工具") { List { Text("CoreTools：文件、网络与项目工具"); Text("ReverseTools：LLVM / binutils / GDB"); Text("Python：解释器及 pip"); Text("Frida：内置 ARM64/musl Python 模块与 CLI，实际启动验证"); Text("REA：固定版本 CLI、官方技能及 MCP；引擎另行检测") }.navigationTitle("Tools") }
                 ForEach(["Codex","Theos","CoreTools","ReverseTools","Python","Frida","REA"],id:\.self) { name in
                     NavigationLink { RuntimeComponentView(name:name) } label: {
-                        HStack { Text(name); Spacer(); Text(model.componentStatus[name] ?? "查看与安装").font(.caption).foregroundColor(.secondary) }
+                        HStack(spacing: 12) {
+                            Image(systemName: toolIcon(name)).font(.title3).foregroundStyle(toolColor(name)).frame(width: 26)
+                            VStack(alignment: .leading, spacing: 2) { Text(name); Text(model.componentStatus[name] ?? "查看与安装").font(.caption).foregroundColor(.secondary).lineLimit(1) }
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+                        }
                     }
                 }
                 Text("点击组件后在应用内安装。当前 Linux 工具运行于 iSH，并非原生 iOS 可执行文件；完整 iOS 编译需另备匹配 SDK/交叉编译器。").font(.caption).foregroundColor(.secondary)
@@ -920,6 +928,12 @@ struct DevelopmentWorkbenchView: View {
             }
         }.navigationTitle("开发环境与诊断")
         .onAppear { model.startComponentProbeIfNeeded() }
+    }
+    private func toolIcon(_ name: String) -> String {
+        switch name { case "Codex": return "brain.head.profile"; case "Theos": return "hammer"; case "CoreTools": return "shippingbox"; case "ReverseTools": return "viewfinder.circle"; case "Python": return "chevron.left.forwardslash.chevron.right"; case "Frida": return "ant.fill"; default: return "waveform.path.ecg" }
+    }
+    private func toolColor(_ name: String) -> Color {
+        switch name { case "Codex": return .blue; case "Theos": return .orange; case "CoreTools": return .green; case "ReverseTools": return .purple; case "Python": return .yellow; case "Frida": return .pink; default: return .teal }
     }
 }
 struct RuntimeComponentView: View {
