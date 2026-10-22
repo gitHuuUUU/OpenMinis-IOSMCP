@@ -116,6 +116,11 @@ jobs:
         run: |
           xcodebuild -downloadComponent MetalToolchain || echo "MetalToolchain download skipped (already present or unavailable)"
 
+      - name: Build native RAR extension reader
+        run: |
+          python3 tools/test_rar_native.py
+          bash deps/build_extension_archive.sh
+
       - name: Build LAME
         run: ./deps/build_lame.sh
 
@@ -124,11 +129,6 @@ jobs:
 
       - name: Build iSH kernel + fakefsify
         run: ./deps/build_ish.sh
-
-      - name: Build native RAR extension reader
-        run: |
-          python3 tools/test_rar_native.py
-          bash deps/build_extension_archive.sh
 
       - name: Prepare Alpine rootfs (prebuilt with IOS-MCP tooling)
         env:
