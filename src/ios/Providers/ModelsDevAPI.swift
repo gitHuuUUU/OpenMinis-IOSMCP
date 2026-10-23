@@ -6,6 +6,35 @@ private let logger = AppLogger(category: "ModelsDevAPI")
 /// Used as a fallback when a provider's /v1/models endpoint is unavailable,
 /// and as the source of truth for model capabilities (modality, context window, output limit).
 enum ModelsDevAPI {
+    struct PriceRow: Identifiable {
+        let provider: String
+        let providerName: String
+        let model: String
+        let name: String
+        let input: Double?
+        let output: Double?
+        let cacheRead: Double?
+        let cacheWrite: Double?
+        let context: Int?
+        var id: String { provider + "/" + model }
+    }
+
+    /// Exact catalog records, never family/prefix guesses. Relay providers may
+    /// charge differently; the UI calls these reference prices, not invoices.
+    static func priceCatalog() -> [PriceRow] {
+        guard let registry = loadRegistry() else { return [] }
+        return registry.flatMap { key, provider in
+            provider.models.values.map { model in
+                PriceRow(provider: key, providerName: provider.name ?? key,
+                         model: model.id, name: model.name ?? model.id,
+                         input: model.cost?.input, output: model.cost?.output,
+                         cacheRead: model.cost?.cache_read, cacheWrite: model.cost?.cache_write,
+                         context: model.limit?.context)
+            }
+        }.sorted { $0.id < $1.id }
+    }
+
+    static func refreshPriceCatalog() async -> Bool { await refreshFromNetwork() }
 
     private static let sourceURL = "https://models.dev/api.json"
     private static let cacheTTL: TimeInterval = 48 * 3600 // 48 hours
@@ -696,26 +725,29 @@ enum ModelsDevAPI {
         }
     }
 
-    private static func refreshFromNetwork() async {
+    @discardableResult
+    private static func refreshFromNetwork() async -> Bool {
         defer { isRefreshing = false }
         do {
-            guard let url = URL(string: sourceURL) else { return }
+            guard let url = URL(string: sourceURL) else { return false }
             var request = URLRequest(url: url)
             request.timeoutInterval = 15
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
                 logger.error("models.dev HTTP error: \((response as? HTTPURLResponse)?.statusCode ?? -1)")
-                return
+                return false
             }
             if let parsed = parseRegistry(data) {
                 cachedRegistry = parsed
                 cacheTimestamp = Date()
                 saveDiskCache(data)
                 logger.info("Background-refreshed models.dev registry: \(parsed.count) providers")
+                return true
             }
         } catch {
             logger.error("Failed to fetch models.dev: \(error.localizedDescription)")
         }
+        return false
     }
 
     private static func parseRegistry(_ data: Data) -> [String: ModelsDevProvider]? {
@@ -933,6 +965,8 @@ private struct ModelsDevLimit: Decodable {
 private struct ModelsDevCost: Decodable {
     let input: Double?
     let output: Double?
+    var cache_read: Double? = nil
+    var cache_write: Double? = nil
 }
 
 /// `interleaved` can be either a bool (`true`) or an object (`{"field": "reasoning_content"}`).

@@ -8148,6 +8148,14 @@ private struct SettingsSheet: View {
         NavigationView {
             List {
                 Section {
+                    NavigationLink { MinisReDashboardView() } label: {
+                        MinisReFeatureRow(title: "MinisRe 工作台", subtitle: "账号、用量、构建与诊断", icon: "square.grid.2x2.fill")
+                    }
+                    NavigationLink { MinisReAccountsView() } label: {
+                        MinisReFeatureRow(title: "AI 账号与费用", subtitle: "登录、计费币种和模型价格", icon: "person.crop.circle.fill", color: .purple)
+                    }
+                }
+                Section {
                     NavigationLink {
                         ProviderInstancesView()
                     } label: {

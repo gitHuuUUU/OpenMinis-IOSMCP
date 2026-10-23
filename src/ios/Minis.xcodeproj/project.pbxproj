@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C1795A80AF0FEF3A522DFA89 /* UsageCostPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46D446A53AC94337F89168AB /* UsageCostPolicy.swift */; };
+		3374BA281E3329D16EEF012F /* MinisReDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF29F1B98826853FFE2654CE /* MinisReDesignSystem.swift */; };
 		BC2026101600000000000001 /* BuildWorkbench.bundle in Resources */ = {isa = PBXBuildFile; fileRef = BC2026101600000000000002 /* BuildWorkbench.bundle */; };
 		AEFE6D0D52B54498B10A8F71 /* WorkbenchBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = C750EAE1C4194A9BBB57C7D9 /* WorkbenchBridge.m */; };
 		FFF8F8476EAD43AEACE06025 /* Workbench.swift in Sources */ = {isa = PBXBuildFile; fileRef = B821A73AC4F54A39B02503A1 /* Workbench.swift */; };
@@ -652,6 +654,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		46D446A53AC94337F89168AB /* UsageCostPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/UsageCostPolicy.swift; sourceTree = SOURCE_ROOT; };
+		DF29F1B98826853FFE2654CE /* MinisReDesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/MinisReDesignSystem.swift; sourceTree = SOURCE_ROOT; };
 		BC2026101600000000000002 /* BuildWorkbench.bundle */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.plug-in"; path = BuildWorkbench.bundle; sourceTree = SOURCE_ROOT; };
 		5A71E40627414A22AC4433B5 /* WorkbenchBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WorkbenchBridge.h; sourceTree = "<group>"; };
 		C750EAE1C4194A9BBB57C7D9 /* WorkbenchBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WorkbenchBridge.m; sourceTree = "<group>"; };
@@ -1552,6 +1556,8 @@
 				5A71E40627414A22AC4433B5 /* WorkbenchBridge.h */,
 				C750EAE1C4194A9BBB57C7D9 /* WorkbenchBridge.m */,
 				B821A73AC4F54A39B02503A1 /* Workbench.swift */,
+				46D446A53AC94337F89168AB /* UsageCostPolicy.swift */,
+				DF29F1B98826853FFE2654CE /* MinisReDesignSystem.swift */,
 				EEC9C0A48BC846C6A969ABAF /* WorkspaceSearchView.swift */,
 				EACB9CC1250D45F3ACAAD86E /* ExpertLibraryView.swift */,
 				0BB791C8D31D4139B47B8471 /* ExpertProfileStore.swift */,
@@ -2872,6 +2878,8 @@
 				E51000001 /* MinisApp.swift in Sources */,
 				AEFE6D0D52B54498B10A8F71 /* WorkbenchBridge.m in Sources */,
 				FFF8F8476EAD43AEACE06025 /* Workbench.swift in Sources */,
+				C1795A80AF0FEF3A522DFA89 /* UsageCostPolicy.swift in Sources */,
+				3374BA281E3329D16EEF012F /* MinisReDesignSystem.swift in Sources */,
 				5E42CA4D55E34F979003E0DD /* WorkspaceSearchView.swift in Sources */,
 				378826C9912E4CA38B0CEABD /* ExpertLibraryView.swift in Sources */,
 				DB73D01A4A24432B88B64E89 /* ExpertProfileStore.swift in Sources */,

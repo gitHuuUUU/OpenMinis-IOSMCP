@@ -49,6 +49,9 @@ jobs:
       - name: Workbench source contract checks
         run: python3 tools/test_workbench_static.py
 
+      - name: Dashboard and production pricing regressions
+        run: python3 tools/test_dashboard.py --require-swift
+
       - name: Execute production skill disclosure regression
         run: python3 tools/test_skill_disclosure.py --require-swift
 

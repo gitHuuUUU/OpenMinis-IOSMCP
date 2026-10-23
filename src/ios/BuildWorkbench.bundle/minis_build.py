@@ -140,9 +140,38 @@ def validate_artifact(path,target):
             if target=='apk' and 'AndroidManifest.xml' not in names:raise RuntimeError('APK manifest missing')
             if target=='ipa' and not any(n.startswith('Payload/') and n.endswith('.app/Info.plist') for n in names):raise RuntimeError('IPA application metadata missing')
 
+PROTECTION_PASSES={'bcf','indcall','indgv','sobf','fla'}
+def protection_flags(args):
+    if getattr(args,'protection','normal')=='normal':return []
+    selected=getattr(args,'protection_passes','').split(',')
+    if not selected or any(p not in PROTECTION_PASSES for p in selected):
+        raise ValueError('Select supported protection passes: '+','.join(sorted(PROTECTION_PASSES)))
+    return [v for p in sorted(set(selected)) for v in ('-mllvm','-'+p)]
+
+def protection_status(args):
+    flags=protection_flags(args)
+    if not flags:return {'mode':'normal','status':'normal compilation; protection disabled'}
+    compiler=getattr(args,'protection_compiler','')
+    if not compiler or not shutil.which(compiler):
+        raise RuntimeError('Protection compiler unavailable: '+str(compiler)+'; stock clang is not substituted')
+    # Check the selected target, flags and compilation together. An accepted
+    # flag is evidence of compatibility, not a guarantee of obfuscation strength.
+    with tempfile.TemporaryDirectory(prefix='minis-protection-') as d:
+        source=pathlib.Path(d)/'probe.c';output=pathlib.Path(d)/'probe.o'
+        source.write_text('const char *s="minis-protection-probe"; int f(int x){return x>2?x+3:x-3;}\n')
+        p=subprocess.run([compiler,'--target=arm64-apple-ios'+getattr(args,'minimum','15.4'),'-O2',*flags,'-c',str(source),'-o',str(output)],capture_output=True,text=True,timeout=60)
+        if p.returncode!=0:raise RuntimeError('Protection capability probe failed: '+(p.stdout+p.stderr)[-4000:])
+        if not output.is_file():raise RuntimeError('Protection compiler produced no object')
+    return {'mode':'enhanced','compiler':compiler,'acceptedPasses':sorted(set(args.protection_passes.split(','))),
+            'status':'target compile probe passed; inspect production artifact separately'}
+
 def build(args):
     src=pathlib.Path(args.project).resolve();out=pathlib.Path(args.output).resolve();out.parent.mkdir(parents=True,exist_ok=True)
     if not src.exists():raise FileNotFoundError(src)
+    protected=getattr(args,'protection','normal')=='enhanced'
+    if protected and (args.remote or args.target!='dylib'):
+        raise RuntimeError('Enhanced mode currently supports local C/ObjC dylib compilation only; no silent normal-mode fallback')
+    protection=protection_status(args) if protected else None
     if args.remote:
         if not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.@:-]*',args.remote):raise ValueError('Use a configured SSH host alias, not options/commands')
         project_name='project'+src.suffix
@@ -163,7 +192,8 @@ def build(args):
         if not shutil.which('ld64.lld'):raise RuntimeError('Missing Mach-O linker ld64.lld; installing headers is not sufficient')
         files=[src] if src.is_file() else [*src.glob('*.c'),*src.glob('*.m'),*src.glob('*.mm'),*src.glob('*.cpp')]
         if not files:raise RuntimeError('No native source files')
-        run(['clang','--target=arm64-apple-ios'+args.minimum,'-isysroot',sdk,'-fuse-ld=lld','-dynamiclib',*files,'-framework','Foundation','-o',out])
+        compiler=args.protection_compiler if protected else 'clang'
+        run([compiler,'--target=arm64-apple-ios'+args.minimum,'-isysroot',sdk,'-fuse-ld=lld','-dynamiclib',*protection_flags(args),*files,'-framework','Foundation','-o',out])
     elif args.target=='deb':
         if not (src/'DEBIAN/control').is_file():raise RuntimeError('DEBIAN/control required')
         with tempfile.TemporaryDirectory(prefix='minis-deb-') as d:
@@ -231,15 +261,20 @@ def build(args):
             run([compiler,*files,'-o',out])
     if not out.is_file() or out.stat().st_size==0:raise RuntimeError('Build produced no artifact')
     validate_artifact(out,args.target)
-    return {'artifact':str(out),'bytes':out.stat().st_size,'sha256':sha(out),'status':'built; execution/device verification separate'}
+    return {'artifact':str(out),'bytes':out.stat().st_size,'sha256':sha(out),'protection':protection,'status':'built; execution/device verification separate'}
 def main():
     p=argparse.ArgumentParser();sub=p.add_subparsers(dest='action',required=True)
     sub.add_parser('doctor');sub.add_parser('sdk-status')
     install=sub.add_parser('install-sdk');install.add_argument('--sdk',choices=[i['version'] for i in sdk_catalog()],required=True)
     b=sub.add_parser('build');b.add_argument('--target',choices=['dylib','deb','ipa','apk','exe'],required=True);b.add_argument('--project',required=True);b.add_argument('--output',required=True);b.add_argument('--sdk',choices=['15.6','16.5','17.5','18.6'],default='16.5');b.add_argument('--minimum',default='15.4');b.add_argument('--remote',default='')
+    ps=sub.add_parser('protection-status')
+    for parser in (b,ps):
+        parser.add_argument('--protection',choices=['normal','enhanced'],default='normal')
+        parser.add_argument('--protection-compiler',default='/opt/minis-protection/bin/clang')
+        parser.add_argument('--protection-passes',default='bcf,sobf')
     args=p.parse_args()
     try:
-        result=doctor() if args.action=='doctor' else sdk_status() if args.action=='sdk-status' else install_sdk(args.sdk) if args.action=='install-sdk' else build(args)
+        result=doctor() if args.action=='doctor' else sdk_status() if args.action=='sdk-status' else install_sdk(args.sdk) if args.action=='install-sdk' else protection_status(args) if args.action=='protection-status' else build(args)
         print(json.dumps(result,ensure_ascii=False,indent=2))
     except Exception as e:print(json.dumps({'error':str(e),'status':'failed'},ensure_ascii=False),file=sys.stderr);sys.exit(1)
 if __name__=='__main__':main()

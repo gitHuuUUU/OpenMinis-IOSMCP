@@ -131,7 +131,7 @@ enum WorkbenchError: LocalizedError {
     @Published var diagnosticStarted: Date?
     @Published var diagnosticDuration: TimeInterval = 0
     @Published var desktopStatus = UserDefaults.standard.string(forKey:"desktop.lastStatus") ?? "尚未从手机检测连接"
-    private static let componentNames = ["Codex","Theos","CoreTools","ReverseTools","Python","Frida","REA"]
+    private static let componentNames = ["Codex","Theos","CoreTools","ReverseTools","BuildTools","Node.js","Python","Frida","REA"]
     private static let verifiedComponentsKey = "workbench.verifiedComponents"
     init() {
         UserDefaults.standard.register(defaults: [
@@ -185,6 +185,8 @@ enum WorkbenchError: LocalizedError {
             ("Theos","test -f /opt/theos/makefiles/common.mk && command -v make && command -v clang"),
             ("CoreTools","command -v bash && command -v curl && command -v git && command -v file"),
             ("ReverseTools","command -v llvm-objdump && command -v strings && command -v readelf"),
+            ("BuildTools","clang --version && ld64.lld --version && dpkg-deb --version"),
+            ("Node.js","node --version && npm --version"),
             ("Python","python3 --version && python3 -c 'import ssl,sqlite3,json'"),
             ("Frida","python3 /usr/local/lib/minis-frida/install.py status"),
             ("REA","python3 /usr/local/lib/minis-reverse-tools/rea_install.py status")
@@ -613,6 +615,8 @@ enum WorkbenchError: LocalizedError {
         case "CoreTools": command="apk add --no-cache bash curl wget git ca-certificates openssl tar unzip zip file coreutils findutils grep sed make perl; command -v git; curl --version; file --version"
         case "Python": command="apk add --no-cache python3 py3-pip; python3 --version; python3 -c 'import ssl,sqlite3,json'"
         case "ReverseTools": command="apk add --no-cache binutils llvm llvm-dev clang lld gdb; llvm-objdump --version; readelf --version"
+        case "BuildTools": command="set -e; apk add --no-cache clang lld llvm dpkg make; clang --version; ld64.lld --version; dpkg-deb --version"
+        case "Node.js": command="set -e; apk add --no-cache nodejs npm; node --version; npm --version"
         case "Theos": command="apk add --no-cache git make perl clang lld && (test -f /opt/theos/makefiles/common.mk || git clone --recursive --depth 1 https://github.com/theos/theos.git /opt/theos); test -f /opt/theos/makefiles/common.mk; make --version"
         case "Codex":
             // Download an actual musl build, not an iOS-incompatible macOS binary.
@@ -702,7 +706,9 @@ enum WorkbenchError: LocalizedError {
     }
     func buildWorkbench(_ args:[String:Any]) async throws -> String {
         let action=args["action"] as? String ?? "doctor"
+        let protection = UserDefaults.standard.string(forKey:"build.protection") ?? "normal"
         if action=="build", args["remote"] as? String == "windows" {
+            guard protection != "enhanced" else { throw WorkbenchError.unavailable("强化模式目前只接入手机本地 C/ObjC dylib 编译；Windows 不会静默回退普通模式") }
             guard let output=args["output"] as? String else { throw WorkbenchError.unavailable("缺少电脑输出路径") }
             let payload=try JSONSerialization.data(withJSONObject:args).base64EncodedString()
             let script="$a=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('"+payload+"')) | ConvertFrom-Json; & (Join-Path $env:USERPROFILE '.minis/minis-build.ps1') -Target $a.target -Project $a.project -Output $a.output -Sdk $a.sdk"
@@ -712,7 +718,7 @@ enum WorkbenchError: LocalizedError {
             _ = try await desktopTool(["action":"download","path":local,"remotePath":output])
             return built+"\n已下载到手机共享产物目录："+local
         }
-        guard ["doctor","sdk-status","install-sdk","build"].contains(action),
+        guard ["doctor","sdk-status","install-sdk","build","protection-status"].contains(action),
               let bundle=Bundle.main.url(forResource:"BuildWorkbench",withExtension:"bundle") else {
             throw WorkbenchError.unavailable("构建工作台资源或动作不可用")
         }
@@ -723,6 +729,11 @@ enum WorkbenchError: LocalizedError {
         }
         func quote(_ value:String)->String { "'"+value.replacingOccurrences(of:"'",with:"'\"'\"'")+"'" }
         var command="python3 /opt/minis-workbench/minis_build.py "+action
+        if action == "build" || action == "protection-status" {
+            command += " --protection " + quote(protection)
+            command += " --protection-compiler " + quote(UserDefaults.standard.string(forKey:"build.protectionCompiler") ?? "/opt/minis-protection/bin/clang")
+            command += " --protection-passes " + quote(UserDefaults.standard.string(forKey:"build.protectionPasses") ?? "bcf,sobf")
+        }
         if action=="install-sdk" {
             guard let value=args["sdk"] as? String, !value.isEmpty else { throw WorkbenchError.unavailable("缺少 SDK 版本") }
             command += " --sdk "+quote(value)
@@ -887,14 +898,9 @@ struct DevelopmentWorkbenchView: View {
                 NavigationLink("SDK 与多平台构建工作台") { MultiPlatformWorkbenchView() }
                 NavigationLink("内置终端") { ISHTerminalView(showCloseButton: true) }
                 NavigationLink("Tools · 基础与逆向工具") { List { Text("CoreTools：文件、网络与项目工具"); Text("ReverseTools：LLVM / binutils / GDB"); Text("Python：解释器及 pip"); Text("Frida：内置 ARM64/musl Python 模块与 CLI，实际启动验证"); Text("REA：固定版本 CLI、官方技能及 MCP；引擎另行检测") }.navigationTitle("Tools") }
-                ForEach(["Codex","Theos","CoreTools","ReverseTools","Python","Frida","REA"],id:\.self) { name in
+                ForEach(["Codex","Theos","CoreTools","ReverseTools","BuildTools","Node.js","Python","Frida","REA"],id:\.self) { name in
                     NavigationLink { RuntimeComponentView(name:name) } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: toolIcon(name)).font(.title3).foregroundStyle(toolColor(name)).frame(width: 26)
-                            VStack(alignment: .leading, spacing: 2) { Text(name); Text(model.componentStatus[name] ?? "查看与安装").font(.caption).foregroundColor(.secondary).lineLimit(1) }
-                            Spacer()
-                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
-                        }
+                        MinisReFeatureRow(title:name, subtitle:model.componentStatus[name] ?? "未检测 · 查看与安装", icon:toolIcon(name), color:toolColor(name))
                     }
                 }
                 Text("点击组件后在应用内安装。当前 Linux 工具运行于 iSH，并非原生 iOS 可执行文件；完整 iOS 编译需另备匹配 SDK/交叉编译器。").font(.caption).foregroundColor(.secondary)
@@ -902,6 +908,9 @@ struct DevelopmentWorkbenchView: View {
                 NavigationLink("Agent 配置") { HelperSettingsView() }
                 Button("合并本地调试 Agent") { model.importAgents(); status="已合并；原 Agent 保留" }
                 NavigationLink("运行诊断") { WorkbenchDiagnosticsView() }
+                NavigationLink { CompilationProtectionView() } label: {
+                    MinisReFeatureRow(title:"OLLVM 编译保护",subtitle:"检查自备前端 · 不把开关当作已安装",icon:"shield.lefthalf.filled",color:.purple)
+                }
                 NavigationLink("日志") { WorkbenchLogView() }
             }
             Section(header:Text("文件与应用调试权限")) {
@@ -930,7 +939,7 @@ struct DevelopmentWorkbenchView: View {
         .onAppear { model.startComponentProbeIfNeeded() }
     }
     private func toolIcon(_ name: String) -> String {
-        switch name { case "Codex": return "brain.head.profile"; case "Theos": return "hammer"; case "CoreTools": return "shippingbox"; case "ReverseTools": return "viewfinder.circle"; case "Python": return "chevron.left.forwardslash.chevron.right"; case "Frida": return "ant.fill"; default: return "waveform.path.ecg" }
+        switch name { case "Codex": return "terminal"; case "Theos": return "hammer"; case "CoreTools": return "shippingbox"; case "ReverseTools": return "wrench.and.screwdriver"; case "BuildTools": return "gearshape.2"; case "Node.js": return "cube"; case "Python": return "chevron.left.forwardslash.chevron.right"; case "Frida": return "ant.fill"; default: return "waveform.path.ecg" }
     }
     private func toolColor(_ name: String) -> Color {
         switch name { case "Codex": return .blue; case "Theos": return .orange; case "CoreTools": return .green; case "ReverseTools": return .purple; case "Python": return .yellow; case "Frida": return .pink; default: return .teal }
@@ -969,6 +978,7 @@ struct WorkbenchDiagnosticsView: View {
     @ObservedObject private var model = DeviceWorkbench.shared
     var body: some View {
         List {
+            Section { MinisReRuntimeCards() }
             Section {
                 Label(model.busy ? "正在检查核心能力" : (model.diagnosticInterrupted ? "检查已中断" : (model.results.isEmpty ? "等待检查" : "检查完成")),systemImage:model.busy ? "clock" : "stethoscope")
                 Text("\(model.results.filter(\.ok).count)/\(model.results.count) 项通过 · \(Int(model.diagnosticDuration)) 秒").font(.caption)
@@ -988,7 +998,17 @@ struct WorkbenchDiagnosticsView: View {
                 }
             }
         }.navigationTitle("运行诊断")
-        .toolbar { ToolbarItem(placement:.navigationBarTrailing) { Button("复制") { UIPasteboard.general.string=model.results.map { "\($0.pending ? "PENDING" : ($0.ok ? "PASS" : "FAIL")) \($0.name)\n\($0.detail)" }.joined(separator:"\n") } } }
+        .toolbar {
+            ToolbarItem(placement:.navigationBarTrailing) {
+                HStack {
+                    Menu {
+                        Button("复制诊断结果") { UIPasteboard.general.string=model.results.map { "\($0.pending ? "PENDING" : ($0.ok ? "PASS" : "FAIL")) \($0.name)\n\($0.detail)" }.joined(separator:"\n") }
+                        NavigationLink("查看日志") { WorkbenchLogView() }
+                    } label: { Image(systemName:"ellipsis.circle") }.accessibilityLabel("诊断操作")
+                    Button { model.startDiagnosis() } label: { Image(systemName:"arrow.clockwise") }.disabled(model.busy).accessibilityLabel("刷新诊断")
+                }
+            }
+        }
         .onAppear { model.startDiagnosis(onlyIfEmpty:true) }
     }
     private func diagnosticGroup(_ name:String)->String {
@@ -1016,6 +1036,7 @@ struct MultiPlatformWorkbenchView:View {
     var body:some View {
         Form {
             Section { NavigationLink("提速与温控",destination:RuntimeEfficiencyView()) }
+            Section { NavigationLink("编译保护",destination:CompilationProtectionView()) }
             Section(header:Text("按需下载 iOS SDK 15–18")) {
                 Text("选择一套 SDK 单独下载并安装到 Theos；下载后核对字节数和 SHA256。已有 SDK 不覆盖，四套归档均不随 IPA 携带；单次安装需要至少 2 GB 可用空间。SDK 不等于完整 Xcode。").font(.caption)
                 Picker("SDK 版本",selection:$sdk) { ForEach(["15.6","16.5","17.5","18.6"],id:\.self) { Text($0).tag($0) } }

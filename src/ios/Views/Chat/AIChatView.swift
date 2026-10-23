@@ -525,23 +525,7 @@ struct AIChatView: View {
             // Messages — floating tool preview overlaid at bottom
             messagesArea
                 .safeAreaInset(edge: .top, spacing: 0) {
-                    // Compact, non-blocking status strip inspired by the desktop
-                    // composer: it surfaces context pressure and active work
-                    // without adding a second navigation surface.
-                    let activeJobs = AgentJobRegistry.shared.jobs.values.filter { $0.state == .running || $0.state == .pending }.count
-                    if vm.contextUsageHint != nil || activeJobs > 0 {
-                        HStack(spacing: 8) {
-                            Image(systemName: activeJobs > 0 ? "person.3.sequence.fill" : "chart.bar.fill")
-                                .foregroundStyle(.blue)
-                            Text(activeJobs > 0 ? "Agent 协作中 · \(activeJobs) 个任务" : (vm.contextUsageHint?.text ?? "上下文已更新"))
-                                .font(.caption)
-                                .lineLimit(1)
-                            Spacer(minLength: 4)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(.ultraThinMaterial)
-                    }
+                    MinisReAgentStrip(session: vm.sessionId, context: vm.contextUsageHint?.text)
                     // Error banner
                     if let error = vm.errorMessage {
                         errorBanner(error)
