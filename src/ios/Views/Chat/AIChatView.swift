@@ -3454,33 +3454,13 @@ struct AIChatView: View {
         return AnyView(row)
     }
 
-    /// Separate horizontal row: avoids squeezing the attachment/expert/voice
-    /// hit targets on small phones. Uses the same pickers as the navigation bar.
+    // Model and thinking controls remain in the navigation bar/slash commands;
+    // no duplicate CPU/slider buttons in the composer.
     private var composerModelRow: some View {
-        HStack(spacing: 10) {
-            Button { inputFocused = false; showModelPicker = true } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "cpu")
-                    Image(systemName: "chevron.down").font(.system(size: 9))
-                }.font(.caption.weight(.medium)).padding(.horizontal, 10).padding(.vertical, 7)
-                    .background(Capsule().fill(ChatColors.inputIconBg))
-            }.buttonStyle(.plain).accessibilityLabel("选择当前模型")
-                .accessibilityValue(SessionModelDisplay(store: configStore, draftGroupId: vm.initialGroupId).displayName(for: vm.sessionId))
-            if !vm.availableThinkingLevels.isEmpty {
-                Menu {
-                    ForEach(vm.availableThinkingLevels, id: \.self) { level in
-                        Button(level.displayName) { vm.setThinkingLevel(level) }
-                    }
-                } label: {
-                    Image(systemName: "slider.horizontal.3")
-                        .font(.caption).padding(.horizontal, 10).padding(.vertical, 7)
-                        .background(Capsule().fill(ChatColors.inputIconBg))
-                }.accessibilityLabel("选择思考等级")
-                    .accessibilityValue(vm.currentThinkingLevel.displayName)
-            }
+        HStack {
             Spacer(minLength: 0)
             composerContextRow
-        }.foregroundStyle(ChatColors.secondaryText).padding(.horizontal, 12).padding(.top, 4)
+        }.padding(.horizontal, 12).padding(.top, 4)
     }
 
     private var composerContextRow: some View {

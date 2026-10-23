@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Offline, hash-verified Alpine packages and a locally built Hikari runtime."""
-import argparse, hashlib, json, os, pathlib, platform, shutil, subprocess, sys
+import argparse, hashlib, json, os, pathlib, platform, shutil, subprocess, sys, re, tarfile
 ROOT=pathlib.Path("/opt/minis-protection")
 def sha(path):
     with path.open("rb") as stream:return hashlib.file_digest(stream,"sha256").hexdigest()
@@ -44,6 +44,81 @@ def ensure(bundle):
             s=status()
             if s["installed"]:return s
     return install(bundle)
+def package_records(apks):
+    """Read signed-APK control metadata; apk still verifies signatures at install."""
+    records=[]
+    for path in apks:
+        with tarfile.open(path,"r:gz") as archive:
+            member=archive.getmember(".PKGINFO")
+            if not member.isfile() or member.size>1_048_576:raise ValueError("Invalid APK control metadata")
+            fields={}
+            for line in archive.extractfile(member).read().decode("utf-8").splitlines():
+                if " = " in line:
+                    key,value=line.split(" = ",1);fields.setdefault(key,[]).append(value)
+            if len(fields.get("pkgname",[]))!=1 or len(fields.get("pkgver",[]))!=1:raise ValueError("Missing APK package identity")
+            records.append({"name":fields["pkgname"][0],"version":fields["pkgver"][0],
+                            "provides":fields.get("provides",[]),"depends":fields.get("depend",[]),"path":path})
+    return records
+
+def installed_records(database):
+    records=[]
+    for block in database.split("\n\n"):
+        fields=dict(line.split(":",1) for line in block.splitlines() if line.startswith(("P:","V:","p:")))
+        if "P" in fields and "V" in fields:
+            records.append({"name":fields["P"],"version":fields["V"],"provides":fields.get("p","").split()})
+    return records
+
+def package_plan(available, installed, compare=None):
+    """Preserve installed ABI-compatible dependencies instead of pinning all APKs.
+
+    Passing the entire offline closure to apk pins every shared library by local
+    checksum, breaking existing curl -> libcurl exact-version pairs. Only roots
+    and genuinely missing/unsatisfied dependencies are explicit install targets.
+    A no-network apk simulation remains the final solver before any mutation.
+    """
+    if compare is None:compare=lambda a,b:command(["apk","version","-t",a,b],30)
+    def identity(value):
+        match=re.fullmatch(r"([^<>=~]+)([<>=~]*)(.*)",value)
+        if not match:raise ValueError("Invalid APK dependency: "+value)
+        return match.groups()
+    def matches(record, requirement):
+        name,op,wanted=identity(requirement)
+        offers=[record["name"]+"="+record["version"],*record.get("provides",[])]
+        for offer in offers:
+            key,_,version=identity(offer)
+            if key!=name:continue
+            if not op:return True
+            if not version:continue
+            result=compare(version,wanted)
+            if op=="=" and result=="=":return True
+            if op==">=" and result in (">","="):return True
+            if op=="<=" and result in ("<","="):return True
+            if op==">" and result==">":return True
+            if op=="<" and result=="<":return True
+        return False
+    chosen={};pending=[]
+    # These exact compiler builds match the bundled LLVM pass ABI. Python is
+    # already running this installer; do not upgrade its optional cache packages.
+    for name in ("clang19","llvm19","lld"):
+        candidates=[r for r in available if r["name"]==name]
+        if len(candidates)!=1:raise ValueError("Missing/duplicate compiler APK: "+name)
+        record=candidates[0];chosen[name]=record;pending.append(record)
+    while pending:
+        record=pending.pop()
+        for dep in record.get("depends",[]):
+            if dep.startswith("!"):continue  # apk enforces conflicts itself.
+            key,_,_=identity(dep)
+            if key in chosen:
+                if not matches(chosen[key],dep):raise ValueError("Conflicting offline APK requirements: "+dep)
+                continue
+            if any(matches(r,dep) for r in chosen.values()) or any(matches(r,dep) for r in installed):continue
+            candidates=[r for r in available if matches(r,dep)]
+            if not candidates:raise RuntimeError("Offline OLLVM dependency unavailable: "+dep)
+            candidate=next((r for r in candidates if r["name"]==key),candidates[0])
+            if candidate["name"] in chosen:raise ValueError("Conflicting offline APK provider: "+dep)
+            chosen[candidate["name"]]=candidate;pending.append(candidate)
+    return [chosen[name]["path"] for name in sorted(chosen)]
+
 def install(bundle):
     if platform.system()!="Linux" or platform.machine() not in ("aarch64","arm64") or not pathlib.Path("/lib/ld-musl-aarch64.so.1").exists():
         raise RuntimeError("OLLVM payload requires Linux ARM64/musl guest")
@@ -53,7 +128,11 @@ def install(bundle):
     apks=sorted((bundle/"apks").glob("*.apk"))
     if not apks:raise ValueError("No offline compiler packages")
     # Retains Alpine's package signature verification. Never allow-untrusted.
-    print(command(["apk","add","--no-network",*apks]),flush=True)
+    installed=installed_records(pathlib.Path("/lib/apk/db/installed").read_text())
+    selected=package_plan(package_records(apks),installed)
+    print("MINIS_STAGE:离线依赖预检（保留兼容的现有组件）",flush=True)
+    print(command(["apk","add","--simulate","--no-network",*selected]),flush=True)
+    print(command(["apk","add","--no-network",*selected]),flush=True)
     stage=ROOT.with_name(".minis-protection-stage-"+str(os.getpid()))
     stage.mkdir(parents=True,exist_ok=False)
     try:

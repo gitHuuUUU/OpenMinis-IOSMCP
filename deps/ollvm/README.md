@@ -11,3 +11,6 @@ The stock Clang frontend emits bitcode; opt loads the reviewed Hikari pass; Clan
 This is an ARM64 Linux guest toolchain, not a native iOS dylib injected into the app.
 
 Source review covered CMake, plugin registration/options, pass entrypoints, file reads and process/network/destructive API strings. No explicit host destructive or credential-upload chain was identified in reviewed selected paths. This is not exhaustive malware certification; compiler output and iPhone compatibility still require separate verification.
+
+## Installed-guest dependency compatibility
+Do not pass every APK in the offline closure to `apk add`: local paths impose checksum/version constraints that conflict with an existing curl -> libcurl exact-version pair. The installer reads signed-APK control metadata and the installed package database, preserves satisfying dependencies, selects the pinned compiler roots and only missing/unsatisfied providers, then runs a no-network solver simulation before installation. APK signatures remain enforced. `tools/test_ollvm_guest_install.sh` restores the shipped fakefs rootfs in an isolated ARM64 Linux fixture, reproduces the old conflict, verifies installation and curl/git preservation, and compiles protected probes. This is not an iPhone device test.

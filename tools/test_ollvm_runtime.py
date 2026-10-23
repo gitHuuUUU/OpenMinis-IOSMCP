@@ -43,12 +43,39 @@ class Tests(unittest.TestCase):
         row=view.split("private var composerModelRow: some View {",1)[1].split("private var composerContextRow:",1)[0]
         self.assertNotIn("Text(",row)
         self.assertNotIn("Label(vm.currentThinkingLevel.displayName",row)
-        self.assertIn("showModelPicker = true",row)
-        self.assertIn("vm.setThinkingLevel(level)",row)
+        self.assertNotIn('Image(systemName: "cpu")',row)
+        self.assertNotIn('Image(systemName: "slider.horizontal.3")',row)
+        self.assertNotIn("showModelPicker = true",row)
+        self.assertNotIn("vm.setThinkingLevel(level)",row)
+        self.assertIn("composerContextRow",row)
+        self.assertIn("showModelPicker = true",view.split("private var composerModelRow:",1)[0])
+        self.assertIn("vm.setThinkingLevel(newLevel)",view.split("private var composerModelRow:",1)[0])
         ui=(ROOT/"src/ios/Views/MinisReDesignSystem.swift").read_text(encoding="utf-8")
         self.assertIn("static let showsContextText = false",ui)
         for name in ["ChatInputBar.swift","Voice/InlineVoiceInputView.swift"]:
             self.assertIn("guard MinisReComposerVisibility.showsContextText else",(ROOT/"src/ios/Views/Chat"/name).read_text(encoding="utf-8"))
+    def records(self, deps=()):
+        return [{"name":name,"version":"19.1.4-r0","provides":[],"depends":list(deps) if name=="llvm19" else [],"path":pathlib.Path(name+".apk")} for name in ("clang19","llvm19","lld")]
+    def test_offline_plan_preserves_installed_libcurl(self):
+        available=self.records(["so:libcurl.so.4"])+[{"name":"libcurl","version":"8.14.1-r3","provides":["so:libcurl.so.4=4.8.0"],"depends":[],"path":pathlib.Path("libcurl-r3.apk")}]
+        installed=installer.installed_records("P:curl\nV:8.14.1-r2\nD:libcurl=8.14.1-r2\n\nP:libcurl\nV:8.14.1-r2\np:so:libcurl.so.4=4.8.0\n")
+        plan=installer.package_plan(available,installed,lambda a,b:"=" if a==b else "<")
+        self.assertNotIn(pathlib.Path("libcurl-r3.apk"),plan)
+        self.assertEqual(len(plan),3)
+        self.assertIn(pathlib.Path("libcurl-r3.apk"),installer.package_plan(available,[],lambda a,b:"="))
+    def test_offline_plan_adds_unsatisfied_dependency(self):
+        available=self.records(["libexpat>=2.8.0"])+[{"name":"libexpat","version":"2.9.0","provides":[],"depends":[],"path":pathlib.Path("libexpat.apk")}]
+        installed=[{"name":"libexpat","version":"2.7.0","provides":[]}]
+        plan=installer.package_plan(available,installed,lambda a,b:">" if a=="2.9.0" else "<")
+        self.assertIn(pathlib.Path("libexpat.apk"),plan)
+    def test_offline_plan_missing_provider_fails(self):
+        with self.assertRaisesRegex(RuntimeError,"dependency unavailable"):
+            installer.package_plan(self.records(["so:missing.so.1"]),[],lambda a,b:"=")
+    def test_apk_preflight_before_mutation(self):
+        source=(ROOT/"src/ios/default_mount/usr/local/lib/minis-ollvm/install.py").read_text(encoding="utf-8")
+        self.assertLess(source.index('["apk","add","--simulate","--no-network",*selected]'),source.index('["apk","add","--no-network",*selected]'))
+        self.assertNotIn('["apk","add","--no-network",*apks]',source)
+
     def test_compact_visual_scale(self):
         ui=(ROOT/"src/ios/Views/MinisReDesignSystem.swift").read_text(encoding="utf-8")
         self.assertIn(".frame(width: 24, height: 24)",ui)
