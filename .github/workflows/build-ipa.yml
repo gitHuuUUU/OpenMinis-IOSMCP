@@ -54,6 +54,12 @@ jobs:
           python3 tools/test_dashboard.py --require-swift
           python3 tools/test_ollvm_runtime.py
 
+      - name: Cockpit coexistence and production catalog regressions
+        run: |
+          python3 tools/test_cockpit_coexistence.py
+          python3 tools/test_cockpit_catalog.py --require-swift
+          python3 tools/test_openai_model_cache.py --require-swift
+
       - name: Execute production skill disclosure regression
         run: python3 tools/test_skill_disclosure.py --require-swift
 

@@ -161,6 +161,7 @@ struct AddProviderView: View {
     /// template (credential picker was skipped). Back should then return
     /// straight to the type list, not to a credential step the user never saw.
     @State private var enteredViaVoiceTemplate = false
+    @State private var enteredViaCockpitPreset = false
     /// [T-ios-voice-provider-title] Vendor name to show in the configure step's
     /// title, supplied by the step that opened it. Nil means "the provider type
     /// is the vendor", and the title falls back to `selectedType.displayName`.
@@ -240,6 +241,8 @@ struct AddProviderView: View {
     /// relays commonly need no key. Mirrors ProviderInstance.allowsEmptyAPIKey —
     /// OAuth flows and official endpoints keep requiring a credential.
     private var emptyKeyAllowedForCurrentInput: Bool {
+        // This preset targets the authenticated gateway, not a keyless local LLM.
+        if enteredViaCockpitPreset { return false }
         guard selectedCredential == .apiKey,
               !customBaseURLInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               let type = selectedType else { return false }
@@ -252,6 +255,7 @@ struct AddProviderView: View {
     }
 
     private var canSaveCurrentInput: Bool {
+        if enteredViaCockpitPreset && !cockpitBaseURLIsValid { return false }
         if pendingOAuthDone { return true }
         if selectedCredential == .apiKey,
            !apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || emptyKeyAllowedForCurrentInput { return true }
@@ -469,6 +473,30 @@ struct AddProviderView: View {
     @ViewBuilder
     private var typePickerSection: some View {
         Section {
+            Button {
+                applyCockpitPreset()
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "network")
+                        .font(.body)
+                        .foregroundStyle(Color.accentColor)
+                        .frame(width: 32, height: 32)
+                        .background(Color.accentColor.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(CockpitGatewayPreset.name)
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(Color(UIColor.label))
+                        Text("本机网关 · OpenAI 兼容 · 与其他服务商共存")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
             ForEach(visibleProviderTypes, id: \.self) { type in
                 Button {
                     selectedType = type
@@ -612,6 +640,34 @@ struct AddProviderView: View {
         // speaks. Hand the name to the configure step rather than letting it
         // guess from the type.
         configuringVendorName = template.name
+    }
+
+    /// A vendor preset, not a new wire protocol or a replacement for existing accounts.
+    private func applyCockpitPreset() {
+        selectedType = .openAI
+        selectedCredential = .apiKey
+        enteredViaCockpitPreset = true
+        enteredViaVoiceTemplate = false
+        configuringVendorName = CockpitGatewayPreset.name
+        customBaseURLInput = CockpitGatewayPreset.lanBaseURL
+        appendV1SuffixInput = false // The preset already includes /v1.
+        useResponsesAPI = false
+        if !labelEdited {
+            isSeedingLabel = true
+            labelInput = CockpitGatewayPreset.name
+        }
+        errorMessage = nil
+    }
+
+    private var cockpitBaseURLIsValid: Bool {
+        let input = customBaseURLInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URLComponents(string: input),
+              let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              let host = url.host, !host.isEmpty,
+              url.user == nil, url.password == nil,
+              url.query == nil, url.fragment == nil else { return false }
+        return true
     }
 
     // MARK: - Step 2: Pick Credential Type
@@ -827,7 +883,7 @@ struct AddProviderView: View {
                         Spacer()
                     }
                 }
-                .disabled((apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !emptyKeyAllowedForCurrentInput) || isSaving)
+                .disabled(!canSaveCurrentInput || isSaving)
             }
         }
     }
@@ -957,6 +1013,20 @@ struct AddProviderView: View {
 
     private var customBaseURLSection: some View {
         Section {
+            if enteredViaCockpitPreset {
+                HStack(spacing: 8) {
+                    Button("局域网") {
+                        customBaseURLInput = CockpitGatewayPreset.lanBaseURL
+                        appendV1SuffixInput = false
+                    }
+                    Button("Tailscale") {
+                        customBaseURLInput = CockpitGatewayPreset.tailscaleBaseURL
+                        appendV1SuffixInput = false
+                    }
+                }
+                .font(.caption)
+                .buttonStyle(.bordered)
+            }
             TextField(defaultBaseURL, text: $customBaseURLInput)
                 .font(.system(.body, design: .monospaced))
                 .foregroundStyle(.secondary)
@@ -970,7 +1040,9 @@ struct AddProviderView: View {
         } header: {
             Text("Custom API Base (Optional)")
         } footer: {
-            if enteredViaVoiceTemplate {
+            if enteredViaCockpitPreset {
+                Text("同一 Wi-Fi 使用局域网；跨网络可使用 Tailscale。电脑地址变化时可编辑。填写网关 API Key 后添加，密钥不内置在安装包中；其他账号和会话不会被替换。")
+            } else if enteredViaVoiceTemplate {
                 Text("The voice service endpoint URL.")
             } else if selectedType == .gemini {
                 Text("Leave empty to use the default Google endpoint. Enter the full base URL including version path.")
@@ -1000,6 +1072,10 @@ struct AddProviderView: View {
 
     private func saveApiKeyInstance() {
         guard let type = selectedType else { return }
+        guard !enteredViaCockpitPreset || cockpitBaseURLIsValid else {
+            errorMessage = "请输入有效的 Cockpit 网关地址。"
+            return
+        }
         let trimmedKey = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedLabel = labelInput.trimmingCharacters(in: .whitespaces)
         let trimmedBase = customBaseURLInput.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1126,14 +1202,17 @@ struct AddProviderView: View {
         // Voice-template entry skipped the credential step, so Back returns
         // all the way to the type list (and clears the prefilled fields) rather
         // than dropping the user onto a credential picker they never saw.
-        if enteredViaVoiceTemplate {
+        if enteredViaVoiceTemplate || enteredViaCockpitPreset {
             enteredViaVoiceTemplate = false
+            enteredViaCockpitPreset = false
             configuringVendorName = nil
             selectedType = nil
             selectedCredential = nil
             apiKeyInput = ""
             customBaseURLInput = ""
             appendV1SuffixInput = true
+            useResponsesAPI = false
+            isSeedingLabel = true
             labelInput = ""
             labelEdited = false
             errorMessage = nil

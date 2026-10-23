@@ -879,6 +879,15 @@ final class ProviderConfigStore: ObservableObject {
             if hasManualToken || instance.providerType.oauthSupportsModelDiscovery {
                 Task { await refreshModels(for: instance) }
             }
+        } else if Self.isCockpitGateway(instance) {
+            // Known gateway IDs are available immediately, even while the phone
+            // is offline. These are catalog entries, not a successful connection
+            // status; the ordinary authenticated refresh still verifies the API.
+            let models = ModelsDevAPI.fetchModels(forBaseURL: instance.effectiveCustomBaseURL ?? "")
+            config.modelEntries.append(contentsOf: models.map {
+                ModelEntry(providerInstanceId: instance.id, model: $0)
+            })
+            Task { await refreshModels(for: instance) }
         } else if !VoiceProviderTemplate.mockEntries(for: instance).isEmpty {
             let mock = VoiceProviderTemplate.mockEntries(for: instance)
             config.modelEntries.append(contentsOf: mock)
@@ -2923,7 +2932,8 @@ final class ProviderConfigStore: ObservableObject {
             guard let key = modelFetchAPIKey(for: instance) else {
                 throw ModelRefreshError.noCredential
             }
-            return try await OpenAIModelsAPI.fetchModels(apiKey: key, baseURL: customBase, appendV1Suffix: appendV1, forceRefresh: forceRefresh, userAgent: ua)
+            let models = try await OpenAIModelsAPI.fetchModels(apiKey: key, baseURL: customBase, appendV1Suffix: appendV1, forceRefresh: forceRefresh, userAgent: ua)
+            return ModelsDevAPI.cockpitModels(models, forBaseURL: isCockpitGateway(instance) ? customBase : nil)
         case (.openAI, .oauth):
             if let manualToken = ProviderKeychainHelper.loadOAuthString(instanceId: instance.id, account: "manual-oauth-token") {
                 return try await OpenAIModelsAPI.fetchModels(apiKey: manualToken, baseURL: customBase, appendV1Suffix: appendV1, forceRefresh: forceRefresh, userAgent: ua)
@@ -2960,7 +2970,8 @@ final class ProviderConfigStore: ObservableObject {
             guard let key = modelFetchAPIKey(for: instance) else {
                 throw ModelRefreshError.noCredential
             }
-            return try await OpenAIModelsAPI.fetchModels(apiKey: key, baseURL: customBase, appendV1Suffix: appendV1, forceRefresh: forceRefresh, userAgent: ua)
+            let models = try await OpenAIModelsAPI.fetchModels(apiKey: key, baseURL: customBase, appendV1Suffix: appendV1, forceRefresh: forceRefresh, userAgent: ua)
+            return ModelsDevAPI.cockpitModels(models, forBaseURL: isCockpitGateway(instance) ? customBase : nil)
         case (.openAIResponses, .oauth):
             // Responses API provider type only supports API key auth
             return ModelsDevAPI.enrichModels(ProviderType.openAIResponses.builtInModels)
@@ -3112,6 +3123,12 @@ final class ProviderConfigStore: ObservableObject {
         return !officialHosts.contains(where: { custom.contains($0) })
     }
 
+    private static func isCockpitGateway(_ instance: ProviderInstance) -> Bool {
+        instance.credentialType == .apiKey
+            && (instance.providerType == .openAI || instance.providerType == .openAIResponses)
+            && CockpitGatewayPreset.matches(baseURL: instance.effectiveCustomBaseURL)
+    }
+
     /// Fetch models from the provider API, falling back to models.dev when the API
     /// returns an empty list or fails (e.g. custom base URL without /v1/models support).
     static func fetchModelsWithFallback(_ instance: ProviderInstance, forceRefresh: Bool = false) async throws -> ModelFetchResult {
@@ -3135,13 +3152,14 @@ final class ProviderConfigStore: ObservableObject {
             logger.info("\(msg) for \(instance.label)")
             // Third-party endpoints (vLLM, Ollama, etc.): do not fall back to
             // built-in GPT models — keep the previously fetched list intact.
-            if isThirdParty {
+            if isThirdParty && !isCockpitGateway(instance) {
                 logger.info("Third-party endpoint unreachable, preserving existing models for \(instance.label)")
                 throw ModelRefreshError.modelsDevNoMatch(warnings: warnings)
             }
         }
 
-        // Step 2: Try models.dev fallback (skip for third-party endpoints)
+        // Step 2: Try catalog fallback. The bundled Cockpit preset is explicitly
+        // known; other unreachable third-party endpoints still keep their models.
         let baseURL = modelsDevBaseURL(for: instance)
         guard let baseURL else {
             let msg = "No base URL resolved, cannot try models.dev"

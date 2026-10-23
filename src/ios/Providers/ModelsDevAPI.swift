@@ -2,6 +2,42 @@ import Foundation
 
 private let logger = AppLogger(category: "ModelsDevAPI")
 
+/// A gateway preset is an OpenAI-compatible account, not another protocol type.
+/// These are connection hints only: credentials always belong to Keychain.
+enum CockpitGatewayPreset {
+    static let providerID = "cockpit"
+    static let name = "Cockpit"
+    static let lanBaseURL = "http://192.168.0.39:61722/v1"
+    static let tailscaleBaseURL = "http://100.116.107.1:61722/v1"
+
+    /// Only the two verified endpoints may use the bundled gateway metadata.
+    /// Do not use a hostname-only test: another service/port/path on the same
+    /// computer must not inherit Cockpit's model list or capabilities.
+    static func matches(baseURL: String?) -> Bool {
+        guard let baseURL,
+              let url = URLComponents(string: baseURL.trimmingCharacters(in: .whitespacesAndNewlines)),
+              url.scheme?.lowercased() == "http", url.port == 61722,
+              url.user == nil, url.password == nil, url.query == nil, url.fragment == nil,
+              let host = url.host?.lowercased(),
+              ["192.168.0.39", "100.116.107.1"].contains(host) else { return false }
+        var path = url.percentEncodedPath
+        while path.hasSuffix("/") { path.removeLast() }
+        return path.isEmpty || path == "/v1"
+    }
+
+    /// Overlay exactly one app-owned entry after EVERY registry decode. Public
+    /// models.dev refreshes/disk caches do not know about this private gateway;
+    /// they must never remove it or replace the other providers with a bundle.
+    static func mergingLocalProvider<Value>(
+        into registry: [String: Value], localProvider: Value?
+    ) -> [String: Value] {
+        guard let localProvider else { return registry }
+        var merged = registry
+        merged[providerID] = localProvider
+        return merged
+    }
+}
+
 /// Fetches and caches the models.dev provider registry.
 /// Used as a fallback when a provider's /v1/models endpoint is unavailable,
 /// and as the source of truth for model capabilities (modality, context window, output limit).
@@ -47,6 +83,7 @@ enum ModelsDevAPI {
         "Anthropic": ["anthropic"],
         "Google": ["google", "google-vertex"],
         "OpenAI": ["openai"],
+        "Cockpit": ["cockpit"],
         "OpenRouter": ["openrouter"],
         "Antigravity": [],  // Custom proxy, no public models.dev entry
     ]
@@ -64,10 +101,18 @@ enum ModelsDevAPI {
 
         logger.info("models.dev lookup: baseURL=\(baseURL), registry has \(registry.count) providers")
 
+        // Both LAN and Tailscale are aliases of the same verified gateway.
+        if CockpitGatewayPreset.matches(baseURL: baseURL),
+           let cockpit = registry[CockpitGatewayPreset.providerID] {
+            return buildModels(from: cockpit)
+        }
+
         // Phase 1: Exact API base match (with/without /v1)
         let candidates = normalizedCandidates(for: baseURL)
         logger.info("models.dev phase1: candidates=\(candidates)")
         for (_, provider) in registry {
+            // Cockpit is deliberately stricter than the legacy public catalog.
+            guard provider.id != CockpitGatewayPreset.providerID else { continue }
             guard let api = provider.api, !api.isEmpty else { continue }
             let normalizedAPI = stripTrailingSlash(api)
             for candidate in candidates {
@@ -84,6 +129,7 @@ enum ModelsDevAPI {
         logger.info("models.dev phase2: inputHost=\(inputHost ?? "nil")")
         if let inputHost {
             for (_, provider) in registry {
+                guard provider.id != CockpitGatewayPreset.providerID else { continue }
                 guard let api = provider.api, !api.isEmpty,
                       let providerHost = extractHost(from: api) else { continue }
                 if inputHost == providerHost {
@@ -96,6 +142,50 @@ enum ModelsDevAPI {
 
         logger.info("No models.dev match for base URL: \(baseURL)")
         return []
+    }
+
+    /// The OpenAI transport initially enriches discovery as public OpenAI.
+    /// Restore this gateway's OWN known metadata without inventing availability:
+    /// keep exactly the IDs and order actually returned by /models, including
+    /// future unknown IDs, and leave every nonpreset account completely alone.
+    static func cockpitModels(_ models: [LLMModel], forBaseURL baseURL: String?) -> [LLMModel] {
+        guard CockpitGatewayPreset.matches(baseURL: baseURL) else { return models }
+        let knownModels = bundledCockpitProvider.map {
+            Dictionary(uniqueKeysWithValues: buildModels(from: $0).map { ($0.id, $0) })
+        } ?? [:]
+        return models.map { model in
+            if let own = knownModels[model.id] {
+                // Start from the complete local record, not OpenAI-enriched
+                // input: nil output/interleaving/voice metadata means unknown,
+                // not permission to retain a public-provider inference.
+                var known = LLMModel(
+                    id: own.id, displayName: model.displayName, provider: own.provider,
+                    modalityOverride: own.modalityOverride,
+                    contextWindow: own.contextWindow, maxOutputTokens: own.maxOutputTokens,
+                    supportsReasoning: own.supportsReasoning,
+                    interleavedReasoningField: own.interleavedReasoningField,
+                    reasoningEffortValues: own.reasoningEffortValues,
+                    declaresNoEffortTiers: own.declaresNoEffortTiers
+                )
+                known.voiceRole = own.voiceRole
+                known.effortDeclarationIsAuthoritative = own.effortDeclarationIsAuthoritative
+                return known
+            }
+            var gatewayModel = LLMModel(
+                id: model.id, displayName: model.displayName, provider: CockpitGatewayPreset.name,
+                modalityOverride: model.modalityOverride,
+                contextWindow: model.contextWindow, maxOutputTokens: model.maxOutputTokens,
+                supportsReasoning: model.supportsReasoning,
+                interleavedReasoningField: model.interleavedReasoningField,
+                reasoningEffortValues: model.reasoningEffortValues,
+                declaresNoEffortTiers: model.declaresNoEffortTiers
+            )
+            gatewayModel.voiceRole = model.voiceRole
+            // A public OpenAI match is not an authoritative declaration by this
+            // private gateway. Only an exact local model record restores that.
+            gatewayModel.effortDeclarationIsAuthoritative = nil
+            return gatewayModel
+        }
     }
 
     private static func buildModels(from provider: ModelsDevProvider) -> [LLMModel] {
@@ -374,6 +464,7 @@ enum ModelsDevAPI {
     private static func buildAggregateIndex(_ registry: [String: ModelsDevProvider]) -> [String: ModelsDevModel] {
         var grouped: [String: [ModelsDevModel]] = [:]
         for key in registry.keys.sorted() {
+            guard key != CockpitGatewayPreset.providerID else { continue }
             guard let prov = registry[key] else { continue }
             for id in prov.models.keys.sorted() {
                 guard let devModel = prov.models[id] else { continue }
@@ -478,6 +569,7 @@ enum ModelsDevAPI {
     private static func buildStage2Index(_ registry: [String: ModelsDevProvider]) -> [String: DevModelMatch] {
         var grouped: [String: [ModelsDevModel]] = [:]
         for key in registry.keys.sorted() {
+            guard key != CockpitGatewayPreset.providerID else { continue }
             guard let prov = registry[key] else { continue }
             for id in prov.models.keys.sorted() {
                 guard let devModel = prov.models[id] else { continue }
@@ -651,7 +743,10 @@ enum ModelsDevAPI {
         }
         var byFullId: [String: ReleaseEntry] = [:]
         var byTail: [String: ReleaseEntry] = [:]
-        for provider in registry.values {
+        for (key, provider) in registry {
+            // Private relay metadata must not change another provider's global
+            // capability vote or release ranking for a coincidentally equal ID.
+            guard key != CockpitGatewayPreset.providerID else { continue }
             for (rawId, model) in provider.models {
                 guard let raw = model.releaseDate,
                       let parsed = ModelReleaseIndex.parseReleaseDate(raw) else { continue }
@@ -752,7 +847,10 @@ enum ModelsDevAPI {
 
     private static func parseRegistry(_ data: Data) -> [String: ModelsDevProvider]? {
         do {
-            return try JSONDecoder().decode([String: ModelsDevProvider].self, from: data)
+            let parsed = try JSONDecoder().decode([String: ModelsDevProvider].self, from: data)
+            return CockpitGatewayPreset.mergingLocalProvider(
+                into: parsed, localProvider: bundledCockpitProvider
+            )
         } catch {
             logger.error("Failed to parse models.dev JSON (\(data.count) bytes): \(error)")
             return nil
@@ -760,6 +858,23 @@ enum ModelsDevAPI {
     }
 
     // MARK: - Bundled Fallback
+
+    /// Decode only the single locally owned key, once, without recursively
+    /// calling parseRegistry or retaining a second copy of the full registry.
+    private struct LocalProviderCatalog: Decodable {
+        let cockpit: ModelsDevProvider?
+    }
+
+    private static let bundledCockpitProvider: ModelsDevProvider? = {
+        guard let url = Bundle.main.url(forResource: "models-dev-api", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let catalog = try? JSONDecoder().decode(LocalProviderCatalog.self, from: data),
+              let cockpit = catalog.cockpit else {
+            logger.error("Bundled Cockpit metadata unavailable; other providers are unchanged")
+            return nil
+        }
+        return cockpit
+    }()
 
     private static func loadBundledRegistry() -> [String: ModelsDevProvider]? {
         guard let url = Bundle.main.url(forResource: "models-dev-api", withExtension: "json") else {

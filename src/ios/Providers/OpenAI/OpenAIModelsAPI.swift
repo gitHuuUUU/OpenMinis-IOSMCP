@@ -16,16 +16,22 @@ enum OpenAIModelsAPI {
     private static let defaultBaseURL = "https://api.openai.com"
 
     static func fetchModels(apiKey: String, baseURL: String? = nil, appendV1Suffix: Bool = true, forceRefresh: Bool = false, userAgent: String? = nil) async throws -> [LLMModel] {
-        if !forceRefresh, let cached = OpenAIModelsCache.load(credential: apiKey) {
-            logger.info("Returning \(cached.count) cached models (API key)")
-            return cached
-        }
-
         let isCustomBase = baseURL != nil
         let base = appendV1Suffix ? stripV1Suffix(baseURL ?? defaultBaseURL) : (baseURL ?? defaultBaseURL)
         let v1Path = appendV1Suffix ? "/v1" : ""
         guard let url = URL(string: URLBuilding.join(base, v1Path, "/models")) else {
             throw LLMError.providerError(message: "Invalid base URL: \(base)")
+        }
+        // Resolve the actual request URL first: the same key may legitimately
+        // be used by several OpenAI-compatible services. Neither their model
+        // catalogs nor custom User-Agent/filter-dependent results are shared.
+        let cacheKey = APIKeyModelsCacheKey(endpoint: url.absoluteString,
+                                            apiKey: apiKey,
+                                            userAgent: userAgent,
+                                            filterOpenAIOnly: !isCustomBase)
+        if !forceRefresh, let cached = OpenAIModelsCache.load(key: cacheKey) {
+            logger.info("Returning \(cached.count) cached models (API key)")
+            return cached
         }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
@@ -33,7 +39,7 @@ enum OpenAIModelsAPI {
         if let ua = userAgent { request.setValue(ua, forHTTPHeaderField: "User-Agent") }
         logger.info("Fetching OpenAI models (API key auth, custom base: \(isCustomBase), appendV1: \(appendV1Suffix))")
         let models = try await performFetch(request, filterOpenAIOnly: !isCustomBase)
-        OpenAIModelsCache.save(models, credential: apiKey)
+        OpenAIModelsCache.save(models, key: cacheKey)
         return models
     }
 
@@ -406,6 +412,15 @@ enum OpenAIModelsAPI {
 
 // MARK: - Cache
 
+/// Structured identity avoids delimiter collisions between URL, key and UA.
+/// Only its digest is used as a filename; credentials never enter cache data.
+private struct APIKeyModelsCacheKey: Hashable, Codable {
+    let endpoint: String
+    let apiKey: String
+    let userAgent: String?
+    let filterOpenAIOnly: Bool
+}
+
 private enum OpenAIModelsCache {
 
     private struct Entry: Codable {
@@ -429,8 +444,29 @@ private enum OpenAIModelsCache {
         cacheDir.appendingPathComponent(cacheKey(for: credential) + ".json")
     }
 
+    private static func cacheFile(for key: APIKeyModelsCacheKey) -> URL? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard let data = try? encoder.encode(key) else { return nil }
+        let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        return cacheDir.appendingPathComponent("api-key-v2-" + digest + ".json")
+    }
+
+    static func load(key: APIKeyModelsCacheKey) -> [LLMModel]? {
+        guard let file = cacheFile(for: key) else { return nil }
+        return load(file: file)
+    }
+
+    static func save(_ models: [LLMModel], key: APIKeyModelsCacheKey) {
+        guard let file = cacheFile(for: key) else { return }
+        save(models, file: file)
+    }
+
     static func load(credential: String) -> [LLMModel]? {
-        let file = cacheFile(for: credential)
+        load(file: cacheFile(for: credential))
+    }
+
+    private static func load(file: URL) -> [LLMModel]? {
         guard let data = try? Data(contentsOf: file),
               let entry = try? JSONDecoder().decode(Entry.self, from: data),
               Date().timeIntervalSince(entry.date) < ttl else {
@@ -440,9 +476,13 @@ private enum OpenAIModelsCache {
     }
 
     static func save(_ models: [LLMModel], credential: String) {
+        save(models, file: cacheFile(for: credential))
+    }
+
+    private static func save(_ models: [LLMModel], file: URL) {
         let entry = Entry(models: models, date: Date())
         guard let data = try? JSONEncoder().encode(entry) else { return }
         try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
-        try? data.write(to: cacheFile(for: credential), options: .atomic)
+        try? data.write(to: file, options: .atomic)
     }
 }
