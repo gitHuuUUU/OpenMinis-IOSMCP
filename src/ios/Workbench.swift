@@ -737,6 +737,8 @@ enum WorkbenchError: LocalizedError {
             let result = try await run("python3 /usr/local/lib/minis-ollvm/install.py ensure --bundle /opt/minis-workbench/ollvm",timeout:1800)
             record("OLLVM install rc=\(result.exitCode)\n\(result.output)")
             guard result.exitCode == 0 else { throw WorkbenchError.unavailable(result.output) }
+            componentStatus["OLLVM"] = "已安装 · 插件加载探针通过"
+            rememberVerified("OLLVM")
             return result.output
         }
         var command="python3 /opt/minis-workbench/minis_build.py "+action
@@ -760,6 +762,11 @@ enum WorkbenchError: LocalizedError {
         let result=try await run(command,timeout:action=="install-sdk" ? 3600 : 1800)
         record("BuildWorkbench \(action) rc=\(result.exitCode)\n\(result.output)")
         guard result.exitCode==0 else { throw WorkbenchError.unavailable(result.output) }
+        if protection == "enhanced", action == "build" || action == "protection-status",
+           (UserDefaults.standard.string(forKey:"build.protectionCompiler") ?? "/opt/minis-protection/bin/clang") == "/opt/minis-protection/bin/clang" {
+            componentStatus["OLLVM"] = "已安装 · 目标编译探针通过"
+            rememberVerified("OLLVM")
+        }
         return result.output
     }
     func desktopTool(_ args:[String:Any]) async throws -> String {
