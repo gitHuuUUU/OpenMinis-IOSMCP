@@ -50,7 +50,9 @@ jobs:
         run: python3 tools/test_workbench_static.py
 
       - name: Dashboard and production pricing regressions
-        run: python3 tools/test_dashboard.py --require-swift
+        run: |
+          python3 tools/test_dashboard.py --require-swift
+          python3 tools/test_ollvm_runtime.py
 
       - name: Execute production skill disclosure regression
         run: python3 tools/test_skill_disclosure.py --require-swift
@@ -155,6 +157,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 tools/prepare_frida_workbench.py
+
+      - name: Bundle verified offline OLLVM compiler
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/prepare_ollvm_workbench.py
 
       - name: Build Minis app (unsigned)
         run: |

@@ -152,6 +152,10 @@ def protection_status(args):
     flags=protection_flags(args)
     if not flags:return {'mode':'normal','status':'normal compilation; protection disabled'}
     compiler=getattr(args,'protection_compiler','')
+    if compiler=='/opt/minis-protection/bin/clang' and (HERE/'ollvm/manifest.json').is_file():
+        # First actual use installs the bundled signed Alpine packages locally.
+        # Normal chat / normal builds never trigger an LLVM install.
+        run([sys.executable,'/usr/local/lib/minis-ollvm/install.py','ensure','--bundle',HERE/'ollvm'])
     if not compiler or not shutil.which(compiler):
         raise RuntimeError('Protection compiler unavailable: '+str(compiler)+'; stock clang is not substituted')
     # Check the selected target, flags and compilation together. An accepted

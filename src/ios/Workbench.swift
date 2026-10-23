@@ -131,7 +131,7 @@ enum WorkbenchError: LocalizedError {
     @Published var diagnosticStarted: Date?
     @Published var diagnosticDuration: TimeInterval = 0
     @Published var desktopStatus = UserDefaults.standard.string(forKey:"desktop.lastStatus") ?? "尚未从手机检测连接"
-    private static let componentNames = ["Codex","Theos","CoreTools","ReverseTools","BuildTools","Node.js","Python","Frida","REA"]
+    private static let componentNames = ["Codex","Theos","CoreTools","ReverseTools","BuildTools","Node.js","Python","Frida","REA","OLLVM"]
     private static let verifiedComponentsKey = "workbench.verifiedComponents"
     init() {
         UserDefaults.standard.register(defaults: [
@@ -187,6 +187,7 @@ enum WorkbenchError: LocalizedError {
             ("ReverseTools","command -v llvm-objdump && command -v strings && command -v readelf"),
             ("BuildTools","clang --version && ld64.lld --version && dpkg-deb --version"),
             ("Node.js","node --version && npm --version"),
+            ("OLLVM","python3 /usr/local/lib/minis-ollvm/install.py status"),
             ("Python","python3 --version && python3 -c 'import ssl,sqlite3,json'"),
             ("Frida","python3 /usr/local/lib/minis-frida/install.py status"),
             ("REA","python3 /usr/local/lib/minis-reverse-tools/rea_install.py status")
@@ -605,6 +606,10 @@ enum WorkbenchError: LocalizedError {
         if !diagnosticInterrupted { results.append(WorkbenchCheck(name:"本机文件权限",ok:fm.isReadableFile(atPath:"/var/mobile/Containers/Data/Application"),detail:"按实际目录读取权限检测；iSH 内 root 不等于 iOS root")) }
     }
     func install(_ name: String) async throws {
+        if name == "OLLVM" {
+            _ = try await buildWorkbench(["action":"install-ollvm"])
+            return
+        }
         if name == "Frida" || name == "REA" {
             _ = try await reverseRuntime(["action": name == "Frida" ? "install-frida" : "install-rea"])
             return
@@ -718,7 +723,7 @@ enum WorkbenchError: LocalizedError {
             _ = try await desktopTool(["action":"download","path":local,"remotePath":output])
             return built+"\n已下载到手机共享产物目录："+local
         }
-        guard ["doctor","sdk-status","install-sdk","build","protection-status"].contains(action),
+        guard ["doctor","sdk-status","install-sdk","build","protection-status","install-ollvm"].contains(action),
               let bundle=Bundle.main.url(forResource:"BuildWorkbench",withExtension:"bundle") else {
             throw WorkbenchError.unavailable("构建工作台资源或动作不可用")
         }
@@ -728,6 +733,12 @@ enum WorkbenchError: LocalizedError {
             throw WorkbenchError.unavailable("无法只读挂载 SDK 目录与构建脚本")
         }
         func quote(_ value:String)->String { "'"+value.replacingOccurrences(of:"'",with:"'\"'\"'")+"'" }
+        if action == "install-ollvm" {
+            let result = try await run("python3 /usr/local/lib/minis-ollvm/install.py ensure --bundle /opt/minis-workbench/ollvm",timeout:1800)
+            record("OLLVM install rc=\(result.exitCode)\n\(result.output)")
+            guard result.exitCode == 0 else { throw WorkbenchError.unavailable(result.output) }
+            return result.output
+        }
         var command="python3 /opt/minis-workbench/minis_build.py "+action
         if action == "build" || action == "protection-status" {
             command += " --protection " + quote(protection)
@@ -898,7 +909,7 @@ struct DevelopmentWorkbenchView: View {
                 NavigationLink("SDK 与多平台构建工作台") { MultiPlatformWorkbenchView() }
                 NavigationLink("内置终端") { ISHTerminalView(showCloseButton: true) }
                 NavigationLink("Tools · 基础与逆向工具") { List { Text("CoreTools：文件、网络与项目工具"); Text("ReverseTools：LLVM / binutils / GDB"); Text("Python：解释器及 pip"); Text("Frida：内置 ARM64/musl Python 模块与 CLI，实际启动验证"); Text("REA：固定版本 CLI、官方技能及 MCP；引擎另行检测") }.navigationTitle("Tools") }
-                ForEach(["Codex","Theos","CoreTools","ReverseTools","BuildTools","Node.js","Python","Frida","REA"],id:\.self) { name in
+                ForEach(["Codex","Theos","CoreTools","ReverseTools","BuildTools","Node.js","Python","Frida","REA","OLLVM"],id:\.self) { name in
                     NavigationLink { RuntimeComponentView(name:name) } label: {
                         MinisReFeatureRow(title:name, subtitle:model.componentStatus[name] ?? "未检测 · 查看与安装", icon:toolIcon(name), color:toolColor(name))
                     }
@@ -909,7 +920,7 @@ struct DevelopmentWorkbenchView: View {
                 Button("合并本地调试 Agent") { model.importAgents(); status="已合并；原 Agent 保留" }
                 NavigationLink("运行诊断") { WorkbenchDiagnosticsView() }
                 NavigationLink { CompilationProtectionView() } label: {
-                    MinisReFeatureRow(title:"OLLVM 编译保护",subtitle:"检查自备前端 · 不把开关当作已安装",icon:"shield.lefthalf.filled",color:.purple)
+                    MinisReFeatureRow(title:"OLLVM 编译保护",subtitle:"内置离线组件 · 首次强化构建自动安装",icon:"shield.lefthalf.filled",color:.purple)
                 }
                 NavigationLink("日志") { WorkbenchLogView() }
             }
@@ -939,7 +950,7 @@ struct DevelopmentWorkbenchView: View {
         .onAppear { model.startComponentProbeIfNeeded() }
     }
     private func toolIcon(_ name: String) -> String {
-        switch name { case "Codex": return "terminal"; case "Theos": return "hammer"; case "CoreTools": return "shippingbox"; case "ReverseTools": return "wrench.and.screwdriver"; case "BuildTools": return "gearshape.2"; case "Node.js": return "cube"; case "Python": return "chevron.left.forwardslash.chevron.right"; case "Frida": return "ant.fill"; default: return "waveform.path.ecg" }
+        switch name { case "Codex": return "terminal"; case "Theos": return "hammer"; case "CoreTools": return "shippingbox"; case "ReverseTools": return "wrench.and.screwdriver"; case "BuildTools": return "gearshape.2"; case "Node.js": return "cube"; case "Python": return "chevron.left.forwardslash.chevron.right"; case "Frida": return "ant.fill"; case "OLLVM": return "shield.lefthalf.filled"; default: return "waveform.path.ecg" }
     }
     private func toolColor(_ name: String) -> Color {
         switch name { case "Codex": return .blue; case "Theos": return .orange; case "CoreTools": return .green; case "ReverseTools": return .purple; case "Python": return .yellow; case "Frida": return .pink; default: return .teal }

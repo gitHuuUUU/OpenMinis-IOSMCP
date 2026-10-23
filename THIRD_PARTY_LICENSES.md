@@ -59,3 +59,8 @@ Test-only dependencies: JUnit 4.13.2 (**EPL-1.0**), MockWebServer 4.12.0 (**Apac
 ## Removed / historical
 
 - **swift-markdown-ui** (MIT) — formerly vendored under `deps/swift-markdown-ui`; no longer referenced by the Xcode project or imported by any source file, and is not part of the open-source tree.
+
+## Hikari / OLLVM runtime
+
+Source: https://github.com/PPKunOfficial/Hikari-fix at 5dd3902a0f2c74570e0ab7a637c57a3cccaed9fd.
+The upstream LICENSE is GNU AGPLv3; per-file notices are retained in deps/ollvm/hikari-source.tar. The runtime bundle includes that license. Build glue and the compiler driver are distributed alongside the complete pinned plugin source and the exact build recipe in this source tree. Alpine compiler packages retain their package metadata/signatures and upstream notices; exact package versions and file hashes are recorded in tools/ollvm-runtime-catalog.json.

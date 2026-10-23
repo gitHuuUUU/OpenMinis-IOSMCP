@@ -238,16 +238,22 @@ struct CompilationProtectionView: View {
         Form {
             Section {
                 Picker("编译模式", selection: $mode) { Text("普通").tag("normal"); Text("强化").tag("enhanced") }.pickerStyle(.segmented)
-                Text("普通模式兼容性优先；强化模式仅用于工作台本地 C/ObjC dylib 编译，必须有匹配的 OLLVM 前端。预编译 IPA/DEB 不能靠打包补加保护。").font(.caption).foregroundStyle(.secondary)
+                Text("普通模式兼容性优先；强化模式首次使用会自动安装内置 Clang19/Hikari 离线组件，无需填路径。用于工作台本地 C/ObjC dylib 编译；预编译 IPA/DEB 不能靠打包补加保护。").font(.caption).foregroundStyle(.secondary)
             }
             if mode == "enhanced" {
                 Section("保护编译组件") {
                     TextField("编译器路径", text: $compiler).textInputAutocapitalization(.never).autocorrectionDisabled()
-                    Text("不会把系统 clang 当成 OLLVM；没有组件或不支持所选 pass 时构建失败并保留真实错误。").font(.caption).foregroundStyle(.secondary)
+                    Button("安装 / 修复内置 OLLVM") { Task { busy = true; defer { busy = false }; do { result = try await DeviceWorkbench.shared.buildWorkbench(["action":"install-ollvm"]) } catch { result = error.localizedDescription } } }.disabled(busy)
+                    Text("内置版本提供分支保护、字符串加密与控制流平坦化；缺少组件或所选 pass 不支持时明确失败，不伪造成功。完整 LLVM 较大，首次解包需 1.5GB 空闲空间，编译会占用 CPU。").font(.caption).foregroundStyle(.secondary)
                 }
                 Section("保护方式 · 多选组合") {
                     ForEach(items, id: \.0) { item in
-                        Toggle(isOn: binding(item.0)) { Label(item.1, systemImage: item.2) }
+                        Toggle(isOn: binding(item.0)) {
+                            VStack(alignment:.leading) {
+                                Label(item.1, systemImage:item.2)
+                                if ["indcall","indgv"].contains(item.0) { Text("本内置引擎未提供此项").font(.caption).foregroundStyle(.secondary) }
+                            }
+                        }.disabled(compiler == "/opt/minis-protection/bin/clang" && ["indcall","indgv"].contains(item.0))
                     }
                 }
             }
@@ -257,6 +263,13 @@ struct CompilationProtectionView: View {
                 if !result.isEmpty { Text(result).font(.system(.caption, design: .monospaced)).textSelection(.enabled) }
             }
         }.navigationTitle("编译保护").navigationBarTitleDisplayMode(.inline)
+            .onAppear { normalizeBuiltinPasses() }
+            .onChange(of:compiler) { _ in normalizeBuiltinPasses() }
+    }
+    private func normalizeBuiltinPasses() {
+        guard compiler == "/opt/minis-protection/bin/clang" else { return }
+        let supported = passes.split(separator:",").map(String.init).filter { ["bcf","fla","sobf"].contains($0) }
+        passes = supported.isEmpty ? "bcf,sobf" : supported.joined(separator:",")
     }
     private func binding(_ pass: String) -> Binding<Bool> {
         Binding(get: { passes.split(separator: ",").contains(Substring(pass)) }, set: { value in

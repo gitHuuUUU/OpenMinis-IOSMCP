@@ -156,3 +156,4 @@ __pycache__/
 
 # Verified binary wheels fetched by build pipeline
 src/ios/BuildWorkbench.bundle/frida/
+src/ios/BuildWorkbench.bundle/ollvm/
