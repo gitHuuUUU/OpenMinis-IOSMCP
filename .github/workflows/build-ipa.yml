@@ -53,6 +53,9 @@ jobs:
         run: |
           python3 tools/test_dashboard.py --require-swift
           python3 tools/test_ollvm_runtime.py
+          python3 tools/test_protection_adapter.py
+          python3 tools/test_macho_signing.py
+          python3 tools/test_protection_ui.py --require-swift
 
       - name: Cockpit coexistence and production catalog regressions
         run: |

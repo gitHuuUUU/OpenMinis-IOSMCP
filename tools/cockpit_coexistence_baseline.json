@@ -8,8 +8,7 @@
     "src/ios/Providers/LLMProviderFactory.swift": "3966ab02df7c1f45e900ab40f88f4d017952f1cfd71f7295e8eca89425f9eedd",
     "src/ios/Providers/ModelEntry.swift": "e4f03d7b7e36d0966e63fc2ec7c690b9fcb48ee782542d1b5aac7e38e8084ff2",
     "src/ios/Info.plist": "e50187c6a4e6ddec4736eef43fcff82f4c324e5509d9392fbf952ac6a594ffe5",
-    "src/ios/Views/Chat/AIChatView.swift": "a3839899c55875c3ed4d348fc8135388a0f970e40eeb7f23e0bc075cb7bcf4e3",
-    "src/ios/default_mount/usr/local/lib/minis-ollvm/install.py": "d3108f7933e9462a48b015660b2ddf539091b0781010fe3c0edafd103344e4b7"
+    "src/ios/Views/Chat/AIChatView.swift": "a3839899c55875c3ed4d348fc8135388a0f970e40eeb7f23e0bc075cb7bcf4e3"
   },
   "keychain_sha256": "ebdf34c06c84a3edf8e3b5fff101e3570734704abb71d1969e4a8747233d3a2d",
   "session_binding_sha256": "7a080eaef9ccfb81adb079508525757865e7d0529326373252bc4b6d5e1c0953",

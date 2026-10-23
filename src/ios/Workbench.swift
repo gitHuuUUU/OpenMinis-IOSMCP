@@ -622,7 +622,7 @@ enum WorkbenchError: LocalizedError {
         case "ReverseTools": command="apk add --no-cache binutils llvm llvm-dev clang lld gdb; llvm-objdump --version; readelf --version"
         case "BuildTools": command="set -e; apk add --no-cache clang lld llvm dpkg make; clang --version; ld64.lld --version; dpkg-deb --version"
         case "Node.js": command="set -e; apk add --no-cache nodejs npm; node --version; npm --version"
-        case "Theos": command="apk add --no-cache git make perl clang lld && (test -f /opt/theos/makefiles/common.mk || git clone --recursive --depth 1 https://github.com/theos/theos.git /opt/theos); test -f /opt/theos/makefiles/common.mk; make --version"
+        case "Theos": command="set -e; apk add --no-cache git make perl clang lld rsync dpkg bash gzip xz; (test -f /opt/theos/makefiles/common.mk || git clone --recursive --depth 1 https://github.com/theos/theos.git /opt/theos); if ! test -x /opt/theos/vendor/dm.pl/dm.pl; then git -C /opt/theos submodule update --init --recursive --depth 1; fi; test -f /opt/theos/makefiles/common.mk; test -x /opt/theos/vendor/dm.pl/dm.pl; perl -MArchive::Tar -MPod::Usage -e 1; command -v rsync; command -v dpkg-deb; make --version"
         case "Codex":
             // Download an actual musl build, not an iOS-incompatible macOS binary.
             let url=URL(string:"https://api.github.com/repos/openai/codex/releases/latest")!
@@ -711,9 +711,13 @@ enum WorkbenchError: LocalizedError {
     }
     func buildWorkbench(_ args:[String:Any]) async throws -> String {
         let action=args["action"] as? String ?? "doctor"
+        // Keep one immutable selection across asynchronous guest setup/build.
         let protection = UserDefaults.standard.string(forKey:"build.protection") ?? "normal"
+        let protectionCompiler = UserDefaults.standard.string(forKey:"build.protectionCompiler") ?? "/opt/minis-protection/bin/clang"
+        let protectionPasses = UserDefaults.standard.string(forKey:"build.protectionPasses") ?? "bcf,sobf"
+        let protectionSelection = UserDefaults.standard.string(forKey:"build.protectionSelection") ?? "combined"
         if action=="build", args["remote"] as? String == "windows" {
-            guard protection != "enhanced" else { throw WorkbenchError.unavailable("强化模式目前只接入手机本地 C/ObjC dylib 编译；Windows 不会静默回退普通模式") }
+            guard protection != "enhanced" else { throw WorkbenchError.unavailable("强化模式只接入手机本地 C/ObjC/C++ dylib 与 Theos 源码编译；Windows 不会静默回退普通模式") }
             guard let output=args["output"] as? String else { throw WorkbenchError.unavailable("缺少电脑输出路径") }
             let payload=try JSONSerialization.data(withJSONObject:args).base64EncodedString()
             let script="$a=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('"+payload+"')) | ConvertFrom-Json; & (Join-Path $env:USERPROFILE '.minis/minis-build.ps1') -Target $a.target -Project $a.project -Output $a.output -Sdk $a.sdk"
@@ -744,8 +748,9 @@ enum WorkbenchError: LocalizedError {
         var command="python3 /opt/minis-workbench/minis_build.py "+action
         if action == "build" || action == "protection-status" {
             command += " --protection " + quote(protection)
-            command += " --protection-compiler " + quote(UserDefaults.standard.string(forKey:"build.protectionCompiler") ?? "/opt/minis-protection/bin/clang")
-            command += " --protection-passes " + quote(UserDefaults.standard.string(forKey:"build.protectionPasses") ?? "bcf,sobf")
+            command += " --protection-compiler " + quote(protectionCompiler)
+            command += " --protection-passes " + quote(protectionPasses)
+            command += " --protection-selection " + quote(protectionSelection)
         }
         if action=="install-sdk" {
             guard let value=args["sdk"] as? String, !value.isEmpty else { throw WorkbenchError.unavailable("缺少 SDK 版本") }
@@ -763,7 +768,7 @@ enum WorkbenchError: LocalizedError {
         record("BuildWorkbench \(action) rc=\(result.exitCode)\n\(result.output)")
         guard result.exitCode==0 else { throw WorkbenchError.unavailable(result.output) }
         if protection == "enhanced", action == "build" || action == "protection-status",
-           (UserDefaults.standard.string(forKey:"build.protectionCompiler") ?? "/opt/minis-protection/bin/clang") == "/opt/minis-protection/bin/clang" {
+           protectionCompiler == "/opt/minis-protection/bin/clang" {
             componentStatus["OLLVM"] = "已安装 · 目标编译探针通过"
             rememberVerified("OLLVM")
         }
@@ -1066,7 +1071,7 @@ struct MultiPlatformWorkbenchView:View {
                 Picker("执行位置",selection:$remote) { Text("手机本地").tag("");Text("当前 Windows 电脑").tag("windows") }
                 TextField("可选 Mac/Linux SSH 主机别名",text:$remote).textInputAutocapitalization(.never).autocorrectionDisabled()
                 Button("构建并校验产物") { perform(["action":"build","target":target,"project":project,"output":output,"sdk":sdk,"remote":remote]) }.disabled(model.busy)
-                Text("dylib 为 C/ObjC 交叉编译；DEB 需要 DEBIAN/control；IPA 打包已有 .app，Swift/Xcode 项目需 macOS 构建；APK 需 Gradle/Android SDK；EXE 需 MinGW。SSH 使用已有主机配置与密钥，远端还须具备对应工具链。缺失即报告失败。").font(.caption)
+                Text("dylib 为 C/ObjC/C++ 交叉编译；DEB 支持 Theos 源码项目，或带 DEBIAN/control 的已编译目录打包（后者不新增保护）；IPA 打包已有 .app，Swift/Xcode 项目需 macOS 构建；APK 需 Gradle/Android SDK；EXE 需 MinGW。SSH 使用已有主机配置与密钥，远端还须具备对应工具链。缺失即报告失败。").font(.caption)
             }
             Section(header:Text("当前 Windows 电脑")) {
                 Text(model.desktopStatus).font(.caption).textSelection(.enabled)

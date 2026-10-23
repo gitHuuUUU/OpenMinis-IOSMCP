@@ -1,19 +1,24 @@
 {
   "release": "rootfs-tooling-v1",
-  "asset": "ollvm19-5dd3902-alpine321-aarch64.tar.gz",
-  "bytes": 208493527,
-  "sha256": "5889c9374ca9ecc920cc152e6ae1f3fcf0269f6692cdc253ac0af9f8844fdb75",
+  "asset": "ollvm19-fivepass-985fbb319489-alpine321-aarch64.tar.gz",
+  "bytes": 215194136,
+  "sha256": "985fbb319489ec878cc57ea7b22cb7030b7b102f85e320da8adc439674125744",
   "manifest": {
     "schema": 1,
-    "engine": "Hikari-LLVM19",
+    "runtimeVersion": 2,
+    "minisProtectionSourceSHA256": "e1646a9f03445314070bae77f6f663663eccf0938380ed131dfa6669115a7dbc",
+    "signerSourceSHA256": "e72498269d04dea5618d889dfefc95652f3cc39cbcf92cdc9b3eb9ecd0fb2d72",
+    "engine": "Hikari-LLVM19+MinisProtection",
     "source": "https://github.com/PPKunOfficial/Hikari-fix",
     "commit": "5dd3902a0f2c74570e0ab7a637c57a3cccaed9fd",
     "platform": "aarch64-linux-musl",
     "alpine": "3.21",
     "passes": [
       "bcf",
-      "fla",
-      "sobf"
+      "indcall",
+      "indgv",
+      "sobf",
+      "fla"
     ],
     "files": [
       {
@@ -282,14 +287,39 @@
         "sha256": "6f1e622c82a380075843bb084a7ec3b1f1d12a4a02526d75e78b0924a860aa75"
       },
       {
+        "path": "licenses/MinisProtection-source.cpp",
+        "bytes": 9002,
+        "sha256": "e1646a9f03445314070bae77f6f663663eccf0938380ed131dfa6669115a7dbc"
+      },
+      {
+        "path": "licenses/ldid-COPYING",
+        "bytes": 34520,
+        "sha256": "57c8ff33c9c0cfc3ef00e650a1cc910d7ee479a8bc509f6c9209a7c2a11399d6"
+      },
+      {
+        "path": "licenses/ldid-source.tar",
+        "bytes": 245760,
+        "sha256": "e72498269d04dea5618d889dfefc95652f3cc39cbcf92cdc9b3eb9ecd0fb2d72"
+      },
+      {
         "path": "runtime/clang.py",
-        "bytes": 3068,
-        "sha256": "424b53dae1300d4e613c04dd81560dd4bef547655959512c80a7fdb8563d1d7e"
+        "bytes": 9932,
+        "sha256": "542f84d6607dce37869980ede8146f034e4448bda1c41686a4492c7a37107b09"
+      },
+      {
+        "path": "runtime/ldid",
+        "bytes": 15711184,
+        "sha256": "608225b201923585bc8b3aef4c6af6dc59c685e02f6ba231aa5c67248ea57274"
       },
       {
         "path": "runtime/libHikari.so",
         "bytes": 670888,
         "sha256": "a7ec3289ba40d69f5e724d42dcc5fe88e954c16a3a82024ce141ce8559db0cc9"
+      },
+      {
+        "path": "runtime/libMinisProtection.so",
+        "bytes": 82816,
+        "sha256": "3f325ffb5e3cf8acc6d0ac940e8aa7f3eed6829060c76df3856df9fa6c226aa7"
       }
     ],
     "verification": {
@@ -297,9 +327,15 @@
       "mach_o_dylib_link": true,
       "string_ir_checked": true,
       "flattening_ir_checked": true,
+      "indirect_call_ir_checked": true,
+      "indirect_global_ir_checked": true,
+      "all_five_native_execution": true,
+      "native_combinations": 31,
+      "static_signer_code_pages_verified": true,
+      "cpp_exception_invoke": true,
       "phone_test": false
     },
     "clang": "Alpine clang version 19.1.4"
   },
-  "runtime_build_run": 39901654412
+  "runtime_build_run": 39984541133
 }

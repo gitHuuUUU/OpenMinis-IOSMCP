@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Real build/inspection adapter. Exit status and output hashes are never simulated."""
 import re
-import argparse, hashlib, json, os, pathlib, plistlib, shutil, subprocess, sys, tarfile, tempfile, zipfile, stat, urllib.request
+import argparse, hashlib, json, os, pathlib, plistlib, shlex, shutil, subprocess, sys, tarfile, tempfile, zipfile, stat, urllib.request
 HERE=pathlib.Path(__file__).resolve().parent
 SDK_HOME=pathlib.Path(os.environ.get('THEOS','/opt/theos'))/'sdks'
 def run(args,cwd=None):
@@ -146,35 +146,120 @@ def protection_flags(args):
     selected=getattr(args,'protection_passes','').split(',')
     if not selected or any(p not in PROTECTION_PASSES for p in selected):
         raise ValueError('Select supported protection passes: '+','.join(sorted(PROTECTION_PASSES)))
+    selection=getattr(args,'protection_selection','combined')
+    if selection not in ('single','combined'):raise ValueError('Unknown protection selection mode')
+    if selection=='single' and len(set(selected))!=1:raise ValueError('Single protection mode requires exactly one selected pass')
     return [v for p in sorted(set(selected)) for v in ('-mllvm','-'+p)]
 
 def protection_status(args):
     flags=protection_flags(args)
     if not flags:return {'mode':'normal','status':'normal compilation; protection disabled'}
     compiler=getattr(args,'protection_compiler','')
+    installed={}
     if compiler=='/opt/minis-protection/bin/clang' and (HERE/'ollvm/manifest.json').is_file():
         # First actual use installs the bundled signed Alpine packages locally.
         # Normal chat / normal builds never trigger an LLVM install.
-        run([sys.executable,'/usr/local/lib/minis-ollvm/install.py','ensure','--bundle',HERE/'ollvm'])
+        p=subprocess.run([sys.executable,'/usr/local/lib/minis-ollvm/install.py','ensure','--bundle',str(HERE/'ollvm')],capture_output=True,text=True,timeout=1800)
+        if p.returncode:raise RuntimeError('Offline protection runtime unavailable: '+(p.stdout+p.stderr)[-4000:])
+        try:installed=json.loads(p.stdout.strip().splitlines()[-1])
+        except (ValueError,IndexError):raise RuntimeError('Invalid protection runtime status; no ready state assumed')
+        if not installed.get('installed') or not installed.get('pluginProbe'):raise RuntimeError('Protection runtime probe failed: '+json.dumps(installed))
     if not compiler or not shutil.which(compiler):
         raise RuntimeError('Protection compiler unavailable: '+str(compiler)+'; stock clang is not substituted')
     # Check the selected target, flags and compilation together. An accepted
     # flag is evidence of compatibility, not a guarantee of obfuscation strength.
     with tempfile.TemporaryDirectory(prefix='minis-protection-') as d:
         source=pathlib.Path(d)/'probe.c';output=pathlib.Path(d)/'probe.o'
-        source.write_text('const char *s="minis-protection-probe"; int f(int x){return x>2?x+3:x-3;}\n')
+        source.write_text('int protection_data=7; const char *s="minis-protection-probe"; __attribute__((noinline)) int callee(int x){return x>2?x+3:x-3;} int f(int x){protection_data+=x; return callee(x)+protection_data+s[0];}\n')
         p=subprocess.run([compiler,'--target=arm64-apple-ios'+getattr(args,'minimum','15.4'),'-O2',*flags,'-c',str(source),'-o',str(output)],capture_output=True,text=True,timeout=60)
         if p.returncode!=0:raise RuntimeError('Protection capability probe failed: '+(p.stdout+p.stderr)[-4000:])
         if not output.is_file():raise RuntimeError('Protection compiler produced no object')
-    return {'mode':'enhanced','compiler':compiler,'acceptedPasses':sorted(set(args.protection_passes.split(','))),
-            'status':'target compile probe passed; inspect production artifact separately'}
+    result={'mode':'enhanced','compiler':compiler,'selection':getattr(args,'protection_selection','combined'),
+            'acceptedPasses':sorted(set(args.protection_passes.split(','))),
+            'status':'selected target compile probe passed; production artifact and device verification separate'}
+    if installed:
+        result.update({key:installed[key] for key in ('installed','installedBytes','runtimeVersion','clang','availablePasses') if key in installed})
+        result['passEvidence']=installed.get('passProbe',{})
+    return result
+
+def is_theos_project(src):
+    makefile=src/'Makefile'
+    return src.is_dir() and makefile.is_file() and not (src/'DEBIAN/control').is_file() and 'THEOS' in makefile.read_text(errors='replace')
+
+def build_theos(args,src,out):
+    """Use a protection frontend, leaving TARGET_LD/sign/package to Theos."""
+    theos=pathlib.Path(os.environ.get('THEOS','/opt/theos'))
+    if not (theos/'makefiles/common.mk').is_file():raise RuntimeError('Theos makefiles unavailable: '+str(theos))
+    if not shutil.which('make'):raise RuntimeError('GNU make required for Theos project')
+    sdk=theos/'sdks'/('iPhoneOS'+args.sdk+'.sdk')
+    if not sdk_valid(sdk):raise RuntimeError('SDK not installed: '+str(sdk))
+    if getattr(args,'protection','normal')=='enhanced' and any(src.rglob('*.swift')):
+        raise RuntimeError('The protection frontend handles C/ObjC/C++ only; Swift sources are not silently reported as protected')
+    command=['make','-j2','package','FINALPACKAGE=1','SDKVERSION='+args.sdk,'IPHONEOS_DEPLOYMENT_TARGET='+args.minimum]
+    if getattr(args,'protection','normal')=='enhanced':
+        frontend=shlex.join([args.protection_compiler,*protection_flags(args)])
+        command+=['TARGET_CC='+frontend,'TARGET_CXX='+frontend]
+        # Do not set TARGET_LD: Theos keeps its configured linker/signing path.
+        if args.protection_compiler=='/opt/minis-protection/bin/clang':
+            signer=pathlib.Path('/opt/minis-protection/runtime/ldid')
+            if not signer.is_file():raise RuntimeError('Bundled real ldid missing; repair the protection component')
+            command+=['TARGET_CODESIGN='+str(signer)]
+    before={p.resolve():(p.stat().st_mtime_ns,p.stat().st_size,sha(p)) for p in (src/'packages').glob('*.deb')}
+    run([part if part!='package' else 'clean' for part in command],cwd=src)
+    run(command,cwd=src)
+    artifacts=[p for p in (src/'packages').glob('*.deb') if p.resolve() not in before or (p.stat().st_mtime_ns,p.stat().st_size,sha(p))!=before[p.resolve()]]
+    if len(artifacts)!=1:raise RuntimeError('Expected one newly built Theos DEB; select one project/package explicitly')
+    signatures=[]
+    if getattr(args,'protection','normal')=='enhanced' and args.protection_compiler=='/opt/minis-protection/bin/clang':
+        # Verify before exposing a shared output; a failed build preserves any
+        # previous good artifact rather than leaving an unverified replacement.
+        signatures=verify_theos_signatures(artifacts[0])
+    with tempfile.NamedTemporaryFile(prefix='.'+out.name+'.',dir=out.parent,delete=False) as staging:
+        staged=pathlib.Path(staging.name)
+    try:
+        shutil.copy2(artifacts[0],staged)
+        os.replace(staged,out)
+    finally:staged.unlink(missing_ok=True)
+    return signatures
+
+def verify_theos_signatures(package):
+    """Verify actual packaged thin arm64 code pages, never just a signer's exit code."""
+    import importlib.util
+    spec=importlib.util.spec_from_file_location('minis_macho_signing',HERE/'macho_signing.py')
+    verifier=importlib.util.module_from_spec(spec);spec.loader.exec_module(verifier)
+    reports=[]
+    with tempfile.TemporaryFile() as errors:
+        process=subprocess.Popen(['dpkg-deb','--fsys-tarfile',str(package)],stdout=subprocess.PIPE,stderr=errors)
+        try:
+            with tarfile.open(fileobj=process.stdout,mode='r|*') as archive:
+                for member in archive:
+                    if not member.isfile():continue
+                    with archive.extractfile(member) as stream:
+                        head=stream.read(4)
+                        if head in (b'\xca\xfe\xba\xbe',b'\xbe\xba\xfe\xca'):
+                            raise RuntimeError('Protected Theos signature validation currently requires thin arm64 output; select ARCHS=arm64')
+                        if head!=b'\xcf\xfa\xed\xfe':continue
+                        if member.size>256*1024*1024:raise RuntimeError('Mach-O signing verification size limit exceeded')
+                        raw=head+stream.read()
+                        import struct
+                        if len(raw)<32 or struct.unpack_from('<I',raw,4)[0]!=0x0100000c:raise RuntimeError('Protected Theos output must be arm64; select ARCHS=arm64')
+                        report=verifier.verify_macho_code_directory(raw)
+                        reports.append({'entry':member.name,'sha256':report['sha256'],'codePageHashesVerified':report['codePageHashesVerified']})
+            process.stdout.close()
+            code=process.wait(timeout=60)
+            if code:raise RuntimeError('Cannot inspect actual Theos package signing')
+        finally:
+            if process.poll() is None:process.kill();process.wait()
+    if not reports:raise RuntimeError('Theos package contains no signed Mach-O code; not reporting a protected build')
+    return reports
 
 def build(args):
     src=pathlib.Path(args.project).resolve();out=pathlib.Path(args.output).resolve();out.parent.mkdir(parents=True,exist_ok=True)
     if not src.exists():raise FileNotFoundError(src)
     protected=getattr(args,'protection','normal')=='enhanced'
-    if protected and (args.remote or args.target!='dylib'):
-        raise RuntimeError('Enhanced mode currently supports local C/ObjC dylib compilation only; no silent normal-mode fallback')
+    theos_project=args.target=='deb' and is_theos_project(src)
+    if protected and (args.remote or not (args.target=='dylib' or theos_project)):
+        raise RuntimeError('Enhanced mode supports local C/ObjC dylib and source Theos DEB projects only; no silent normal-mode fallback or protection of prebuilt packages')
     protection=protection_status(args) if protected else None
     if args.remote:
         if not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.@:-]*',args.remote):raise ValueError('Use a configured SSH host alias, not options/commands')
@@ -199,6 +284,10 @@ def build(args):
         compiler=args.protection_compiler if protected else 'clang'
         run([compiler,'--target=arm64-apple-ios'+args.minimum,'-isysroot',sdk,'-fuse-ld=lld','-dynamiclib',*protection_flags(args),*files,'-framework','Foundation','-o',out])
     elif args.target=='deb':
+        if theos_project:
+            signatures=build_theos(args,src,out)
+            validate_artifact(out,'deb')
+            return {'artifact':str(out),'bytes':out.stat().st_size,'sha256':sha(out),'protection':protection,'signatures':signatures,'status':'Theos source build/package completed; device verification separate'}
         if not (src/'DEBIAN/control').is_file():raise RuntimeError('DEBIAN/control required')
         with tempfile.TemporaryDirectory(prefix='minis-deb-') as d:
             package=pathlib.Path(d)/'package';shutil.copytree(src,package)
@@ -276,6 +365,7 @@ def main():
         parser.add_argument('--protection',choices=['normal','enhanced'],default='normal')
         parser.add_argument('--protection-compiler',default='/opt/minis-protection/bin/clang')
         parser.add_argument('--protection-passes',default='bcf,sobf')
+        parser.add_argument('--protection-selection',choices=['single','combined'],default='combined')
     args=p.parse_args()
     try:
         result=doctor() if args.action=='doctor' else sdk_status() if args.action=='sdk-status' else install_sdk(args.sdk) if args.action=='install-sdk' else protection_status(args) if args.action=='protection-status' else build(args)
