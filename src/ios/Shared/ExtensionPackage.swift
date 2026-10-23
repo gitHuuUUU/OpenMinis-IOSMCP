@@ -40,6 +40,7 @@ enum ExtensionPackageReader {
     static let maxBytes = 50 * 1024 * 1024
     static let maxFiles = 5000
     static let allowedExtensions: Set<String> = ["md", "json", "txt", "png", "jpg", "jpeg", "gif", "webp"]
+    static let sourceExtensions: Set<String> = ["py", "js", "ts", "sh", "bash", "ps1", "bat", "cmd", "c", "h", "cpp", "hpp", "swift", "java", "gradle", "properties", "yaml", "yml", "toml", "csv", "template"]
     static let maxInstructionBytes = 64000
     static var legacyChineseEncoding: String.Encoding {
         String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue)))
@@ -125,11 +126,15 @@ enum ExtensionPackageReader {
             let parts = path.split(separator: "/", omittingEmptySubsequences: false)
             guard total <= maxBytes, !path.hasPrefix("/"), !path.contains("\\"), !path.contains(":"),
                   !parts.contains(".."), !parts.contains("."), !parts.contains(""),
-                  allowedExtensions.contains((path as NSString).pathExtension.lowercased()) else { throw fail("资源路径、类型或大小非法：" + path) }
+                  allowedExtensions.union(sourceExtensions).contains((path as NSString).pathExtension.lowercased()) else { throw fail("资源路径、类型或大小非法：" + path) }
             let signatures: [[UInt8]] = [[0x4d,0x5a], [0x7f,0x45,0x4c,0x46], [0xcf,0xfa,0xed,0xfe], [0xfe,0xed,0xfa,0xcf], [0xca,0xfe,0xba,0xbe], [0x23,0x21]]
-            guard !signatures.contains(where: { body.starts(with: $0) }) else { throw fail("拒绝可执行文件：" + path) }
+            guard !signatures.filter({ $0 != [0x23,0x21] || !sourceExtensions.contains((path as NSString).pathExtension.lowercased()) }).contains(where: { body.starts(with: $0) }) else { throw fail("拒绝可执行文件：" + path) }
         }
-        if original.keys.contains(where: { $0 == "manifest.json" || $0.hasSuffix("/manifest.json") }) {
+        // Only a package-root manifest declares the extension. Nested skill/tool
+        // manifests belong to their own resources and must not hijack discovery.
+        let roots = Set(original.keys.compactMap { $0.split(separator: "/").first.map(String.init) })
+        let wrappedManifest = roots.count == 1 && roots.first.map { original[$0 + "/manifest.json"] != nil } == true
+        if original["manifest.json"] != nil || wrappedManifest {
             return try validateFiles(original, currentVersion: currentVersion)
         }
         let skillPaths = original.keys.filter { $0 == "SKILL.md" || $0.hasSuffix("/SKILL.md") }.sorted()
@@ -282,7 +287,7 @@ enum ExtensionPackageReader {
                 continue
             }
             guard mode != 0x4000,
-                  allowedExtensions.contains((name as NSString).pathExtension.lowercased()) else { throw fail("文件扩展名或可执行权限不允许：\(name)") }
+                  allowedExtensions.union(sourceExtensions).contains((name as NSString).pathExtension.lowercased()) else { throw fail("文件扩展名或可执行权限不允许：\(name)") }
             total += expanded
             guard total <= maxBytes else { throw fail("解压总大小超过 50 MB") }
             let raw = data.subdata(in: offset..<offset+compressed)
@@ -292,7 +297,7 @@ enum ExtensionPackageReader {
             let crc = body.withUnsafeBytes { ptr in zlib.crc32(0, ptr.bindMemory(to: Bytef.self).baseAddress, uInt(body.count)) }
             guard Int(crc) == u32(p+16) else { throw fail("ZIP CRC 校验失败：\(name)") }
             let signatures: [[UInt8]] = [[0x4d,0x5a], [0x7f,0x45,0x4c,0x46], [0xcf,0xfa,0xed,0xfe], [0xfe,0xed,0xfa,0xcf], [0xca,0xfe,0xba,0xbe], [0x23,0x21]]
-            guard !signatures.contains(where: { body.starts(with: $0) }) else { throw fail("拒绝伪装为资源的可执行文件：\(name)") }
+            guard !signatures.filter({ $0 != [0x23,0x21] || !sourceExtensions.contains((name as NSString).pathExtension.lowercased()) }).contains(where: { body.starts(with: $0) }) else { throw fail("拒绝伪装为资源的可执行文件：\(name)") }
             result[name] = body
         }
         guard position == e else { throw fail("ZIP 中央目录条目数不一致") }

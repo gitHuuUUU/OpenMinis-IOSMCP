@@ -81,8 +81,10 @@ struct ExtensionPreview: Identifiable, Sendable {
                 let markdown = url.pathExtension.lowercased() == "md"
                 guard markdown || ["zip", "rar"].contains(url.pathExtension.lowercased()) else { throw ExtensionPackageReader.fail("只接受 .zip / .rar 扩展包或 .md 追加指令文件") }
                 let limit = markdown ? ExtensionPackageReader.maxInstructionBytes : ExtensionPackageReader.maxBytes
-                let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? Int.max
-                guard size <= limit else { throw ExtensionPackageReader.fail(markdown ? "MD 超过 64000 字节，未读取" : "ZIP 超过 50 MB，未读取") }
+                let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize
+                // Cloud/file-provider URLs may not expose size metadata. The bounded
+                // read below remains authoritative instead of treating unknown as huge.
+                guard size.map({ $0 <= limit }) ?? true else { throw ExtensionPackageReader.fail(markdown ? "MD 超过 64000 字节，未读取" : "ZIP 超过 50 MB，未读取") }
                 let handle = try FileHandle(forReadingFrom: url)
                 defer { try? handle.close() }
                 let bytes = try handle.read(upToCount: limit + 1) ?? Data()

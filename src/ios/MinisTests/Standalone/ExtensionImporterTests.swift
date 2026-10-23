@@ -70,6 +70,13 @@ final class ExtensionHTTPFixture: URLProtocol {
         let skillExport = try ExtensionPackageReader.readCompatible(Data(contentsOf: root.appendingPathComponent("loose-skills.zip")), filename: "skills.zip", currentVersion: "1.0")
         check(skillExport.skillNames == ["reviewer"], "Plain skill ZIP registers the discovered skill")
         check(skillExport.files["skills/reviewer/reference.md"] != nil, "Skill references survive compatibility normalization")
+        let withSources = try ExtensionPackageReader.readCompatibleFiles([
+            "reviewer/SKILL.md": Data("Review project files.".utf8),
+            "reviewer/scripts/check.py": Data("#!/usr/bin/env python3\nprint('check')".utf8),
+            "reviewer/config/manifest.json": Data("{}".utf8)
+        ], filename: "reviewer.zip", currentVersion: "2.0")
+        check(withSources.skillNames == ["reviewer"], "Nested resource manifest must not hijack skill import")
+        check(withSources.files["skills/reviewer/scripts/check.py"] != nil, "Source attachments retained")
         let strict = try ExtensionPackageReader.readCompatible(Data(contentsOf: root.appendingPathComponent("valid.zip")), filename: "valid.zip", currentVersion: "1.0")
         check(strict.manifest.name == "demo", "Manifest package retains identity and validation")
         let host = try FixtureHost(root.appendingPathComponent("work/skills"))

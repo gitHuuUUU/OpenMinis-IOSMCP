@@ -23,7 +23,7 @@ struct ExtensionManagementView: View {
                         catch { errorText = error.localizedDescription; showError = true }
                     }
                 }.disabled(store.busy || remoteURL.isEmpty)
-                Text("MD（最多 64000 字节）自动生成包信息，预览确认后作为追加指令；不是自动执行技能。ZIP / RAR 支持标准 manifest 包、普通 SKILL.md 技能包及纯 Markdown 文档包；会先生成预览，含脚本的资料包仍不能作为纯指令导入。ZIP 与解压内容均限 50 MB、\(ExtensionPackageReader.maxFiles) 项（含目录），仍不允许可执行文件。")
+                Text("MD（最多 64000 字节）自动生成包信息，预览确认后作为追加指令；不是自动执行技能。ZIP / RAR 支持标准 manifest 包、普通 SKILL.md 技能包及纯 Markdown 文档包；会先生成预览，技能包支持 Python、Shell、JavaScript 等源码附件，导入不会自动执行；二进制程序仍不接受。ZIP 与解压内容均限 50 MB、\(ExtensionPackageReader.maxFiles) 项（含目录），仍不允许可执行文件。")
                     .font(.footnote).foregroundColor(.secondary)
             }
             Section(header: Text("已安装 · 拖动调整加载顺序（后者优先）")) {
@@ -43,7 +43,7 @@ struct ExtensionManagementView: View {
         }
         .navigationTitle("扩展包")
         .toolbar { EditButton() }
-        .fileImporter(isPresented: $picker, allowedContentTypes: [.zip, UTType(filenameExtension: "rar") ?? .data, UTType(filenameExtension: "md") ?? .plainText], allowsMultipleSelection: false) { result in
+        .fileImporter(isPresented: $picker, allowedContentTypes: [.item], allowsMultipleSelection: false) { result in
             switch result {
             case .success(let urls):
                 guard let url = urls.first else { return }
