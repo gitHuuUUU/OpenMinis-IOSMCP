@@ -909,27 +909,23 @@ struct DevelopmentWorkbenchView: View {
     @State private var status=""
     var body: some View {
         List {
-            Section(header:Text("开发环境与诊断")) {
-                NavigationLink { MinisReDashboardView() } label: {
-                    Label("MinisRe 工作台总览", systemImage: "sparkles.rectangle.stack.fill")
-                }
-                NavigationLink("SDK 与多平台构建工作台") { MultiPlatformWorkbenchView() }
+            Section(header:Text("开发与构建")) {
+                NavigationLink("SDK 与多平台构建") { MultiPlatformWorkbenchView() }
                 NavigationLink("内置终端") { ISHTerminalView(showCloseButton: true) }
-                NavigationLink("Tools · 基础与逆向工具") { List { Text("CoreTools：文件、网络与项目工具"); Text("ReverseTools：LLVM / binutils / GDB"); Text("Python：解释器及 pip"); Text("Frida：内置 ARM64/musl Python 模块与 CLI，实际启动验证"); Text("REA：固定版本 CLI、官方技能及 MCP；引擎另行检测") }.navigationTitle("Tools") }
+            }
+            Section(header:Text("工具组件")) {
                 ForEach(["Codex","Theos","CoreTools","ReverseTools","BuildTools","Node.js","Python","Frida","REA","OLLVM"],id:\.self) { name in
                     NavigationLink { RuntimeComponentView(name:name) } label: {
                         MinisReFeatureRow(title:name, subtitle:model.componentStatus[name] ?? "未检测 · 查看与安装", icon:toolIcon(name), color:toolColor(name))
                     }
                 }
                 Text("点击组件后在应用内安装。当前 Linux 工具运行于 iSH，并非原生 iOS 可执行文件；完整 iOS 编译需另备匹配 SDK/交叉编译器。").font(.caption).foregroundColor(.secondary)
-                NavigationLink("Skills 与扩展") { SkillsManagementView() }
-                NavigationLink("Agent 配置") { HelperSettingsView() }
-                Button("合并本地调试 Agent") { model.importAgents(); status="已合并；原 Agent 保留" }
+            }
+            Section(header:Text("运行与维护")) {
                 NavigationLink("运行诊断") { WorkbenchDiagnosticsView() }
-                NavigationLink { CompilationProtectionView() } label: {
-                    MinisReFeatureRow(title:"OLLVM 编译保护",subtitle:"内置离线组件 · 首次强化构建自动安装",icon:"shield.lefthalf.filled",color:.purple)
-                }
+                NavigationLink("提速与温控") { RuntimeEfficiencyView() }
                 NavigationLink("日志") { WorkbenchLogView() }
+                Button("合并本地调试 Agent") { model.importAgents(); status="已合并；原 Agent 保留" }
             }
             Section(header:Text("文件与应用调试权限")) {
                 Toggle("允许 AI 自动选择并打开已安装应用",isOn:$autoApps)
@@ -950,10 +946,7 @@ struct DevelopmentWorkbenchView: View {
                 Text("应用可自动检测并调用真实 WDA；无法在普通 iOS 应用内部直接安装 XCTest runner。免越狱使用需配对 Mac + Xcode + 开发签名（或已有 WDA 主机），启动后填入 URL；未返回 ready 前不会报告 UI 控制就绪。").font(.caption).foregroundColor(.secondary)
             }
             if !status.isEmpty { Section { Text(status).font(.caption) } }
-            Section(header:Text("实际检测结果：\(model.results.filter(\.ok).count)/\(model.results.count) 通过")) {
-                ForEach(model.results) { row in HStack(alignment:.top) { Image(systemName:row.pending ? "clock" : (row.ok ? "checkmark.circle.fill" : "exclamationmark.circle")).foregroundColor(row.ok ? .green : .orange); VStack(alignment:.leading) { Text(row.name); Text(row.detail.isEmpty ? (row.pending ? "待实时复检" : (row.ok ? "探针成功" : "探针失败")) : String(row.detail.suffix(1500))).font(.caption).foregroundColor(.secondary) } } }
-            }
-        }.navigationTitle("开发环境与诊断")
+        }.navigationTitle("开发环境与诊断").navigationBarTitleDisplayMode(.inline)
         .onAppear { model.startComponentProbeIfNeeded() }
     }
     private func toolIcon(_ name: String) -> String {
@@ -969,8 +962,7 @@ struct RuntimeComponentView: View {
     private var active: Bool { model.installingName == name }
     var body: some View {
         ScrollView {
-            VStack(alignment:.leading, spacing:20) {
-                Text(name).font(.title3.weight(.semibold))
+            VStack(alignment:.leading, spacing:12) {
                 Text(model.componentStatus[name] ?? "尚未检查安装状态").foregroundColor(.secondary)
                 Text("在应用内准备、下载、校验、解压、安装并运行探针。Alpine 包由 apk 验签；Codex 资产校验 GitHub SHA256。失败保留日志，不显示虚假就绪状态。").font(.callout)
                 if active && model.busy { ProgressView(); Text(model.installStage).font(.headline) }
@@ -989,7 +981,7 @@ struct RuntimeComponentView: View {
                 Text("Theos 的项目文件安装成功不代表已具备 iOS SDK。诊断会单独检查手机编译和 iOS SDK。").font(.caption).foregroundColor(.secondary)
                 if active { Text(String(model.log.suffix(6000))).font(.system(.caption,design:.monospaced)).textSelection(.enabled) }
             }.padding()
-        }.navigationTitle(name)
+        }.navigationTitle(name).navigationBarTitleDisplayMode(.inline)
     }
 }
 struct WorkbenchDiagnosticsView: View {
@@ -1053,7 +1045,6 @@ struct MultiPlatformWorkbenchView:View {
     }
     var body:some View {
         Form {
-            Section { NavigationLink("提速与温控",destination:RuntimeEfficiencyView()) }
             Section { NavigationLink("编译保护",destination:CompilationProtectionView()) }
             Section(header:Text("按需下载 iOS SDK 15–18")) {
                 Text("选择一套 SDK 单独下载并安装到 Theos；下载后核对字节数和 SHA256。已有 SDK 不覆盖，四套归档均不随 IPA 携带；单次安装需要至少 2 GB 可用空间。SDK 不等于完整 Xcode。").font(.caption)

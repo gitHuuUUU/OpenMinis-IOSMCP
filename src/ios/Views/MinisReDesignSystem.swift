@@ -42,40 +42,6 @@ struct MinisReFeatureRow: View {
     }
 }
 
-struct MinisReDashboardView: View {
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("你的开发空间").font(.title3.weight(.semibold))
-                Text("账号、工具与运行状态，一处掌握").font(.caption).foregroundStyle(.secondary)
-                MinisReCard {
-                    NavigationLink { MinisReAccountsView() } label: {
-                        MinisReFeatureRow(title: "AI 账号", subtitle: "登录 · 服务商 · 用量与模型价格", icon: "person.crop.circle.fill", color: .blue)
-                    }
-                    Divider()
-                    NavigationLink { DevelopmentWorkbenchView() } label: {
-                        MinisReFeatureRow(title: "开发能力", subtitle: "按需安装，保留真实探针结果", icon: "hammer.fill", color: .orange)
-                    }
-                    Divider()
-                    NavigationLink { CompilationProtectionView() } label: {
-                        MinisReFeatureRow(title: "编译保护", subtitle: "普通 / 强化 · 编译器与能力检测", icon: "shield.lefthalf.filled", color: .purple)
-                    }
-                }
-                MinisReCard {
-                    NavigationLink { WorkbenchDiagnosticsView() } label: {
-                        MinisReFeatureRow(title: "运行诊断", subtitle: "签名权限、工具与环境检查", icon: "stethoscope", color: .teal)
-                    }
-                    Divider()
-                    NavigationLink { RuntimeEfficiencyView() } label: {
-                        MinisReFeatureRow(title: "提速与温控", subtitle: "按需并发，热压力下自动降载", icon: "bolt.fill", color: .green)
-                    }
-                }
-            }.padding(16)
-        }.background(MinisRePalette.background.ignoresSafeArea())
-            .navigationTitle("MinisRe").navigationBarTitleDisplayMode(.inline)
-    }
-}
-
 struct MinisReAccountsView: View {
     @ObservedObject private var providers = ProviderConfigStore.shared
     @AppStorage("minisre.currency") private var currency = "USD"

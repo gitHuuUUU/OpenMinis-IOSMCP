@@ -25,6 +25,26 @@ class DashboardTests(unittest.TestCase):
         self.assertNotIn('enabled ? "已启用"', ui)
         self.assertIn("record.hasSnapshot", ui)
 
+    def test_compact_navigation_has_no_duplicate_hub_cycle(self):
+        design = (ROOT/"src/ios/Views/MinisReDesignSystem.swift").read_text(encoding="utf-8")
+        work = (ROOT/"src/ios/Workbench.swift").read_text(encoding="utf-8")
+        settings = (ROOT/"src/ios/Views/ContentView.swift").read_text(encoding="utf-8").split("private struct SettingsSheet: View", 1)[1].split('.navigationTitle("Settings")', 1)[0]
+        mcp = (ROOT/"src/ios/Views/MCP/MCPIntegrationsView.swift").read_text(encoding="utf-8")
+        for source in (design, work, settings):
+            self.assertNotIn("MinisReDashboardView", source)
+        self.assertEqual(settings.count("MinisReAccountsView()"), 1)
+        self.assertNotIn("ProviderInstancesView()", settings)
+        self.assertNotIn("UsageStatsView()", settings)
+        dev = work.split("struct DevelopmentWorkbenchView", 1)[1].split("struct RuntimeComponentView", 1)[0]
+        for target in ("SkillsManagementView()", "HelperSettingsView()", "CompilationProtectionView()"):
+            self.assertNotIn(target, dev)
+        self.assertEqual(work.count("RuntimeEfficiencyView()"), 1)
+        self.assertNotIn("RuntimeEfficiencyView()", mcp)
+        self.assertEqual(work.count("CompilationProtectionView()"), 1)
+        for target in ("ProviderInstancesView()", "MinisReUsageView()", "UsageStatsView()"):
+            self.assertIn(target, design)
+        self.assertNotIn('Text(name).font(.title3', work)
+
     def test_normal_never_needs_protection_compiler(self):
         args=SimpleNamespace(protection="normal")
         self.assertEqual(adapter.protection_flags(args), [])
