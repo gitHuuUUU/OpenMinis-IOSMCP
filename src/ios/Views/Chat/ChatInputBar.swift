@@ -2024,6 +2024,7 @@ struct PastableTextView: UIViewRepresentable {
         /// Called from `updateUIView` on every re-render; acts only when the
         /// parent's hint carries a generation not yet seen.
         func syncContextUsageHint(in textView: UITextView) {
+            guard MinisReComposerVisibility.showsContextText else { return }
             // Diagnostic: what this Coordinator SEES on each re-render. Logged
             // only when it changes, since updateUIView runs constantly.
             let seen = "parentHint=\(parent.contextUsageHint.map { "gen\($0.generation)" } ?? "nil") handled=gen\(contextHintGeneration) unconsumed=\(hasUnconsumedTransientHint)"

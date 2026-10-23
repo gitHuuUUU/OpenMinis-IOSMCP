@@ -646,6 +646,7 @@ struct InlineVoiceInputView: View {
             // generation restarts the task (cancelling the old window); the
             // task owns no stored closure capturing the view.
             .task(id: contextUsageHint?.generation) {
+                guard MinisReComposerVisibility.showsContextText else { return }
                 guard let hint = contextUsageHint,
                       hint.generation != voiceUsageHintGeneration else { return }
                 voiceUsageHintGeneration = hint.generation

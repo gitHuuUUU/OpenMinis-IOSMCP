@@ -1,5 +1,10 @@
 import SwiftUI
 
+enum MinisReComposerVisibility {
+    // Keep context accounting and detail pages; remove the inline figures.
+    static let showsContextText = false
+}
+
 enum MinisRePalette {
     static let background = Color(UIColor.systemGroupedBackground)
     static let card = Color(UIColor.secondarySystemGroupedBackground)
@@ -283,13 +288,12 @@ struct CompilationProtectionView: View {
 struct MinisReAgentStrip: View {
     @ObservedObject private var jobs = AgentJobRegistry.shared
     let session: String?
-    let context: String?
     var body: some View {
         let active = session.map { jobs.activeChildren(parent: $0).count } ?? 0
-        if active > 0 || context != nil {
+        if active > 0 {
             HStack(spacing: 9) {
-                Image(systemName: active > 0 ? "person.3.fill" : "chart.bar.fill").foregroundStyle(.blue)
-                Text(active > 0 ? "Agent 协作中 · \(active) 个任务" : (context ?? "")).font(.caption).lineLimit(2)
+                Image(systemName: "person.3.fill").foregroundStyle(.blue)
+                Text("Agent 协作中 · \(active) 个任务").font(.caption).lineLimit(2)
                 Spacer(minLength: 0)
             }.padding(.horizontal, 14).padding(.vertical, 8).background(.ultraThinMaterial)
         }

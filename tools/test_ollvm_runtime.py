@@ -38,4 +38,15 @@ class Tests(unittest.TestCase):
         workflow=(ROOT/".github/workflows/build-ipa.yml").read_text(encoding="utf-8")
         self.assertIn("prepare_ollvm_workbench.py",workflow)
         self.assertNotIn("--allow-untrusted",(ROOT/"src/ios/default_mount/usr/local/lib/minis-ollvm/install.py").read_text(encoding="utf-8").replace("# Retains Alpine's package signature verification. Never allow-untrusted.",""))
+    def test_composer_icon_only(self):
+        view=(ROOT/"src/ios/Views/Chat/AIChatView.swift").read_text(encoding="utf-8")
+        row=view.split("private var composerModelRow: some View {",1)[1].split("private var composerContextRow:",1)[0]
+        self.assertNotIn("Text(",row)
+        self.assertNotIn("Label(vm.currentThinkingLevel.displayName",row)
+        self.assertIn("showModelPicker = true",row)
+        self.assertIn("vm.setThinkingLevel(level)",row)
+        ui=(ROOT/"src/ios/Views/MinisReDesignSystem.swift").read_text(encoding="utf-8")
+        self.assertIn("static let showsContextText = false",ui)
+        for name in ["ChatInputBar.swift","Voice/InlineVoiceInputView.swift"]:
+            self.assertIn("guard MinisReComposerVisibility.showsContextText else",(ROOT/"src/ios/Views/Chat"/name).read_text(encoding="utf-8"))
 if __name__=="__main__":unittest.main()

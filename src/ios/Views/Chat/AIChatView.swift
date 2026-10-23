@@ -525,7 +525,7 @@ struct AIChatView: View {
             // Messages — floating tool preview overlaid at bottom
             messagesArea
                 .safeAreaInset(edge: .top, spacing: 0) {
-                    MinisReAgentStrip(session: vm.sessionId, context: vm.contextUsageHint?.text)
+                    MinisReAgentStrip(session: vm.sessionId)
                     // Error banner
                     if let error = vm.errorMessage {
                         errorBanner(error)
@@ -3461,41 +3461,32 @@ struct AIChatView: View {
             Button { inputFocused = false; showModelPicker = true } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "cpu")
-                    Text(SessionModelDisplay(store: configStore, draftGroupId: vm.initialGroupId).displayName(for: vm.sessionId))
-                        .lineLimit(1).truncationMode(.middle)
                     Image(systemName: "chevron.down").font(.system(size: 9))
                 }.font(.caption.weight(.medium)).padding(.horizontal, 10).padding(.vertical, 7)
                     .background(Capsule().fill(ChatColors.inputIconBg))
             }.buttonStyle(.plain).accessibilityLabel("选择当前模型")
+                .accessibilityValue(SessionModelDisplay(store: configStore, draftGroupId: vm.initialGroupId).displayName(for: vm.sessionId))
             if !vm.availableThinkingLevels.isEmpty {
                 Menu {
                     ForEach(vm.availableThinkingLevels, id: \.self) { level in
                         Button(level.displayName) { vm.setThinkingLevel(level) }
                     }
                 } label: {
-                    Label(vm.currentThinkingLevel.displayName, systemImage: "slider.horizontal.3")
+                    Image(systemName: "slider.horizontal.3")
                         .font(.caption).padding(.horizontal, 10).padding(.vertical, 7)
                         .background(Capsule().fill(ChatColors.inputIconBg))
                 }.accessibilityLabel("选择思考等级")
+                    .accessibilityValue(vm.currentThinkingLevel.displayName)
             }
             Spacer(minLength: 0)
+            composerContextRow
         }.foregroundStyle(ChatColors.secondaryText).padding(.horizontal, 12).padding(.top, 4)
     }
 
     private var composerContextRow: some View {
-        let input = vm.sessionInputTokens + vm.sessionCacheReadTokens + vm.sessionCacheWriteTokens
-        return Button { inputFocused = false; showTokenUsage = true } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "chart.pie")
-                if let context = vm.contextUsage {
-                    Text("上下文 \(TokenCountFormatter.short(context.usedTokens))/\(TokenCountFormatter.short(context.windowTokens))")
-                } else { Text("上下文待服务商返回") }
-                if input > 0 {
-                    Text("· 缓存 \(Int(Double(vm.sessionCacheReadTokens) / Double(input) * 100))%")
-                }
-                Spacer(minLength: 0)
-            }.font(.caption2).lineLimit(1).minimumScaleFactor(0.75)
-                .foregroundStyle(ChatColors.secondaryText).padding(.horizontal, 14).padding(.top, 7)
+        Button { inputFocused = false; showTokenUsage = true } label: {
+            Image(systemName: "chart.pie").font(.system(size:16))
+                .foregroundStyle(ChatColors.secondaryText).frame(width:34,height:34)
         }.buttonStyle(.plain).accessibilityLabel("查看上下文和用量明细")
     }
 
@@ -4028,7 +4019,6 @@ struct AIChatView: View {
             }
 
             VStack(spacing: 5) {
-                composerContextRow
                 // [T-paste-placeholder] Stashed long pastes referenced by the
                 // draft. Removal also strips the literal from the input text.
                 if !vm.pastedTexts.isEmpty {
