@@ -3454,6 +3454,51 @@ struct AIChatView: View {
         return AnyView(row)
     }
 
+    /// Separate horizontal row: avoids squeezing the attachment/expert/voice
+    /// hit targets on small phones. Uses the same pickers as the navigation bar.
+    private var composerModelRow: some View {
+        HStack(spacing: 10) {
+            Button { inputFocused = false; showModelPicker = true } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "cpu")
+                    Text(SessionModelDisplay(store: configStore, draftGroupId: vm.initialGroupId).displayName(for: vm.sessionId))
+                        .lineLimit(1).truncationMode(.middle)
+                    Image(systemName: "chevron.down").font(.system(size: 9))
+                }.font(.caption.weight(.medium)).padding(.horizontal, 10).padding(.vertical, 7)
+                    .background(Capsule().fill(ChatColors.inputIconBg))
+            }.buttonStyle(.plain).accessibilityLabel("选择当前模型")
+            if !vm.availableThinkingLevels.isEmpty {
+                Menu {
+                    ForEach(vm.availableThinkingLevels, id: \.self) { level in
+                        Button(level.displayName) { vm.setThinkingLevel(level) }
+                    }
+                } label: {
+                    Label(vm.currentThinkingLevel.displayName, systemImage: "slider.horizontal.3")
+                        .font(.caption).padding(.horizontal, 10).padding(.vertical, 7)
+                        .background(Capsule().fill(ChatColors.inputIconBg))
+                }.accessibilityLabel("选择思考等级")
+            }
+            Spacer(minLength: 0)
+        }.foregroundStyle(ChatColors.secondaryText).padding(.horizontal, 12).padding(.top, 4)
+    }
+
+    private var composerContextRow: some View {
+        let input = vm.sessionInputTokens + vm.sessionCacheReadTokens + vm.sessionCacheWriteTokens
+        return Button { inputFocused = false; showTokenUsage = true } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "chart.pie")
+                if let context = vm.contextUsage {
+                    Text("上下文 \(TokenCountFormatter.short(context.usedTokens))/\(TokenCountFormatter.short(context.windowTokens))")
+                } else { Text("上下文待服务商返回") }
+                if input > 0 {
+                    Text("· 缓存 \(Int(Double(vm.sessionCacheReadTokens) / Double(input) * 100))%")
+                }
+                Spacer(minLength: 0)
+            }.font(.caption2).lineLimit(1).minimumScaleFactor(0.75)
+                .foregroundStyle(ChatColors.secondaryText).padding(.horizontal, 14).padding(.top, 7)
+        }.buttonStyle(.plain).accessibilityLabel("查看上下文和用量明细")
+    }
+
     /// [T-ios-de-voice-toolbar] Fixed controls in `inputBottomRow`: two 34pt
     /// original leading buttons plus the library icon, the 34pt mic and the
     /// 34pt send button, plus five 12pt HStack gaps between them. Everything left over is what the
@@ -3983,6 +4028,7 @@ struct AIChatView: View {
             }
 
             VStack(spacing: 5) {
+                composerContextRow
                 // [T-paste-placeholder] Stashed long pastes referenced by the
                 // draft. Removal also strips the literal from the input text.
                 if !vm.pastedTexts.isEmpty {
@@ -4005,6 +4051,7 @@ struct AIChatView: View {
 
                 inputFieldOrWaveform
 
+                composerModelRow
                 inputBottomRow
                     // [T-ios-de-voice-toolbar] Measure the row so the
                     // read-aloud toggle can decide whether its label fits.
