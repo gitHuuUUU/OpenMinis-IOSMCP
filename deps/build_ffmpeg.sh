@@ -136,15 +136,21 @@ fetch_ffmpeg_source() {
         rm -rf "$tmp"
         log_error "Failed to download $url — check your network, or place the source at $FFMPEG_DIR manually."
     fi
-    # GitHub tag tarball extracts as FFmpeg-n6.1.2; normalize to ffmpeg-6.1.2
-    if [ -d "$tmp/FFmpeg-n6.1.2" ]; then mv "$tmp/FFmpeg-n6.1.2" "$tmp/ffmpeg-${version}"; fi
-
     log_info "Extracting..."
     if ! tar -xf "$tmp/$tarball" -C "$tmp"; then
         rm -rf "$tmp"
         log_error "Failed to extract $tarball"
     fi
 
+    # GitHub's tag fallback uses a different root, which exists only AFTER
+    # extraction, not before it.
+    if [ -d "$tmp/FFmpeg-n${version}" ]; then
+        mv "$tmp/FFmpeg-n${version}" "$tmp/ffmpeg-${version}"
+    fi
+    if [ ! -f "$tmp/ffmpeg-${version}/configure" ]; then
+        rm -rf "$tmp"
+        log_error "Extracted FFmpeg source root/configure missing"
+    fi
     mv "$tmp/ffmpeg-${version}" "$FFMPEG_DIR"
     rm -rf "$tmp"
     log_success "FFmpeg ${version} source ready at $FFMPEG_DIR"
