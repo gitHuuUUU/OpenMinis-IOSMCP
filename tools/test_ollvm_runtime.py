@@ -49,4 +49,12 @@ class Tests(unittest.TestCase):
         self.assertIn("static let showsContextText = false",ui)
         for name in ["ChatInputBar.swift","Voice/InlineVoiceInputView.swift"]:
             self.assertIn("guard MinisReComposerVisibility.showsContextText else",(ROOT/"src/ios/Views/Chat"/name).read_text(encoding="utf-8"))
+    def test_compact_visual_scale(self):
+        ui=(ROOT/"src/ios/Views/MinisReDesignSystem.swift").read_text(encoding="utf-8")
+        self.assertIn(".frame(width: 24, height: 24)",ui)
+        self.assertIn(".frame(minHeight: 44)",ui)
+        self.assertIn("Text(title).font(.subheadline)",ui)
+        self.assertIn("cornerRadius: 14",ui)
+        self.assertNotIn(".largeTitle",ui)
+        self.assertNotIn(".frame(width: 40, height: 40)",ui)
 if __name__=="__main__":unittest.main()

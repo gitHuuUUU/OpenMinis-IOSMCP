@@ -970,7 +970,7 @@ struct RuntimeComponentView: View {
     var body: some View {
         ScrollView {
             VStack(alignment:.leading, spacing:20) {
-                Text(name).font(.largeTitle.bold())
+                Text(name).font(.title3.weight(.semibold))
                 Text(model.componentStatus[name] ?? "尚未检查安装状态").foregroundColor(.secondary)
                 Text("在应用内准备、下载、校验、解压、安装并运行探针。Alpine 包由 apk 验签；Codex 资产校验 GitHub SHA256。失败保留日志，不显示虚假就绪状态。").font(.callout)
                 if active && model.busy { ProgressView(); Text(model.installStage).font(.headline) }

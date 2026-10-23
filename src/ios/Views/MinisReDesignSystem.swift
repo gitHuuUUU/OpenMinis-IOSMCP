@@ -15,10 +15,10 @@ struct MinisReCard<Content: View>: View {
     let content: Content
     init(@ViewBuilder content: () -> Content) { self.content = content() }
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) { content }
-            .padding(16).frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(MinisRePalette.card))
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(MinisRePalette.border))
+        VStack(alignment: .leading, spacing: 10) { content }
+            .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(MinisRePalette.card))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(MinisRePalette.border))
     }
 }
 
@@ -28,25 +28,26 @@ struct MinisReFeatureRow: View {
     let icon: String
     var color: Color = .blue
     var body: some View {
-        HStack(spacing: 13) {
-            Image(systemName: icon).font(.system(size: 19, weight: .semibold))
-                .foregroundStyle(.white).frame(width: 40, height: 40)
-                .background(RoundedRectangle(cornerRadius: 12).fill(color))
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).foregroundStyle(.primary)
-                if !subtitle.isEmpty { Text(subtitle).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+        HStack(spacing: 10) {
+            Image(systemName: icon).font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.white).frame(width: 24, height: 24)
+                .background(RoundedRectangle(cornerRadius: 7).fill(color))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.subheadline).foregroundStyle(.primary)
+                if !subtitle.isEmpty { Text(subtitle).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
             }
             Spacer(minLength: 4)
-        }.padding(.vertical, 3).frame(maxWidth: .infinity, alignment: .leading)
+        }.frame(minHeight: 44).frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
     }
 }
 
 struct MinisReDashboardView: View {
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                Text("你的开发空间").font(.largeTitle.bold())
-                Text("账号、工具与运行状态，一处掌握").font(.subheadline).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 12) {
+                Text("你的开发空间").font(.title3.weight(.semibold))
+                Text("账号、工具与运行状态，一处掌握").font(.caption).foregroundStyle(.secondary)
                 MinisReCard {
                     NavigationLink { MinisReAccountsView() } label: {
                         MinisReFeatureRow(title: "AI 账号", subtitle: "登录 · 服务商 · 用量与模型价格", icon: "person.crop.circle.fill", color: .blue)
@@ -69,7 +70,7 @@ struct MinisReDashboardView: View {
                         MinisReFeatureRow(title: "提速与温控", subtitle: "按需并发，热压力下自动降载", icon: "bolt.fill", color: .green)
                     }
                 }
-            }.padding(18)
+            }.padding(16)
         }.background(MinisRePalette.background.ignoresSafeArea())
             .navigationTitle("MinisRe").navigationBarTitleDisplayMode(.inline)
     }
@@ -84,7 +85,7 @@ struct MinisReAccountsView: View {
     }
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 14) {
                 MinisReCard {
                     if let account = chatGPT {
                         NavigationLink { ProviderInstanceDetailView(instanceId: account.id) } label: {
@@ -100,7 +101,7 @@ struct MinisReAccountsView: View {
                         MinisReFeatureRow(title: "第三方服务商", subtitle: "\(providers.instances.count) 个已配置 · 管理登录与密钥", icon: "globe", color: .purple)
                     }
                 }
-                Text("管理").font(.subheadline).foregroundStyle(.secondary).padding(.leading, 6)
+                Text("管理").font(.caption).foregroundStyle(.secondary).padding(.leading, 6)
                 MinisReCard {
                     Button { showCurrency = true } label: {
                         MinisReFeatureRow(title: "计费币种", subtitle: currency == "CNY" ? "人民币 (CNY)" : "美元 (USD)", icon: "dollarsign.circle.fill")
@@ -114,7 +115,7 @@ struct MinisReAccountsView: View {
                         MinisReFeatureRow(title: "模型价格", subtitle: "models.dev 参考目录 · 支持搜索刷新", icon: "tag.fill", color: .orange)
                     }
                 }
-            }.padding(18)
+            }.padding(16)
         }.background(MinisRePalette.background.ignoresSafeArea())
             .navigationTitle("AI 账号").navigationBarTitleDisplayMode(.inline)
             .confirmationDialog("计费币种（只影响估算显示）", isPresented: $showCurrency, titleVisibility: .visible) {
@@ -147,7 +148,7 @@ struct MinisRePricesView: View {
                 Section(group.0) {
                     ForEach(group.1) { row in
                         VStack(alignment: .leading, spacing: 5) {
-                            Label(row.name, systemImage: "cpu").font(.headline)
+                            Label(row.name, systemImage: "cpu").font(.subheadline.weight(.semibold))
                             Text(row.model).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                             Text("输入 \(price(row.input)) · 输出 \(price(row.output)) / 1M").font(.caption)
                             if let context = row.context { Text("上下文 \(context.formatted()) token").font(.caption).foregroundStyle(.secondary) }
@@ -178,14 +179,14 @@ struct MinisReUsageView: View {
     @State private var loaded = false
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 12) {
                 Text("本机用量估算").foregroundStyle(.secondary)
                 MinisReCard {
-                    Label("Token 用量统计", systemImage: "chart.bar.fill").font(.headline)
+                    Label("Token 用量统计", systemImage: "chart.bar.fill").font(.subheadline.weight(.semibold))
                     HStack { metric("今日 Token", value: todayTokens.formatted()); metric("累计 Token", value: totalTokens.formatted()) }
                 }
                 MinisReCard {
-                    Label("API 参考费用", systemImage: "dollarsign.circle").font(.headline)
+                    Label("API 参考费用", systemImage: "dollarsign.circle").font(.subheadline.weight(.semibold))
                     HStack { metric("今日已匹配部分", value: display(todayCost)); metric("累计已匹配部分", value: display(totalCost)) }
                     Text("匹配 \(covered)/\(count) 条记录。只使用精确模型 ID 与服务商类别；未知模型、缓存单价和旧记录不冒充免费。代理商收费、订阅额度和实际账单请以服务商为准。").font(.caption).foregroundStyle(.secondary)
                     if currency == "CNY" {
@@ -197,13 +198,13 @@ struct MinisReUsageView: View {
                     MinisReFeatureRow(title: "详细 Token 与子代理统计", subtitle: "保留原有分模型、缓存及归属明细", icon: "list.bullet.rectangle")
                 }
                 if !loaded { ProgressView("读取本机记录…") }
-            }.padding(18)
+            }.padding(16)
         }.background(MinisRePalette.background.ignoresSafeArea()).navigationTitle("用量与费用").navigationBarTitleDisplayMode(.inline)
             .task { await load() }
     }
     private func display(_ usd: Double?) -> String { UsageCostPolicy.display(usd, currency: currency, usdToCNY: exchange) }
     private func metric(_ title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 7) { Text(title).font(.caption).foregroundStyle(.secondary); Text(value).font(.title3.bold()).minimumScaleFactor(0.7).lineLimit(1) }.frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 5) { Text(title).font(.caption2).foregroundStyle(.secondary); Text(value).font(.headline).minimumScaleFactor(0.7).lineLimit(1) }.frame(maxWidth: .infinity, alignment: .leading)
     }
     private func load() async {
         let records = await ChatStore.shared.fetchUsageStats()
@@ -304,12 +305,12 @@ struct MinisReRuntimeCards: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             MinisReCard {
-                Label("目录访问", systemImage: "folder.badge.gearshape").font(.headline)
+                Label("目录访问", systemImage: "folder.badge.gearshape").font(.subheadline.weight(.semibold))
                 Text(FileManager.default.isReadableFile(atPath: "/var/jb") ? "检测到 /var/jb 可读" : "未检测到 /var/jb 可读").font(.caption).foregroundStyle(.secondary)
                 Text("不据此推断越狱类型").font(.caption2).foregroundStyle(.secondary)
             }
             MinisReCard {
-                Label("签名权限", systemImage: "checkmark.seal").font(.headline)
+                Label("签名权限", systemImage: "checkmark.seal").font(.subheadline.weight(.semibold))
                 Text(AppSigningCapabilities.canAccessOutsideAppContainer ? "有效扩展权限" : "普通沙盒权限").font(.caption).foregroundStyle(.secondary)
                 Text("以系统实际权限为准").font(.caption2).foregroundStyle(.secondary)
             }
