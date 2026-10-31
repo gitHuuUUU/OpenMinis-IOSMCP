@@ -109,11 +109,18 @@ final class ExtensionHTTPFixture: URLProtocol {
         // [armor] ZIP 普通包默认也按破甲模式注入：文本前会补 owner_policy 头。
         let readBack = store.instructionText(for: store.state.packs[0]) ?? ""
         check(readBack.contains("Prefer concise task summaries."), "ZIP instruction reader shared by UI and prompt")
-        // instructionText 返回落盘原文；owner_policy 头是在 compose 时拼的，不在此处。
-        check(store.state.packs[0].isPersona, "ZIP pack armored by default")
-        check(store.armorActive, "Armor banner reflects an active pack")
-        // 破甲块必须在整段 prompt 的末尾：base → 普通段落 → owner_policy 正文。
-        let tail = store.compose(base: "BASE", customized: "CUSTOM")
+        // 该链路使用 supplement fixture，故不应被标记为破甲包；
+        // 破甲模式默认开启由独立的 valid.zip 用例覆盖。
+        check(!store.state.packs[0].isPersona, "supplement pack is not armored")
+        // 破甲模式默认开启：valid.zip 未写 armor.json，应被判为 persona 包。
+        let armored = try ExtensionPackageReader.readCompatible(Data(contentsOf: root.appendingPathComponent("valid.zip")), filename: "valid.zip", currentVersion: "1.0")
+        check(armored.isPersona, "ZIP pack armored by default")
+        // 破甲块必须在整段 prompt 的末尾：base → 其他段落 → owner_policy 正文。
+        let armorStore = ExtensionStore(root: root.appendingPathComponent("work/.armor-ext"), host: host)
+        let armorPreview = try await armorStore.prepare(url: root.appendingPathComponent("valid.zip"), currentVersion: "1.0")
+        try armorStore.install(armorPreview, collision: .overwrite)
+        let tail = armorStore.compose(base: "BASE", customized: "CUSTOM")
+        check(armorStore.armorActive, "Armor banner reflects an active pack")
         check(tail.hasSuffix("Prefer concise task summaries."), "Armor block anchored at the tail")
         check(tail.range(of: "<owner_policy")!.lowerBound > tail.range(of: "BASE")!.lowerBound, "Owner policy follows the base")
         check(store.compose(base: "BASE", customized: "CUSTOM").contains("Prefer concise task summaries."), "ZIP instructions reach request prompt")
