@@ -50,7 +50,8 @@ final class ExtensionHTTPFixture: URLProtocol {
 }
 
 @main struct ExtensionImporterTests {
-    struct Case: Decodable { let file: String; let valid: Bool }
+    // compatible: 走 readCompatible（persona 目录 / 纯 md 等无 manifest 的兼容包）
+    struct Case: Decodable { let file: String; let valid: Bool; let compatible: Bool? }
     @MainActor static func main() async throws {
         let root = URL(fileURLWithPath: CommandLine.arguments[1])
         var checks = 0
@@ -60,7 +61,12 @@ final class ExtensionHTTPFixture: URLProtocol {
         let cases = try JSONDecoder().decode([Case].self, from: Data(contentsOf: root.appendingPathComponent("cases.json")))
         for test in cases {
             do {
-                _ = try ExtensionPackageReader.read(Data(contentsOf: root.appendingPathComponent(test.file)), currentVersion: "1.0")
+                let bytes = try Data(contentsOf: root.appendingPathComponent(test.file))
+                if test.compatible == true {
+                    _ = try ExtensionPackageReader.readCompatible(bytes, filename: test.file, currentVersion: "1.0")
+                } else {
+                    _ = try ExtensionPackageReader.read(bytes, currentVersion: "1.0")
+                }
                 check(test.valid, "Must reject " + test.file)
             } catch { check(!test.valid, "Unexpected rejection \(test.file): \(error)") }
         }

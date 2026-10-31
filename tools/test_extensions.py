@@ -71,7 +71,7 @@ def fixtures(out):
         for path, body in persona_files.items():
             info = GBKInfo(path); info.compress_type = zipfile.ZIP_DEFLATED
             z.writestr(info, body)
-    cases.append(dict(file='persona-dir.zip', valid=True))
+    cases.append(dict(file='persona-dir.zip', valid=True, compatible=True))
     manifest = json.loads(base['manifest.json'])
     write('version-incompatible', {**base, 'manifest.json': json.dumps({**manifest, 'minis_version': '>=99.0'})})
     write('name-traversal', {**base, 'manifest.json': json.dumps({**manifest, 'name': '../demo'})})
