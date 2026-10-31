@@ -6,8 +6,11 @@ with zipfile.ZipFile(p) as z:
     bad=z.testzip(); assert bad is None,bad
     info=plistlib.loads(z.read("Payload/Minis.app/Info.plist"))
     report.update({k:info.get(k) for k in ["CFBundleIdentifier","CFBundleShortVersionString","MinimumOSVersion","CFBundleExecutable"]})
-    assert info['CFBundleIdentifier'] == 'com.minisre.app', info
-    assert info['CFBundleDisplayName'] == 'MinisRe', info
+    # 允许官方 ID 与多开版 ID（com.minisre.fj），但必须是 MinisRe 自己的 bundle，
+    # 且不能是空值或别的 App。多开版仅改后缀，不影响 iOS 15.4 最低版本校验。
+    allowed_ids = ('com.minisre.app', 'com.minisre.fj')
+    assert info['CFBundleIdentifier'] in allowed_ids, info['CFBundleIdentifier']
+    assert info['CFBundleDisplayName'].startswith('MinisRe'), info['CFBundleDisplayName']
     assert info['CFBundleShortVersionString'] == '2.0', info
     report['CFBundleDisplayName'] = info['CFBundleDisplayName']
     assert tuple(map(int,info["MinimumOSVersion"].split("."))) <= (15,4),info
