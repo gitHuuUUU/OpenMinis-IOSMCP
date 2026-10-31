@@ -127,6 +127,7 @@ def main():
             return
         executable = folder/'extension-tests'
         subprocess.run(['swiftc', '-parse-as-library',
+            str(ROOT/'src/ios/Shared/ExtensionArmor.swift'),
             str(ROOT/'src/ios/Shared/ExtensionPackage.swift'),
             str(ROOT/'src/ios/Shared/ExtensionDownload.swift'),
             str(ROOT/'src/ios/Shared/ExtensionStore.swift'),
