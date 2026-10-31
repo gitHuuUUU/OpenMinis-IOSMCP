@@ -82,7 +82,7 @@ final class ICloudBackupManager: ObservableObject {
     @Published var availableBackups: [BackupEntry] = []
 
     private let fm = FileManager.default
-    private let containerID = "iCloud.com.minisre.app"
+    private let containerID = "iCloud.com.minisre.fj"
 
     // MARK: - iCloud Container
 

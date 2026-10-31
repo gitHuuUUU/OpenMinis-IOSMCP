@@ -6,7 +6,7 @@ enum SigningCapabilityPolicy {
     static func allowsMinisCloudKit(_ entitlements: [String: Any]) -> Bool {
         let services = entitlements["com.apple.developer.icloud-services"] as? [String] ?? []
         let containers = entitlements["com.apple.developer.icloud-container-identifiers"] as? [String] ?? []
-        return services.contains("CloudKit") && containers.contains("iCloud.com.minisre.app")
+        return services.contains("CloudKit") && containers.contains("iCloud.com.minisre.fj")
     }
 
     static func allowsOutsideAppContainer(_ entitlements: [String: Any]) -> Bool {

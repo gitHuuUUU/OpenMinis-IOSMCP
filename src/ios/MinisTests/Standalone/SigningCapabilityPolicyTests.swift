@@ -16,7 +16,7 @@ struct SigningCapabilityPolicyTests {
 
         let serviceOnly: [String: Any] = ["com.apple.developer.icloud-services": ["CloudKit"]]
         expect(!SigningCapabilityPolicy.allowsMinisCloudKit(serviceOnly), "service without container")
-        let containerOnly: [String: Any] = ["com.apple.developer.icloud-container-identifiers": ["iCloud.com.minisre.app"]]
+        let containerOnly: [String: Any] = ["com.apple.developer.icloud-container-identifiers": ["iCloud.com.minisre.fj"]]
         expect(!SigningCapabilityPolicy.allowsMinisCloudKit(containerOnly), "container without service")
         let wrongContainer: [String: Any] = [
             "com.apple.developer.icloud-services": ["CloudKit"],
@@ -25,7 +25,7 @@ struct SigningCapabilityPolicyTests {
         expect(!SigningCapabilityPolicy.allowsMinisCloudKit(wrongContainer), "wrong container")
         let validCloud: [String: Any] = [
             "com.apple.developer.icloud-services": ["CloudKit"],
-            "com.apple.developer.icloud-container-identifiers": ["iCloud.com.minisre.app"],
+            "com.apple.developer.icloud-container-identifiers": ["iCloud.com.minisre.fj"],
         ]
         expect(SigningCapabilityPolicy.allowsMinisCloudKit(validCloud), "valid CloudKit")
 

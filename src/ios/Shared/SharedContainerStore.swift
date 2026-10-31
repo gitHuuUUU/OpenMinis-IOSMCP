@@ -51,7 +51,7 @@ enum AppSigningCapabilities {
 /// Reads and writes PendingShare data to the App Group shared container.
 /// Compiled into both the main app target and the Share Extension target.
 enum SharedContainerStore {
-    static let appGroupID = "group.com.minisre.app"
+    static let appGroupID = "group.com.minisre.fj"
 
     static var hasSharedAppGroupContainer: Bool {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID) != nil

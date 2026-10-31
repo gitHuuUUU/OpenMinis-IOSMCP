@@ -3709,9 +3709,9 @@
                     "-lbz2",
 				);
 				OTHER_SWIFT_FLAGS = "";
-				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.app;
-					INFOPLIST_KEY_CFBundleDisplayName = "MinisRe";
-				INFOPLIST_KEY_CFBundleName = "MinisRe";
+				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.fj;
+					INFOPLIST_KEY_CFBundleDisplayName = "MinisRe-FJ";
+				INFOPLIST_KEY_CFBundleName = "MinisReFJ";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/MinisApp-Bridging-Header.h";
@@ -3769,9 +3769,9 @@
                     "-lbz2",
 				);
 				OTHER_SWIFT_FLAGS = "";
-				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.app;
-					INFOPLIST_KEY_CFBundleDisplayName = "MinisRe";
-				INFOPLIST_KEY_CFBundleName = "MinisRe";
+				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.fj;
+					INFOPLIST_KEY_CFBundleDisplayName = "MinisRe-FJ";
+				INFOPLIST_KEY_CFBundleName = "MinisReFJ";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/MinisApp-Bridging-Header.h";
@@ -3789,7 +3789,7 @@
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Share to MinisRe";
+				INFOPLIST_KEY_CFBundleDisplayName = "Share to MinisRe-FJ";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.4;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -3798,7 +3798,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 2.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.app.ShareExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.fj.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -3816,7 +3816,7 @@
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Share to MinisRe";
+				INFOPLIST_KEY_CFBundleDisplayName = "Share to MinisRe-FJ";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.4;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -3825,7 +3825,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 2.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.app.ShareExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.fj.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -3843,7 +3843,7 @@
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FileProvider/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "MinisRe Files";
+				INFOPLIST_KEY_CFBundleDisplayName = "MinisRe-FJ Files";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -3852,7 +3852,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 2.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.app.FileProvider;
+				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.fj.FileProvider;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -3870,7 +3870,7 @@
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FileProvider/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "MinisRe Files";
+				INFOPLIST_KEY_CFBundleDisplayName = "MinisRe-FJ Files";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -3879,7 +3879,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 2.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.app.FileProvider;
+				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.fj.FileProvider;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -3906,7 +3906,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 2.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.app.AgentWidget;
+				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.fj.AgentWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -3933,7 +3933,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 2.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.app.AgentWidget;
+				PRODUCT_BUNDLE_IDENTIFIER = com.minisre.fj.AgentWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;

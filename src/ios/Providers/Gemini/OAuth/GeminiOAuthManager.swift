@@ -215,10 +215,10 @@ final class GeminiOAuthManager: NSObject, ObservableObject {
 
     // MARK: - Legacy singleton Keychain (for migration)
 
-    static let legacyKeychainService = "com.minisre.app.gemini-oauth"
+    static let legacyKeychainService = "com.minisre.fj.gemini-oauth"
     static let legacyKeychainAccount = "token"
-    static let legacyEmailKey = "com.minisre.app.gemini-email"
-    static let legacyProjectIDKey = "com.minisre.app.gemini-gcp-project"
+    static let legacyEmailKey = "com.minisre.fj.gemini-email"
+    static let legacyProjectIDKey = "com.minisre.fj.gemini-gcp-project"
 
     static func loadLegacyToken() -> GeminiTokenStorage? {
         let query: [String: Any] = [

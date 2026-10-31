@@ -17,7 +17,7 @@ enum ExtensionArmor {
 
     /// 构建印记：每次出包手动递增。UI 会显示它，用来确认手机上跑的到底是哪一版，
     /// 避免"装了新包但报错文案来自旧代码"这类无法判断的循环。
-    static let buildStamp = "armor-3"
+    static let buildStamp = "armor-fj-4"
 
     /// 内置人格标识。只用于展示和 idempotent 判断，不参与鉴权。
     static let builtinID = "fujiang"
