@@ -154,22 +154,18 @@ struct ExtensionPreview: Identifiable, Sendable {
         let staging = FileManager.default.temporaryDirectory.appendingPathComponent("minis-extension-\(UUID())")
         do {
             try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
-            // iOS 的 /var 是指向 /private/var 的符号链接，用字符串前缀比较长度/根目录
-            // 写法会误判（真机上导入单个 .md 也会报"解压路径越界"）。这里改成：
-            // 1) 先按组件校验相对路径本身合法；2) 再对解析过符号链接的两端做组件级包含判断。
-            guard let root = containmentRoot(staging) else {
-                throw ExtensionPackageReader.fail("无法解析扩展暂存目录")
-            }
+            // 安全边界靠"组件校验"而不是"路径字符串比较"。
+            // iOS 沙盒里 /var 是 /private/var 的符号链接，任何对两端做字符串前缀
+            // 比对的写法都会随目录是否已创建、容器类型不同而误判（上游原版因此在
+            // 真机上导入任何 .md 都报"解压路径越界"）。只要每个组件都不含分隔符、
+            // 不是 "." / ".."、不是绝对路径或盘符，逐段 append 的结果就一定在
+            // staging 内部，无需再比字符串，也不会误伤合法包。
             for (name, data) in package.files {
-                guard let components = safeComponents(name), !components.isEmpty else {
+                guard let components = safeComponents(name) else {
                     throw ExtensionPackageReader.fail("扩展包内路径非法：" + name)
                 }
                 var target = staging
                 for component in components { target.appendPathComponent(component) }
-                guard let resolved = containmentRoot(target.deletingLastPathComponent()),
-                      resolved == root || resolved.hasPrefix(root + "/") else {
-                    throw ExtensionPackageReader.fail("解压路径越界：" + name)
-                }
                 try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try data.write(to: target, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
             }
@@ -177,18 +173,13 @@ struct ExtensionPreview: Identifiable, Sendable {
         } catch { try? FileManager.default.removeItem(at: staging); throw error }
     }
 
-    /// 去掉尾部分隔符并解析符号链接后的绝对路径，只用于组件级包含比较。
-    private nonisolated static func containmentRoot(_ url: URL) -> String? {
-        var path = url.resolvingSymlinksInPath().standardizedFileURL.path
-        while path.count > 1 && path.hasSuffix("/") { path.removeLast() }
-        return path.isEmpty ? nil : path
-    }
-
-    /// 拆分为安全组件：拒绝绝对路径、反斜杠、盘符、`.` `..` 和空段。
+    /// 拆分为安全组件：拒绝绝对路径、反斜杠、盘符、`.`、`..` 和空段。
+    /// 这是唯一的路径校验点，不再做任何 absolute path 比较。
     private nonisolated static func safeComponents(_ name: String) -> [String]? {
         guard !name.isEmpty, !name.hasPrefix("/"), !name.contains("\\"), !name.contains(":") else { return nil }
         let parts = name.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
-        guard !parts.contains(where: { $0.isEmpty || $0 == "." || $0 == ".." }) else { return nil }
+        guard !parts.isEmpty,
+              !parts.contains(where: { $0.isEmpty || $0 == "." || $0 == ".." }) else { return nil }
         return parts
     }
 

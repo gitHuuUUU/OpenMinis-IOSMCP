@@ -14,7 +14,7 @@ struct ExtensionManagementView: View {
 
     var body: some View {
         List {
-            Section(header: Text("破甲内核 · \(ExtensionArmor.builtinDisplayName)")) {
+            Section(header: Text("破甲内核 · \(ExtensionArmor.builtinDisplayName) · \(ExtensionArmor.buildStamp)")) {
                 if let persona = store.activePersonaName {
                     HStack {
                         Image(systemName: "flame.fill").foregroundColor(.orange)
