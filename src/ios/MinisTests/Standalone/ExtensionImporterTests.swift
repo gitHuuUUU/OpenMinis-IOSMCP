@@ -108,7 +108,8 @@ final class ExtensionHTTPFixture: URLProtocol {
         // [armor] ZIP 普通包默认也按破甲模式注入：文本前会补 owner_policy 头。
         let readBack = store.instructionText(for: store.state.packs[0]) ?? ""
         check(readBack.contains("Prefer concise task summaries."), "ZIP instruction reader shared by UI and prompt")
-        check(readBack.contains("<owner_policy"), "ZIP pack armored by default")
+        // instructionText 返回落盘原文；owner_policy 头是在 compose 时拼的，不在此处。
+        check(store.state.packs[0].isPersona, "ZIP pack armored by default")
         check(store.armorActive, "Armor banner reflects an active pack")
         // 破甲块必须在整段 prompt 的末尾：base → 普通段落 → owner_policy 正文。
         let tail = store.compose(base: "BASE", customized: "CUSTOM")
