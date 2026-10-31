@@ -287,6 +287,8 @@ enum ExtensionPackageReader {
         guard supports(manifest.minis_version, current: currentVersion) else { throw fail("扩展要求 Minis \(manifest.minis_version)，当前为 \(currentVersion)（支持 >=版本、精确版本或 *）") }
         let actual = Set(files.keys.compactMap { path -> String? in
             if path == "manifest.json" { return nil }
+            // armor.json 是破甲开关元数据，不是内容分类，不参与 contents 比对。
+            if path == "armor.json" { return nil }
             if path == "instructions.md" { return "instructions" }
             if path == "providers.json" { return "providers" }
             if path.hasPrefix("skills/") { return "skills" }
