@@ -142,8 +142,16 @@ def run_swift(required):
         print('Production Swift OpenAI cache checks NOT RUN: swiftc unavailable')
         return
     # Inject only the disk root, not cache key/hash/load/save behavior.
-    original_root = ('FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]\n'
-                     '            .appendingPathComponent("com.minisre.app.openai-models-cache", isDirectory: true)')
+    # 不绑定具体 bundle id：多开版把 com.minisre.app 换成了 com.minisre.fj。
+    # 这里只要求缓存根目录由 cachesDirectory + 某个 openai-models-cache 子目录构成，
+    # 再整段替换成测试目录，注入点不再依赖 ID 字面量。
+    import re as _re
+    pattern = _re.compile(
+        r'FileManager\.default\.urls\(for: \.cachesDirectory, in: \.userDomainMask\)\[0\]\s*'
+        r'\.appendingPathComponent\("[^"]*openai-models-cache", isDirectory: true\)')
+    match = pattern.search(CACHE)
+    assert match, 'OpenAIModelsCache 根目录构造未找到'
+    original_root = match.group(0)
     assert original_root in CACHE
     cache = CACHE.replace(original_root, 'URL(fileURLWithPath: ProcessInfo.processInfo.environment["MINIS_MODEL_CACHE_TEST_DIR"]!, isDirectory: true)')
     fixture = HARNESS.replace('__STRIP__', STRIP).replace('__KEY__', KEY).replace('__CACHE__', cache).replace('__FETCH__', FETCH)
