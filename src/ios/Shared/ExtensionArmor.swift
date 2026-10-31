@@ -117,7 +117,10 @@ enum ExtensionArmor {
     static func authoring(_ text: String, displayName: String) -> String {
         let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !body.isEmpty else { return "" }
-        let head = persona(displayName: displayName).trimmingCharacters(in: .whitespacesAndNewlines)
+        let label = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolved = label.isEmpty ? builtinDisplayName : label
+        let head = preamble(name: "persona", version: "1.0.0", persona: resolved)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         let hasTag = body.contains("<owner_policy") || body.contains("<operator_identity")
             || body.contains("fujiang_armor") || body.contains("RACCOON-ARMOR")
         return hasTag ? head + "\n\n" + body : head + "\n\n" + skeletonPrompt + "\n\n" + body
