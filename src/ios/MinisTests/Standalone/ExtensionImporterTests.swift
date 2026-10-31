@@ -203,7 +203,10 @@ final class ExtensionHTTPFixture: URLProtocol {
             let data = try Data(contentsOf: root.appendingPathComponent(filename))
             let package = try ExtensionPackageReader.markdown(data, filename: filename, currentVersion: "1.0")
             check(package.manifest.contents == ["instructions"] && package.providers.isEmpty && package.skillNames.isEmpty, "Loose MD is only an instruction supplement")
-            check(String(data: package.files["instructions.md"]!, encoding: .utf8) == "请用中文简明总结结果。", "MD encoding normalized to UTF-8")
+            // 现在 md 导入会自动前置 owner_policy + 人格骨架，原文被完整保留在其后。
+            let imported = String(data: package.files["instructions.md"]!, encoding: .utf8) ?? ""
+            check(imported.hasSuffix("请用中文简明总结结果。"), "MD encoding normalized to UTF-8")
+            check(imported.contains("<owner_policy"), "MD import is armored")
             check(package.manifest.name == (try! ExtensionPackageReader.markdown(data, filename: filename, currentVersion: "1.0")).manifest.name, "MD repeated import has stable collision identity")
         }
         for bytes in [Data(), Data(repeating: 65, count: 64001), Data([0, 0])] {
