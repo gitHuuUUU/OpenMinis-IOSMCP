@@ -98,7 +98,11 @@ def fixtures(out):
     path = write('executable-mode', base, True)
     data = bytearray(path.read_bytes()); p = data.index(b'PK\x01\x02'); struct.pack_into('<I', data, p+38, 0o100755 << 16); path.write_bytes(data)
     path = write('directory-missing-skill', {**base, 'skills/empty/': b''})
-    write('second', {**base, 'manifest.json': json.dumps({**manifest, 'name': 'second'}), 'instructions.md': 'Use readable reports.', 'skills/example/SKILL.md': 'Second skill contents'}, True)
+    # demo/second 是"低优先级补充指令"链路的专属 fixture：显式写 supplement，
+    # 让它们继续验证 Supplemental extension 前缀与排序语义。
+    base_supplement = {**base, 'armor.json': json.dumps({'mode': 'supplement'})}
+    write('demo-supplement', base_supplement, True)
+    write('second', {**base_supplement, 'manifest.json': json.dumps({**manifest, 'name': 'second'}), 'instructions.md': 'Use readable reports.', 'skills/example/SKILL.md': 'Second skill contents'}, True)
     (out / 'cases.json').write_text(json.dumps(cases), encoding='utf8')
     (out/'普通说明.md').write_text('请用中文简明总结结果。',encoding='utf8')
     (out/'legacy.md').write_bytes('请用中文简明总结结果。'.encode('gbk'))

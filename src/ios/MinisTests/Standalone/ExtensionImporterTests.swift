@@ -91,7 +91,8 @@ final class ExtensionHTTPFixture: URLProtocol {
         try "Original skill".write(to: original.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
         host.enabled["example"] = false
         let store = ExtensionStore(root: root.appendingPathComponent("work/.minis/extensions"), host: host)
-        let zip = root.appendingPathComponent("valid.zip")
+        // 生命周期链路（技能替换/排序/卸载）走 supplement 模式 fixture，保持其原有低优先级语义。
+        let zip = root.appendingPathComponent("demo-supplement.zip")
         let preview = try await store.prepare(url: zip, currentVersion: "1.0")
         check(store.state.packs.isEmpty && host.providers.isEmpty && host.secrets.isEmpty, "Preview must not activate anything")
         let sanitized = try String(contentsOf: preview.staging.appendingPathComponent("providers.json"), encoding: .utf8)
