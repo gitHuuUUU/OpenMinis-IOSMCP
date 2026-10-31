@@ -123,9 +123,7 @@ struct ExtensionManagementView: View {
                 failed.append(url.lastPathComponent + "：" + error.localizedDescription)
             }
         }
-        batchNotice = "成功 \(ok) 个" + (failed.isEmpty ? "" : "；失败 \(failed.count) 个：
-" + failed.prefix(6).joined(separator: "
-"))
+        batchNotice = "成功 \(ok) 个" + (failed.isEmpty ? "" : "；失败 \(failed.count) 个：\n" + failed.prefix(6).joined(separator: "\n"))
         if ok > 0 { try? store.setArmorEnabled(true) }
     }
 
