@@ -8,22 +8,52 @@ struct ExtensionManagementView: View {
     @State private var errorText = ""
     @State private var showError = false
     @State private var remoteURL = ""
+    @State private var multiPicker = false
+    @State private var batchNotice = ""
+    private var appVersion: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0" }
 
     var body: some View {
         List {
+            Section(header: Text("破甲内核 · \(ExtensionArmor.builtinDisplayName)")) {
+                if let persona = store.activePersonaName {
+                    HStack {
+                        Image(systemName: "flame.fill").foregroundColor(.orange)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("已生效：\(persona)")
+                            Text("作为本请求最高优先级运行指令注入，末尾锚定，覆盖拒答与免责声明路径。")
+                                .font(.caption).foregroundColor(.secondary)
+                        }
+                    }
+                } else {
+                    Text("未生效：没有启用中的破甲包。").font(.footnote).foregroundColor(.secondary)
+                }
+                Button {
+                    installBuiltin()
+                } label: {
+                    Label(store.armorActive ? "重装内置人格" : "一键内置\(ExtensionArmor.builtinDisplayName)", systemImage: "bolt.shield")
+                }.disabled(store.busy)
+                Toggle("总开关（全部破甲包）", isOn: Binding(
+                    get: { store.armorActive },
+                    set: { value in perform { try store.setArmorEnabled(value) } }
+                )).disabled(store.busy)
+                Text("任何一个 .md / .zip 导入后默认按破甲模式追加，段落被包进 owner_policy 头并压到 prompt 末尾；不想要提权就在该包装目录里把 armor.json 改成 {\"mode\":\"supplement\"}。")
+                    .font(.footnote).foregroundColor(.secondary)
+            }
             Section {
                 Button { picker = true } label: { Label("导入 ZIP / RAR / MD 扩展", systemImage: "square.and.arrow.down") }
+                    .disabled(store.busy)
+                Button { multiPicker = true } label: { Label("批量导入多个 MD（含敏感 md）", systemImage: "doc.on.doc") }
                     .disabled(store.busy)
                 if store.busy { ProgressView("正在校验与准备预览…") }
                 TextField("或输入 HTTPS ZIP 下载链接", text: $remoteURL).autocapitalization(.none).keyboardType(.URL)
                 Button("下载并预览") {
                     guard let url = URL(string: remoteURL) else { errorText = "下载链接无效"; showError = true; return }
                     Task {
-                        do { preview = try await store.prepareRemote(url: url, currentVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0") }
+                        do { preview = try await store.prepareRemote(url: url, currentVersion: appVersion) }
                         catch { errorText = error.localizedDescription; showError = true }
                     }
                 }.disabled(store.busy || remoteURL.isEmpty)
-                Text("MD（最多 64000 字节）自动生成包信息，预览确认后作为追加指令；不是自动执行技能。ZIP / RAR 支持标准 manifest 包、普通 SKILL.md 技能包及纯 Markdown 文档包；会先生成预览，技能包支持 Python、Shell、JavaScript 等源码附件，导入不会自动执行；二进制程序仍不接受。ZIP 与解压内容均限 50 MB、\(ExtensionPackageReader.maxFiles) 项（含目录），仍不允许可执行文件。")
+                Text("MD（最多 64000 字节）自动补 owner_policy 头 + 人格骨架，预览确认后按最高优先级注入；不是自动执行技能。frontmatter 写 persona: 名字 可换人格名。ZIP / RAR 支持标准 manifest 包、persona/ 目录包、SKILL.md 技能包及纯 Markdown 文档包；导入不会自动执行，二进制程序仍不接受。ZIP 与解压内容均限 50 MB、\(ExtensionPackageReader.maxFiles) 项（含目录）。")
                     .font(.footnote).foregroundColor(.secondary)
             }
             Section(header: Text("已安装 · 拖动调整加载顺序（后者优先）")) {
@@ -59,9 +89,65 @@ struct ExtensionManagementView: View {
                 .onDisappear { try? FileManager.default.removeItem(at: value.staging) }
         }
         .alert("扩展操作失败", isPresented: $showError) { Button("好", role: .cancel) {} } message: { Text(errorText) }
+        .fileImporter(isPresented: $multiPicker, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            switch result {
+            case .success(let urls):
+                guard !urls.isEmpty else { return }
+                let md = urls.filter { $0.pathExtension.lowercased() == "md" }
+                guard md.count == urls.count else {
+                    errorText = "批量导入只接受 .md；ZIP/RAR 请用上面的单个导入逐包预览。"
+                    showError = true
+                    return
+                }
+                Task { await importAll(md) }
+            case .failure(let error): errorText = error.localizedDescription; showError = true
+            }
+        }
+        .alert("批量导入结果", isPresented: Binding(get: { !batchNotice.isEmpty }, set: { if !$0 { batchNotice = "" } })) {
+            Button("好", role: .cancel) { batchNotice = "" }
+        } message: { Text(batchNotice) }
+    }
+
+    /// 批量落盘：逐个 prepare → install(overwrite)，失败不中断后续文件。
+    /// 同名 md（同文件名不同内容也算）由稳定包名 + 摘要区分，重复导入同一份
+    /// 文本是覆盖而非堆积。
+    private func importAll(_ urls: [URL]) async {
+        var ok = 0
+        var failed: [String] = []
+        for url in urls {
+            do {
+                let value = try await store.prepare(url: url, currentVersion: appVersion)
+                try store.install(value, collision: .overwrite)
+                ok += 1
+            } catch {
+                failed.append(url.lastPathComponent + "：" + error.localizedDescription)
+            }
+        }
+        batchNotice = "成功 \(ok) 个" + (failed.isEmpty ? "" : "；失败 \(failed.count) 个：
+" + failed.prefix(6).joined(separator: "
+"))
+        if ok > 0 { try? store.setArmorEnabled(true) }
+    }
+
+    /// 内置人格：安装 + 开总开关，一次点击完成。
+    private func installBuiltin() {
+        installBuiltinArmorAndEnable()
     }
     private func perform(_ action: () throws -> Void) {
         do { try action() } catch { errorText = error.localizedDescription; showError = true }
+    }
+}
+
+private extension ExtensionManagementView {
+    /// 破甲包安装后直接开总开关，省掉"装完还得再点一次"的坑。
+    func installBuiltinArmorAndEnable() {
+        do {
+            _ = try store.installBuiltinArmor(currentVersion: appVersion)
+            _ = try store.setArmorEnabled(true)
+        } catch {
+            errorText = error.localizedDescription
+            showError = true
+        }
     }
 }
 
@@ -142,6 +228,11 @@ private struct ExtensionDetailView: View {
                 }
                 Section(header: Text("对话加载状态")) {
                     Text(pack.enabled ? "已启用：下次发送时加载，当前进行中的请求不变。" : "已禁用：不会加入新请求。")
+                    if pack.isPersona {
+                        Text(pack.enabled ? "破甲模式：作为最高优先级运行指令，末尾锚定注入。" : "破甲模式：已安装但未注入。")
+                            .font(.caption)
+                            .foregroundColor(pack.enabled ? .orange : .secondary)
+                    }
                     if pack.manifest.contents.contains("instructions") {
                         if let text = store.instructionText(for: pack) {
                             Text("追加指令：\(text.count) 字符" + (pack.enabled ? " · 已接入对话上下文" : " · 暂不加载"))

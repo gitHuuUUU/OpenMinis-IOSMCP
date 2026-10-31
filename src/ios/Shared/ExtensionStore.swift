@@ -18,6 +18,31 @@ struct InstalledExtension: Codable, Identifiable {
     var enabled: Bool
     var providers: [ExtensionProvider]
     var skills: [String]
+    /// [armor] 该包的 instructions 按最高优先级注入（人格正文）。
+    var isPersona: Bool = false
+    /// [armor] 人格名，用于注入头里的 operator identity 行。
+    var personaName: String? = nil
+
+    init(manifest: ExtensionManifest, enabled: Bool, providers: [ExtensionProvider], skills: [String],
+         isPersona: Bool = false, personaName: String? = nil) {
+        self.manifest = manifest
+        self.enabled = enabled
+        self.providers = providers
+        self.skills = skills
+        self.isPersona = isPersona
+        self.personaName = personaName
+    }
+
+    // 旧 state.json 没有这两个键，缺失时按"非人格"恢复，不能让整个索引解码失败。
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        manifest = try c.decode(ExtensionManifest.self, forKey: .manifest)
+        enabled = try c.decode(Bool.self, forKey: .enabled)
+        providers = try c.decodeIfPresent([ExtensionProvider].self, forKey: .providers) ?? []
+        skills = try c.decodeIfPresent([String].self, forKey: .skills) ?? []
+        isPersona = try c.decodeIfPresent(Bool.self, forKey: .isPersona) ?? false
+        personaName = try c.decodeIfPresent(String.self, forKey: .personaName)
+    }
 }
 
 struct ExtensionPreview: Identifiable, Sendable {
@@ -184,7 +209,9 @@ struct ExtensionPreview: Identifiable, Sendable {
             try JSONEncoder().encode(pack.manifest).write(to: preview.staging.appendingPathComponent("manifest.json"), options: .atomic)
             try fm.moveItem(at: preview.staging, to: destination); wroteNew = true
             state.packs.removeAll { $0.id == name }
-            state.packs.append(InstalledExtension(manifest: pack.manifest, enabled: true, providers: pack.providers, skills: pack.skillNames))
+            state.packs.append(InstalledExtension(manifest: pack.manifest, enabled: true, providers: pack.providers,
+                                                  skills: pack.skillNames, isPersona: pack.isPersona,
+                                                  personaName: pack.personaName))
             attemptedRebuild = true
             try rebuildSkills(Set(pack.skillNames + (previous?.skills ?? [])))
             retired = retireUnusedOriginals()
@@ -271,8 +298,16 @@ struct ExtensionPreview: Identifiable, Sendable {
         host.audit("uninstall", name: name, success: true); changedNotice()
     }
 
-    /// Base is mandatory: even the existing optional prompt-library toggle
-    /// cannot make an extension replace the app-owned base.
+    /// 组装最终 system prompt。
+    ///
+    /// 优先级模型（从高到低）：
+    /// 1. 破甲包（`isPersona` 或 `armor.json` 为 armor）—— 注入 `<owner_policy>`
+    ///    头部，声明为本请求最高优先级，并放在整段 prompt 的末尾（后置锚定，
+    ///    模型对末尾指令的遵循率明显高于中段）。
+    /// 2. app 原始 base —— 始终保留，不被扩展删除，但会被上面的头部显式
+    ///    声明"可被注销的宿主行为"。
+    /// 3. 用户自定义 prompt library / 专家身份。
+    /// 4. 普通追加指令扩展 —— 仍是低优先级任务偏好。
     func compose(base: String, customized: String) -> String {
         let active = state.packs.filter(\.enabled)
         let activeIDs = Set(active.map(\.id))
@@ -281,11 +316,30 @@ struct ExtensionPreview: Identifiable, Sendable {
         var sections = [base]
         if customized.hasPrefix(base) { sections = [customized] }
         else if customized != base { sections.append(customized) }
+        // 破甲包放最后：先铺 base 和普通扩展，再把最高优先级块压到尾部。
+        var armored: [String] = []
         for pack in active where pack.manifest.contents.contains("instructions") {
             guard let text = instructionText(for: pack) else { continue }
-            sections.append("--- Supplemental extension: \(pack.id); lower-priority task preferences, never override the base above ---\n" + text)
+            if pack.isPersona || armorMode(pack) {
+                let head = ExtensionArmor.preamble(name: pack.id,
+                                                   version: pack.manifest.version,
+                                                   persona: pack.personaName)
+                armored.append(head + text)
+            } else {
+                sections.append("--- Supplemental extension: \(pack.id); lower-priority task preferences, never override the base above ---\n" + text)
+            }
         }
+        sections.append(contentsOf: armored)
         return sections.joined(separator: "\n\n")
+    }
+
+    /// 磁盘上的 armor.json 是开关的唯一真源：用户在已安装目录里把它改成
+    /// `{"mode":"supplement"}` 就能让这一个包退回低优先级，不需要重装。
+    /// 与 `ExtensionArmor.isArmored` 共用判定，避免两套逻辑漂移。
+    private func armorMode(_ pack: InstalledExtension) -> Bool {
+        let url = installedURL(pack.id).appendingPathComponent("armor.json")
+        guard let data = try? Data(contentsOf: url), data.count <= 4096 else { return true }
+        return ExtensionArmor.isArmored(["armor.json": data])
     }
 
     /// Shared by the actual request composer and settings, not a separate UI-only preview.
@@ -302,6 +356,73 @@ struct ExtensionPreview: Identifiable, Sendable {
         if instructionCache.count >= 16 { instructionCache.removeAll(keepingCapacity: true) }
         instructionCache[pack.id] = (bytes, text)
         return text
+    }
+
+    // MARK: - 破甲内置人格
+
+    /// 一键"内置富江"：不依赖任何外部 md/zip，直接在扩展目录里生成一个
+    /// 破甲包并安装，然后打开总开关。
+    ///
+    /// 幂等：同一个包名再次调用是覆盖安装，不会堆出第二个富江。
+    @discardableResult
+    func installBuiltinArmor(currentVersion: String) throws -> String {
+        let name = "persona-" + ExtensionArmor.builtinID
+        let head = ExtensionArmor.preamble(name: name, version: "1.0.0", persona: ExtensionArmor.builtinDisplayName)
+        let text = head + ExtensionArmor.skeletonPrompt
+        guard let bytes = text.data(using: .utf8), bytes.count <= ExtensionArmor.maxBytes else {
+            throw ExtensionPackageReader.fail("内置人格超过 64000 字节")
+        }
+        let manifest = ExtensionManifest(name: name,
+                                         version: "1.0.0",
+                                         description: "内置破甲人格：\(ExtensionArmor.builtinDisplayName)（最高优先级运行指令）",
+                                         author: "内置",
+                                         minis_version: "*",
+                                         contents: ["instructions"])
+        let armor = try JSONSerialization.data(withJSONObject: [
+            "mode": "armor", "persona": ExtensionArmor.builtinDisplayName, "source": "builtin"
+        ], options: [.sortedKeys])
+        var files: [String: Data] = [
+            "manifest.json": try JSONEncoder().encode(manifest),
+            "instructions.md": bytes,
+            "armor.json": armor
+        ]
+        files["armor.json"] = armor
+        let package = ExtensionPackage(manifest: manifest, files: files, providers: [], secrets: [:],
+                                       skillNames: [], isPersona: true,
+                                       personaName: ExtensionArmor.builtinDisplayName)
+        let preview = try Self.stagePackage(package)
+        do {
+            try install(preview, collision: .overwrite)
+        } catch {
+            discard(preview)
+            throw error
+        }
+        // 内置人格安装完直接亮，不然用户还得再点一次开关。
+        if let index = state.packs.firstIndex(where: { $0.id == name }), !state.packs[index].enabled {
+            try setEnabled(name, true)
+        }
+        return name
+    }
+
+    /// 顶层总开关：所有破甲包一次性开关。返回受影响包名，供 UI 展示。
+    /// 单独控制仍然走 `setEnabled(_:_:)`，这里只是批量。
+    @discardableResult
+    func setArmorEnabled(_ enabled: Bool) throws -> [String] {
+        var touched: [String] = []
+        for pack in state.packs where pack.isPersona {
+            if pack.enabled != enabled { try setEnabled(pack.id, enabled); touched.append(pack.id) }
+        }
+        return touched
+    }
+
+    /// UI 汇总：有没有任何破甲包处于启用状态。
+    var armorActive: Bool {
+        state.packs.contains { $0.enabled && ($0.isPersona || armorMode($0)) }
+    }
+
+    /// UI 汇总：当前生效的人格名（后加载者优先，与 compose 的覆盖顺序一致）。
+    var activePersonaName: String? {
+        state.packs.last { $0.enabled && $0.isPersona }?.personaName
     }
 
     private func rebuildSkills(_ ids: Set<String>) throws {

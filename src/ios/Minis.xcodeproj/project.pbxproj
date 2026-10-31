@@ -38,6 +38,7 @@
 		AA0838FF2F3B941A00049557 /* MirrorSpeedTestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0838FE2F3B941A00049557 /* MirrorSpeedTestView.swift */; };
 		AA26CCB72F31067900AECF2D /* alpine-rootfs.zip in Resources */ = {isa = PBXBuildFile; fileRef = AA26CCB62F31067900AECF2D /* alpine-rootfs.zip */; };
 		E5BUNDSK0000000000000002 /* BundledSkills in Resources */ = {isa = PBXBuildFile; fileRef = E5BUNDSK0000000000000001 /* BundledSkills */; };
+		E5A5M0R00000000000000001 /* ExtensionArmor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5A5M0R00000000000000002 /* ExtensionArmor.swift */; };
 		AA26CCB92F31070A00AECF2D /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = AA26CCB82F31070A00AECF2D /* libsqlite3.tbd */; };
 		AA26CCBA2F31080100AECF2D /* ISHKernel.m in Sources */ = {isa = PBXBuildFile; fileRef = AA26CCBB2F31080100AECF2D /* ISHKernel.m */; };
 		AA26CCBC2F31080100AECF2D /* ISHTerminalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA26CCBD2F31080100AECF2D /* ISHTerminalView.swift */; };
@@ -1298,6 +1299,7 @@
 		0BB791C8D31D4139B47B8471 /* ExpertProfileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Providers/ExpertProfileStore.swift"; sourceTree = "<group>"; };
 		EACB9CC1250D45F3ACAAD86E /* ExpertLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/Settings/ExpertLibraryView.swift"; sourceTree = "<group>"; };
 		EEC9C0A48BC846C6A969ABAF /* WorkspaceSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/Settings/WorkspaceSearchView.swift"; sourceTree = "<group>"; };
+		E5A5M0R00000000000000002 /* ExtensionArmor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/ExtensionArmor.swift"; sourceTree = "<group>"; };
 		F13CB3AD6EA94E1C81A3E1F8 /* ExtensionPackage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/ExtensionPackage.swift"; sourceTree = "<group>"; };
 		BD0E1B3128894143838C0B9D /* ExtensionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/ExtensionStore.swift"; sourceTree = "<group>"; };
 		EAA2B0C70CF04E2EBBA22F3C /* ExtensionDownload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/ExtensionDownload.swift"; sourceTree = "<group>"; };
@@ -1565,6 +1567,7 @@
 				02D1BB04D8434802AB7C3506 /* MinisExtensionHost.swift */,
 				EAA2B0C70CF04E2EBBA22F3C /* ExtensionDownload.swift */,
 				BD0E1B3128894143838C0B9D /* ExtensionStore.swift */,
+				E5A5M0R00000000000000002 /* ExtensionArmor.swift */,
 				F13CB3AD6EA94E1C81A3E1F8 /* ExtensionPackage.swift */,
 				1F8B9666BB88448DB0D321F0 /* ExpertPolicy.swift */,
 				E5QA0102 /* AppDelegate.swift */,
@@ -2888,6 +2891,7 @@
 				BCFC360D0FCA4C448EB19238 /* ExtensionDownload.swift in Sources */,
 				ADDB89F3DCD54F31BD4C8CFE /* ExtensionStore.swift in Sources */,
 				65607406BBC74DE9945E4EC4 /* ExtensionPackage.swift in Sources */,
+				E5A5M0R00000000000000001 /* ExtensionArmor.swift in Sources */,
 				9BC4FA4A7028445C9CF63D6D /* ExpertPolicy.swift in Sources */,
 				E5FPBH02 /* FileProviderBootHealth.swift in Sources */,
 				E5QA0001 /* QuickActionRouter.swift in Sources */,
